@@ -14,13 +14,13 @@
 # bootstrap option: Build without requiring an X server
 # (which in turn requires mesa to build)
 %bcond_without hardware
-%bcond_without bootstrap
+%bcond_with bootstrap
 %bcond_without vdpau
 %bcond_with va
 %bcond_without wayland
 %bcond_without egl
 %bcond_without opencl
-%bcond_with tfloat
+%bcond_without tfloat
 %ifarch %arm mips sparc
 %bcond_with intel
 %else
@@ -358,6 +358,7 @@ Group:		System/Libraries
 Suggests:	%{dridrivers} >= %{version}-%{release}
 %if %{with tfloat}
 Requires:	%mklibname txc-dxtn
+BuildRequires:	libtxc_dxtn-devel
 %endif
 Obsoletes:	%{_lib}mesagl1 < %{version}-%{release}
 
