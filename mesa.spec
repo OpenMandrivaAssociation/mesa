@@ -20,7 +20,7 @@
 %bcond_without wayland
 %bcond_without egl
 %bcond_without opencl
-%bcond_without tfloat
+%bcond_with tfloat
 %ifarch %arm mips sparc
 %bcond_with intel
 %else
