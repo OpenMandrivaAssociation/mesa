@@ -5,7 +5,7 @@
 %define _disable_ld_no_undefined 1
 
 %define git 0
-%define git_branch 9.2
+%define git_branch 10.0
 
 %define opengl_ver 3.0
 
@@ -71,17 +71,12 @@
 
 %define dridrivers	%mklibname dri-drivers
 
-%define dricoremajor	1
-%define dricorename	dricore
-%define libdricore	%mklibname %{dricorename} %{dricoremajor}
-%define devdricore	%mklibname %{dricorename} -d
-
 %define gbmmajor	1
 %define gbmname		gbm
 %define libgbm		%mklibname %{gbmname} %{gbmmajor}
 %define devgbm		%mklibname %{gbmname} -d
 
-%define xatrackermajor	1
+%define xatrackermajor	2
 %define xatrackername	xatracker
 %define libxatracker	%mklibname %xatrackername %{xatrackermajor}
 %define devxatracker	%mklibname %xatrackername -d
@@ -115,11 +110,11 @@
 %define dri_drivers_arm		"nouveau,r200,radeon,swrast"
 %define	dri_drivers		%{expand:%{dri_drivers_%{_arch}}}
 
-%define short_ver 9.2.3
+%define short_ver 10.0
 
 Summary:	OpenGL 3.0 compatible 3D graphics library
 Name:		mesa
-Version:	9.2.3
+Version:	10.0.1
 %if %{relc}
 %if %{git}
 Release:	0.rc%{relc}.0.%{git}.1
@@ -140,11 +135,22 @@ Url:		http://www.mesa3d.org
 # (cg) Current commit ref: origin/mesa_7_5_branch
 Source0:	%{name}-%{git_branch}-%{git}.tar.xz
 %else
-Source0:	ftp://ftp.freedesktop.org/pub/mesa/%short_ver/MesaLib-%{short_ver}%{vsuffix}.tar.bz2
+Source0:	ftp://ftp.freedesktop.org/pub/mesa/%{version}/MesaLib-%{version}%{vsuffix}.tar.bz2
 %endif
 Source3:	make-git-snapshot.sh
 Source5:	mesa-driver-install
 Source100:	%{name}.rpmlintrc
+
+%define dricoremajor	1
+%define dricorename	dricore
+%define devdricore	%mklibname %{dricorename} -d
+%define libdricore	%mklibname %{dricorename} 9
+Obsoletes:	%{libdricore} < %{EVRD}
+Obsoletes:	%{devdricore} < %{EVRD}
+Obsoletes:	%{name}-xorg-drivers < %{EVRD}
+Obsoletes:	%{name}-xorg-drivers-radeon < %{EVRD}
+Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
+
 
 # fedora patches
 Patch15: mesa-9.2-hardware-float.patch
@@ -195,9 +201,6 @@ BuildRequires:	pkgconfig(xxf86vm)	>= 1.1.0
 %if %{with opencl}
 BuildRequires:	pkgconfig(libclc)
 BuildRequires:	clang-devel clang
-%endif
-%if ! %{with bootstrap}
-BuildRequires:	pkgconfig(xorg-server)	>= 1.11.0
 %endif
 BuildRequires:	pkgconfig(xvmc)
 %if %{with vdpau}
@@ -285,45 +288,6 @@ Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
 %description -n %{dridrivers}-freedreno
 DRI and XvMC drivers for Adreno graphics chipsets
 %endif
-
-%package	xorg-drivers
-Summary:	Mesa/Gallium XOrg drivers
-Group:		System/X11
-Requires:	%{name}-xorg-drivers-radeon = %{EVRD}
-Requires:	%{name}-xorg-drivers-nouveau = %{EVRD}
-
-%description xorg-drivers
-Xorg drivers from the Mesa/Gallium project
-
-%package	xorg-drivers-radeon
-Summary:	Mesa/Gallium XOrg drivers for AMD/ATI Radeon chipsets
-Group:		System/X11
-
-%description xorg-drivers-radeon
-Xorg drivers from the Mesa/Gallium project for AMD/ATI Radeon graphics chipsets
-
-%package	xorg-drivers-nouveau
-Summary:	Mesa/Gallium XOrg drivers for NVIDIA chipsets using the Nouveau driver
-Group:		System/X11
-
-%description xorg-drivers-nouveau
-Xorg drivers from the Mesa/Gallium project for NVIDIA graphics chipsets
-
-%package -n	%{libdricore}
-Summary:	Shared library for DRI drivers
-Group:		System/Libraries
-
-%description -n %{libdricore}
-Mesa is an OpenGL %{opengl_ver} compatible 3D graphics library.
-DRI core part.
-
-%package -n	%{devdricore}
-Summary:	Development files for DRI core
-Group:		Development/C
-Requires:	%{libdricore} = %{version}-%{release}
-
-%description -n %{devdricore}
-This package contains the headers needed to compile DRI drivers.
 
 %package -n	%{libosmesa}
 Summary:	Mesa offscreen rendering library
@@ -539,17 +503,10 @@ Group:		System/Libraries
 This packages provides a VPDAU plugin to enable video acceleration
 with the nouveau driver.
 
-%package -n	%{_lib}vdpau-driver-r300
-Summary:	VDPAU plugin for r300 driver
-Group:		System/Libraries
-
-%description -n %{_lib}vdpau-driver-r300
-This packages provides a VPDAU plugin to enable video acceleration
-with the r300 driver.
-
 %package -n	%{_lib}vdpau-driver-r600
 Summary:	VDPAU plugin for r600 driver
 Group:		System/Libraries
+Obsoletes:	%{_lib}vdpau-driver-r300 < %{EVRD}
 
 %description -n %{_lib}vdpau-driver-r600
 This packages provides a VPDAU plugin to enable video acceleration
@@ -626,7 +583,7 @@ Mesa common metapackage devel
 %if %{git}
 %setup -qn %{name}-%{git_branch}-%{git}
 %else
-%setup -qn Mesa-%{short_ver}%{vsuffix}
+%setup -qn Mesa-%{version}%{vsuffix}
 %endif
 
 %apply_patches
@@ -644,9 +601,11 @@ mkdir -p build-osmesa
 cp -a $all build-osmesa
 
 %build
+export CFLAGS="%optflags -fno-optimize-sibling-calls"
+export CXXFLAGS="%optflags -fno-optimize-sibling-calls"
 # fix build - TODO: should this be fixed in llvm somehow, or maybe the library
 # symlinks should be moved to %{_libdir}? -Anssi 08/2012
-export LDFLAGS="-L%{_libdir}/llvm"
+export LDFLAGS="-L%{_libdir}/llvm -fuse-ld=bfd"
 
 GALLIUM_DRIVERS="swrast"
 %if %{with hardware}
@@ -781,9 +740,6 @@ find %{buildroot} -name '*.la' -exec rm {} \;
 
 %ifnarch %arm
 %files -n %{dridrivers}-intel
-%if ! %{with bootstrap}
-%{_libdir}/xorg/modules/drivers/i915_drv.so
-%endif
 %_libdir/dri/i9?5_dri.so
 %_libdir/gallium-pipe/pipe_i915.so
 %endif
@@ -796,26 +752,12 @@ find %{buildroot} -name '*.la' -exec rm {} \;
 %files -n %{dridrivers}-swrast
 %_libdir/dri/swrast_dri.so
 %_libdir/gallium-pipe/pipe_swrast.so
-%_libdir/libXvMCsoftpipe.so.*
 
 %ifarch %arm
 %files -n %{dridrivers}-freedreno
 %{_libdir}/dri/kgsl_dri.so
+%{_libdir}/dri/msm_dri.so
 %endif
-
-%if ! %{with bootstrap}
-%files xorg-drivers
-
-%files xorg-drivers-radeon
-%_libdir/xorg/modules/drivers/r?00g_drv.so
-%_libdir/xorg/modules/drivers/radeonsi_drv.so
-
-%files xorg-drivers-nouveau
-%_libdir/xorg/modules/drivers/nouveau2_drv.so
-%endif
-
-%files -n %{libdricore}
-%{_libdir}/libdricore%{version}.so.%{dricoremajor}*
 
 %files -n %{libosmesa}
 %{_libdir}/libOSMesa.so.%{osmesamajor}*
@@ -915,16 +857,10 @@ find %{buildroot} -name '*.la' -exec rm {} \;
 %files -n %{devglapi}
 %{_libdir}/libglapi.so
 
-%files -n %{devdricore}
-%{_libdir}/libdricore%{version}.so
-
 #vdpau enblaed
 %if %{with vdpau}
 %files -n %{_lib}vdpau-driver-nouveau
 %{_libdir}/vdpau/libvdpau_nouveau.so.*
-
-%files -n %{_lib}vdpau-driver-r300
-%{_libdir}/vdpau/libvdpau_r300.so.*
 
 %files -n %{_lib}vdpau-driver-r600
 %{_libdir}/vdpau/libvdpau_r600.so.*
@@ -933,7 +869,6 @@ find %{buildroot} -name '*.la' -exec rm {} \;
 %{_libdir}/vdpau/libvdpau_radeonsi.so.*
 
 %files -n %{_lib}vdpau-driver-softpipe
-%{_libdir}/vdpau/libvdpau_softpipe.so.*
 %endif
 
 %if ! %{with bootstrap}
