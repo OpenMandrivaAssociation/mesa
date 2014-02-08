@@ -125,7 +125,7 @@ Release:	0.rc%{relc}.1
 %if %{git}
 Release:	0.%{git}.1
 %else
-Release:	3
+Release:	4
 %endif
 %endif
 Group:		System/Libraries
