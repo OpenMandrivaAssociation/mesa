@@ -125,7 +125,7 @@ Release:	0.rc%{relc}.1
 %if %{git}
 Release:	0.%{git}.1
 %else
-Release:	4
+Release:	5
 %endif
 %endif
 Group:		System/Libraries
@@ -621,6 +621,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 %configure2_5x \
 	--enable-dri \
 	--enable-glx \
+	--enable-glx-tls \
 	--with-dri-driverdir=%{driver_dir} \
 	--with-dri-drivers="%{dri_drivers}" \
 	--with-clang-libdir=%{_prefix}/lib \
