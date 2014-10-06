@@ -153,8 +153,6 @@ Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 
 # https://bugs.freedesktop.org/show_bug.cgi?id=74098
 Patch1:	mesa-10.2-clang-compilefix.patch
-# Make it build with more recent llvm 3.5 snapshots
-Patch2: Mesa-10.2.2-llvm-3.5.patch
 
 # fedora patches
 Patch15: mesa-9.2-hardware-float.patch
@@ -622,7 +620,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 %endif
 %endif
 
-%configure \
+%configure2_5x \
 	--enable-dri \
 	--enable-glx \
 	--enable-glx-tls \
