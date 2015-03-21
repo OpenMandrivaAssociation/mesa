@@ -7,7 +7,7 @@
 %define git 0
 %define git_branch %(echo %{version} |cut -d. -f1-2)
 
-%define opengl_ver 3.0
+%define opengl_ver 3.3
 
 %define relc	0
 
@@ -114,7 +114,7 @@
 
 Summary:	OpenGL 3.0 compatible 3D graphics library
 Name:		mesa
-Version:	10.2.9
+Version:	10.3.7
 %if %{relc}
 %if %{git}
 Release:	0.rc%{relc}.0.%{git}.1
@@ -125,7 +125,7 @@ Release:	0.rc%{relc}.1
 %if %{git}
 Release:	0.%{git}.1
 %else
-Release:	1
+Release:	0.1
 %endif
 %endif
 Group:		System/Libraries
@@ -186,7 +186,7 @@ BuildRequires:	makedepend
 BuildRequires:	llvm-devel >= 3.3
 BuildRequires:	pkgconfig(expat)
 BuildRequires:	elfutils-devel
-BuildRequires:	pkgconfig(libdrm) >= 2.4.22
+BuildRequires:	pkgconfig(libdrm) >= 2.4.60
 BuildRequires:	pkgconfig(libudev) >= 186
 BuildRequires:	pkgconfig(talloc)
 BuildRequires:	pkgconfig(x11)		>= 1.3.3
