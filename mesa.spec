@@ -656,7 +656,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--enable-xvmc \
 %if %{with vdpau}
 	--enable-vdpau \
-%else		
+%else
 	--disable-vdpau \
 %endif
 %if %{with va}
@@ -734,6 +734,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %_libdir/gallium-pipe/pipe_r?00.so
 %_libdir/gallium-pipe/pipe_radeonsi.so
 %_libdir/libXvMCr?00.so.*
+%_libdir/libXvMCgallium.so.1
 #% _libdir/libllvmradeon*.so
 
 %files -n %{dridrivers}-vmwgfx
@@ -754,6 +755,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 
 %files -n %{dridrivers}-swrast
 %_libdir/dri/swrast_dri.so
+%_libdir/dri/kms_swrast_dri.so
 %_libdir/gallium-pipe/pipe_swrast.so
 
 %ifarch %arm aarch64
@@ -831,6 +833,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %doc docs/COPYING
 %dir %{_includedir}/GL
 %{_includedir}/GL/gl.h
+%{_includedir}/GL/glcorearb.h
 %{_includedir}/GL/glext.h
 %{_includedir}/GL/gl_mangle.h
 %{_includedir}/GL/wglext.h
