@@ -183,7 +183,7 @@ BuildRequires:	bison
 BuildRequires:	gccmakedep
 BuildRequires:	libxml2-python
 BuildRequires:	makedepend
-BuildRequires:	llvm-devel >= 3.3
+BuildRequires:	llvm-devel >= 3.4.2
 BuildRequires:	pkgconfig(expat)
 BuildRequires:	elfutils-devel
 BuildRequires:	pkgconfig(libdrm) >= 2.4.60
