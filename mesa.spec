@@ -16,7 +16,7 @@
 %bcond_without hardware
 %bcond_with bootstrap
 %bcond_without vdpau
-%bcond_without va
+%bcond_with va
 %bcond_without wayland
 %bcond_without egl
 %bcond_without opencl
