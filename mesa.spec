@@ -778,7 +778,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %files -n %{dridrivers}-intel
 %_libdir/dri/i9?5_dri.so
 %_libdir/dri/ilo_dri.so
-%_libdir/gallium-pipe/pipe_i915.so
+%_libdir/gallium-pipe/pipe_i9?5.so
 %endif
 
 %files -n %{dridrivers}-nouveau
@@ -823,12 +823,12 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %files -n %{libegl}
 %doc docs/COPYING
 %{_libdir}/libEGL.so.%{eglmajor}*
-%dir %{_libdir}/egl
+#%dir %{_libdir}/egl
 %if !%{with wayland}
 # st_GL, built only when shared glapi is not enabled
 %{_libdir}/egl/st_GL.so
 %endif
-%{_libdir}/egl/egl_gallium.so
+#%{_libdir}/egl/egl_gallium.so
 %endif
 
 %files -n %{libglapi}
