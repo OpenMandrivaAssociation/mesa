@@ -59,6 +59,11 @@
 
 %define devglesv3	%mklibname glesv3 -d
 
+%define d3dmajor	0
+%define d3dname		d3dadapter9
+%define libd3d		%mklibname %{d3dname} %{d3dmajor}
+%define devd3d		%mklibname %{d3dname} -d
+
 %define openvgmajor	1
 %define openvgname	openvg
 %define libopenvg	%mklibname %{openvgname} %{openvgmajor}
@@ -449,6 +454,24 @@ Provides:	glesv3-devel = %{version}-%{release}
 %description -n %{devglesv3}
 This package contains the headers needed to compile OpenGL ES 3 programs.
 
+%package -n %{libd3d}
+Summary:	Mesa Gallium Direct3D 9 state tracker
+Group:		System/Libraries
+
+%description -n %{libd3d}
+OpenGL ES is a low-level, lightweight API for advanced embedded graphics using
+well-defined subset profiles of OpenGL.
+This package provides Direct3D 9 support.
+
+%package -n %{devd3d}
+Summary:	Development files for Direct3D 9 libs
+Group:		Development/C
+Requires:	%{libd3d} = %{version}-%{release}
+Provides:	d3d-devel = %{EVRD}
+
+%description -n %{devd3d}
+This package contains the headers needed to compile Direct3D 9 programs.
+
 %package -n %{libopenvg}
 Summary:	Files for MESA (OpenVG libs)
 Group:		System/Libraries
@@ -504,10 +527,17 @@ Group:		System/Libraries
 This packages provides a VPDAU plugin to enable video acceleration
 with the nouveau driver.
 
+%package -n	%{_lib}vdpau-driver-r300
+Summary:	VDPAU plugin for r300 driver
+Group:		System/Libraries
+
+%description -n %{_lib}vdpau-driver-r300
+This packages provides a VPDAU plugin to enable video acceleration
+with the r300 driver.
+
 %package -n	%{_lib}vdpau-driver-r600
 Summary:	VDPAU plugin for r600 driver
 Group:		System/Libraries
-Obsoletes:	%{_lib}vdpau-driver-r300 < %{EVRD}
 
 %description -n %{_lib}vdpau-driver-r600
 This packages provides a VPDAU plugin to enable video acceleration
@@ -576,9 +606,10 @@ Requires:	%{devegl} = %{version}-%{release}
 Requires:	%{devglapi} = %{version}-%{release}
 Requires:	%{devglesv1} = %{version}-%{release}
 Requires:	%{devglesv2} = %{version}-%{release}
+Suggests:	%{devd3d} = %{version}-%{release}
 
 %description common-devel
-Mesa common metapackage devel
+Mesa common metapackage devel.
 
 %prep
 %if %{git}
@@ -624,12 +655,12 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--enable-dri \
 	--enable-glx \
 	--enable-glx-tls \
+    --enable-nine \
 	--with-dri-driverdir=%{driver_dir} \
 	--with-dri-drivers="%{dri_drivers}" \
 	--with-clang-libdir=%{_prefix}/lib \
 %if %{with egl}
 	--enable-egl \
-	--enable-gallium-egl \
 	--enable-gbm \
 	--enable-shared-glapi \
 %else
@@ -641,18 +672,15 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--with-egl-platforms=x11,drm,fbdev \
 %endif
 %if ! %{with bootstrap}
-	--enable-xorg \
 	--enable-xa \
 %endif
 	--enable-gles1 \
 	--enable-gles2 \
-	--enable-gles3 \
 	--enable-openvg \
 %if %{with opencl}
 	--enable-opencl \
 %endif
 	--enable-gallium-egl \
-	--enable-gallium-g3dvl \
 	--enable-xvmc \
 %if %{with vdpau}
 	--enable-vdpau \
@@ -812,6 +840,9 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %files -n %{libglesv2}
 %{_libdir}/libGLESv2.so.%{glesv2major}*
 
+%files -n %{libd3d}
+%{_libdir}/libd3dadapter9.so.%{d3dmajor}*
+
 %files -n %{libopenvg}
 %{_libdir}/libOpenVG.so.%{openvgmajor}*
 
@@ -869,6 +900,9 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %files -n %{_lib}vdpau-driver-nouveau
 %{_libdir}/vdpau/libvdpau_nouveau.so.*
 
+%files -n %{_lib}vdpau-driver-r300
+%{_libdir}/vdpau/libvdpau_r300.so.*
+
 %files -n %{_lib}vdpau-driver-r600
 %{_libdir}/vdpau/libvdpau_r600.so.*
 
@@ -897,6 +931,10 @@ find %{buildroot} -name '*.la' |xargs rm -f
 
 %files -n %{devglesv3}
 %{_includedir}/GLES3
+
+%files -n %{devd3d}
+%{_libdir}/libd3dadapter9.so
+%{_includedir}/d3dadapter
 
 %files -n %{devopenvg}
 %{_includedir}/VG
