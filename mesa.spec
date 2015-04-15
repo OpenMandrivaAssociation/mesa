@@ -20,6 +20,7 @@
 %bcond_without wayland
 %bcond_without egl
 %bcond_without opencl
+%bcond_with openvg
 %bcond_without tfloat
 %ifarch %arm mips sparc aarch64
 %bcond_with intel
@@ -472,6 +473,7 @@ Provides:	d3d-devel = %{EVRD}
 %description -n %{devd3d}
 This package contains the headers needed to compile Direct3D 9 programs.
 
+%if %{with openvg}
 %package -n %{libopenvg}
 Summary:	Files for MESA (OpenVG libs)
 Group:		System/Libraries
@@ -490,6 +492,7 @@ Obsoletes:	%{_lib}mesaopenvg1-devel < 8.0
 
 %description -n %{devopenvg}
 Development files for OpenVG library.
+%endif
 
 %if %{with opencl}
 %package -n %{libcl}
@@ -676,7 +679,9 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 %endif
 	--enable-gles1 \
 	--enable-gles2 \
+%if %{with openvg}
 	--enable-openvg \
+%endif
 %if %{with opencl}
 	--enable-opencl \
 %endif
@@ -843,8 +848,10 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %files -n %{libd3d}
 %{_libdir}/libd3dadapter9.so.%{d3dmajor}*
 
+%if %{with openvg}
 %files -n %{libopenvg}
 %{_libdir}/libOpenVG.so.%{openvgmajor}*
+%endif
 
 %if %{with opencl}
 %files -n %{libcl}
@@ -936,10 +943,12 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_libdir}/libd3dadapter9.so
 %{_includedir}/d3dadapter
 
+%if %{with openvg}
 %files -n %{devopenvg}
 %{_includedir}/VG
 %{_libdir}/libOpenVG.so
 %{_libdir}/pkgconfig/vg.pc
+%endif
 
 %if %{with opencl}
 %files -n %{devcl}
