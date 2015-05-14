@@ -60,7 +60,7 @@
 
 %define devglesv3	%mklibname glesv3 -d
 
-%define d3dmajor	0
+%define d3dmajor	1
 %define d3dname		d3dadapter9
 %define libd3d		%mklibname %{d3dname} %{d3dmajor}
 %define devd3d		%mklibname %{d3dname} -d
