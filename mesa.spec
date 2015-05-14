@@ -846,7 +846,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_libdir}/libGLESv2.so.%{glesv2major}*
 
 %files -n %{libd3d}
-%{_libdir}/libd3dadapter9.so.%{d3dmajor}*
+%{_libdir}/d3d/d3dadapter9.so.%{d3dmajor}*
 
 %if %{with openvg}
 %files -n %{libopenvg}
@@ -861,7 +861,6 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %if %{with wayland}
 %files -n %{libgbm}
 %{_libdir}/libgbm.so.%{gbmmajor}*
-%{_libdir}/gbm/gbm_*.so
 
 %files -n %{libwaylandegl}
 %{_libdir}/libwayland-egl.so.%{waylandeglmajor}*
@@ -940,8 +939,9 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_includedir}/GLES3
 
 %files -n %{devd3d}
-%{_libdir}/libd3dadapter9.so
+%{_libdir}/d3d/d3dadapter9.so
 %{_includedir}/d3dadapter
+%{_libdir}/pkgconfig/d3d.pc
 
 %if %{with openvg}
 %files -n %{devopenvg}
