@@ -141,7 +141,7 @@ Url:		http://www.mesa3d.org
 # (cg) Current commit ref: origin/mesa_7_5_branch
 Source0:	%{name}-%{git_branch}-%{git}.tar.xz
 %else
-Source0:	ftp://ftp.freedesktop.org/pub/mesa/%{short_ver}/%{name}-%{version}%{vsuffix}.tar.bz2
+Source0:	ftp://ftp.freedesktop.org/pub/mesa/%{short_ver}/%{name}-%{version}%{vsuffix}.tar.xz
 %endif
 Source3:	make-git-snapshot.sh
 Source5:	mesa-driver-install
