@@ -120,7 +120,7 @@
 
 Summary:	OpenGL 3.0 compatible 3D graphics library
 Name:		mesa
-Version:	10.4.7
+Version:	10.5.9
 %if %{relc}
 %if %{git}
 Release:	0.rc%{relc}.0.%{git}.1
@@ -141,7 +141,7 @@ Url:		http://www.mesa3d.org
 # (cg) Current commit ref: origin/mesa_7_5_branch
 Source0:	%{name}-%{git_branch}-%{git}.tar.xz
 %else
-Source0:	ftp://ftp.freedesktop.org/pub/mesa/%{short_ver}/MesaLib-%{version}%{vsuffix}.tar.bz2
+Source0:	ftp://ftp.freedesktop.org/pub/mesa/%{short_ver}/%{name}-%{version}%{vsuffix}.tar.bz2
 %endif
 Source3:	make-git-snapshot.sh
 Source5:	mesa-driver-install
@@ -656,9 +656,11 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 
 %configure2_5x \
 	--enable-dri \
+	--enable-dri3 \
 	--enable-glx \
 	--enable-glx-tls \
-    --enable-nine \
+	--enable-nine \
+	--enable-gallium-osmesa \
 	--with-dri-driverdir=%{driver_dir} \
 	--with-dri-drivers="%{dri_drivers}" \
 	--with-clang-libdir=%{_prefix}/lib \
