@@ -618,7 +618,7 @@ Mesa common metapackage devel.
 %if %{git}
 %setup -qn %{name}-%{git_branch}-%{git}
 %else
-%setup -qn Mesa-%{version}%{vsuffix}
+%setup -qn %{name}-%{version}%{vsuffix}
 %endif
 
 %apply_patches
