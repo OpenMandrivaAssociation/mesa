@@ -672,9 +672,9 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--disable-egl \
 %endif
 %if %{with wayland}
-	--with-egl-platforms=x11,wayland,drm,fbdev \
+	--with-egl-platforms=x11,wayland,drm \
 %else
-	--with-egl-platforms=x11,drm,fbdev \
+	--with-egl-platforms=x11,drm \
 %endif
 %if ! %{with bootstrap}
 	--enable-xa \
