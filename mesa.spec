@@ -17,7 +17,7 @@
 %bcond_with bootstrap
 %bcond_without vdpau
 %bcond_with va
-%bcond_without wayland
+%bcond_with wayland
 %bcond_without egl
 %bcond_without opencl
 %bcond_with openvg
