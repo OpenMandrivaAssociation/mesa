@@ -563,7 +563,7 @@ This packages provides a VPDAU plugin to enable video acceleration
 with the softpipe driver.
 %endif
 
-%if %{with wayland}
+%if %{with egl}
 %package -n %{libgbm}
 Summary:	Files for Mesa (gbm libs)
 Group:		System/Libraries
@@ -580,7 +580,9 @@ Requires:	%{libgbm} = %{version}-%{release}
 %description -n %{devgbm}
 Mesa is an OpenGL %{opengl_ver} compatible 3D graphics library.
 GBM (Graphics Buffer Manager) development parts.
+%endif
 
+%if %{with wayland}
 %package -n %{libwaylandegl}
 Summary:	Files for Mesa (Wayland EGL libs)
 Group:		System/Libraries
@@ -826,7 +828,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %doc docs/COPYING
 %{_libdir}/libEGL.so.%{eglmajor}*
 #%dir %{_libdir}/egl
-%if !%{with wayland}
+%if %{with wayland}
 # st_GL, built only when shared glapi is not enabled
 %{_libdir}/egl/st_GL.so
 %endif
@@ -860,7 +862,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %_libdir/libOpenCL.so.%{clmajor}*
 %endif
 
-%if %{with wayland}
+%if %{with egl}
 %files -n %{libgbm}
 %{_libdir}/libgbm.so.%{gbmmajor}*
 
@@ -885,9 +887,12 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_libdir}/pkgconfig/dri.pc
 
 #FIXME: check those headers
+%if %{with wayland}
 %{_includedir}/GL/wmesa.h
+%endif
 %dir %{_includedir}/GL/internal
 %{_includedir}/GL/internal/dri_interface.h
+#END FIX
 
 %files common-devel
 # meta devel pkg
@@ -958,12 +963,14 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %_libdir/libOpenCL.so
 %endif
 
-%if %{with wayland}
+%if %{with egl}
 %files -n %{devgbm}
 %{_includedir}/gbm.h
 %{_libdir}/libgbm.so
 %{_libdir}/pkgconfig/gbm.pc
+%endif
 
+%if %{with wayland}
 %files -n %{devwaylandegl}
 %{_libdir}/libwayland-egl.so
 %{_libdir}/pkgconfig/wayland-egl.pc
