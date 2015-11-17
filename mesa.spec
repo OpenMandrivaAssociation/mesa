@@ -865,7 +865,9 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %if %{with egl}
 %files -n %{libgbm}
 %{_libdir}/libgbm.so.%{gbmmajor}*
+%endif
 
+%if %{with wayland}
 %files -n %{libwaylandegl}
 %{_libdir}/libwayland-egl.so.%{waylandeglmajor}*
 %endif
