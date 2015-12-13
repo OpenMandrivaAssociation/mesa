@@ -16,7 +16,7 @@
 %bcond_without hardware
 %bcond_with bootstrap
 %bcond_without vdpau
-%bcond_with va
+%bcond_without va
 %bcond_with wayland
 %bcond_without egl
 %bcond_without opencl
@@ -120,7 +120,7 @@
 
 Summary:	OpenGL 3.0 compatible 3D graphics library
 Name:		mesa
-Version:	10.6.9
+Version:	11.0.7
 %if %{relc}
 %if %{git}
 Release:	0.rc%{relc}.0.%{git}.1
@@ -192,7 +192,7 @@ BuildRequires:	makedepend
 BuildRequires:	llvm-devel >= 3.5.0
 BuildRequires:	pkgconfig(expat)
 BuildRequires:	elfutils-devel
-BuildRequires:	pkgconfig(libdrm) >= 2.4.60
+BuildRequires:	pkgconfig(libdrm) >= 2.4.65
 BuildRequires:	pkgconfig(libudev) >= 186
 BuildRequires:	pkgconfig(talloc)
 BuildRequires:	pkgconfig(x11)		>= 1.3.3
@@ -449,7 +449,7 @@ This package contains the headers needed to compile OpenGL ES 2 programs.
 %package -n %{devglesv3}
 Summary:	Development files for glesv3 libs
 Group:		Development/C
-# there is no pkgconfig 
+# there is no pkgconfig
 Provides:	glesv3-devel = %{version}-%{release}
 
 %description -n %{devglesv3}
@@ -638,12 +638,13 @@ mkdir -p build-osmesa
 cp -a $all build-osmesa
 
 %build
-export CFLAGS="%optflags -fno-optimize-sibling-calls"
-export CXXFLAGS="%optflags -fno-optimize-sibling-calls"
-# Using clang causes the r600 driver to crash on startup, and to complain
-# about "libGL: driver does not expose __driDriverGetExtensions_r600(): /usr/lib64/dri/r600_dri.so: undefined symbol: __driDriverGetExtensions_r600"
-export CC=gcc
-export CXX=g++
+export CFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
+export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
+%ifarch x86_64
+# Mesa uses SSSE3 asm instructions -- clang errors out if we don't allow them
+export CFLAGS="$CFLAGS -mssse3"
+export CXXFLAGS="$CXXFLAGS -mssse3"
+%endif
 
 GALLIUM_DRIVERS="swrast"
 %if %{with hardware}
@@ -674,9 +675,9 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--disable-egl \
 %endif
 %if %{with wayland}
-	--with-egl-platforms=x11,wayland,drm \
+	--with-egl-platforms=x11,wayland,drm,surfaceless \
 %else
-	--with-egl-platforms=x11,drm \
+	--with-egl-platforms=x11,drm,surfaceless \
 %endif
 %if ! %{with bootstrap}
 	--enable-xa \
@@ -689,7 +690,6 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 %if %{with opencl}
 	--enable-opencl \
 %endif
-	--enable-gallium-egl \
 	--enable-xvmc \
 %if %{with vdpau}
 	--enable-vdpau \
@@ -704,6 +704,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--with-gallium-drivers=$GALLIUM_DRIVERS \
 %if %{with hardware}
 	--enable-gallium-llvm \
+	--enable-llvm-shared-libs \
 	--enable-r600-llvm-compiler \
 %else
 	--disable-gallium-llvm \
@@ -725,6 +726,8 @@ pushd build-osmesa
 	--disable-glx \
 	--disable-egl \
 	--disable-shared-glapi \
+	--disable-gles1 \
+	--disable-gles2 \
 	--without-gallium-drivers
 popd
 
