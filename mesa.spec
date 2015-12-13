@@ -816,7 +816,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 
 %if %{with va}
 %files -n %{libvadrivers}
-%{_libdir}/va/lib*.so*
+%{_libdir}/dri/gallium_drv_video.so
 %endif
 
 %files -n %{libgl}
