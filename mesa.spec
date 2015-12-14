@@ -640,11 +640,6 @@ cp -a $all build-osmesa
 %build
 export CFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
 export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
-%ifarch x86_64
-# Mesa uses SSSE3 asm instructions -- clang errors out if we don't allow them
-export CFLAGS="$CFLAGS -mssse3"
-export CXXFLAGS="$CXXFLAGS -mssse3"
-%endif
 
 GALLIUM_DRIVERS="swrast"
 %if %{with hardware}
@@ -675,9 +670,9 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--disable-egl \
 %endif
 %if %{with wayland}
-	--with-egl-platforms=x11,wayland,drm,surfaceless \
+	--with-egl-platforms=x11,wayland,drm \
 %else
-	--with-egl-platforms=x11,drm,surfaceless \
+	--with-egl-platforms=x11,drm \
 %endif
 %if ! %{with bootstrap}
 	--enable-xa \
