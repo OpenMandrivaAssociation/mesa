@@ -640,10 +640,6 @@ cp -a $all build-osmesa
 %build
 export CFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
 export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
-# Using clang causes the r600 driver to crash on startup, and to complain
-# about "libGL: driver does not expose __driDriverGetExtensions_r600(): /usr/lib64/dri/r600_dri.so: undefined symbol: __driDriverGetExtensions_r600"
-export CC=gcc
-export CXX=g++
 
 GALLIUM_DRIVERS="swrast"
 %if %{with hardware}
