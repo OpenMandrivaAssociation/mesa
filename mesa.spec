@@ -131,7 +131,7 @@ Release:	0.rc%{relc}.1
 %if %{git}
 Release:	0.%{git}.1
 %else
-Release:	0.1
+Release:	0.2
 %endif
 %endif
 Group:		System/Libraries
@@ -640,6 +640,10 @@ cp -a $all build-osmesa
 %build
 export CFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
 export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
+# Using clang causes the r600 driver to crash on startup, and to complain
+# about "libGL: driver does not expose __driDriverGetExtensions_r600(): /usr/lib64/dri/r600_dri.so: undefined symbol: __driDriverGetExtensions_r600"
+export CC=gcc
+export CXX=g++
 
 GALLIUM_DRIVERS="swrast"
 %if %{with hardware}
@@ -700,7 +704,6 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 %if %{with hardware}
 	--enable-gallium-llvm \
 	--enable-llvm-shared-libs \
-	--enable-r600-llvm-compiler \
 %else
 	--disable-gallium-llvm \
 %endif
