@@ -120,7 +120,7 @@
 
 Summary:	OpenGL 3.0 compatible 3D graphics library
 Name:		mesa
-Version:	11.0.7
+Version:	11.0.8
 %if %{relc}
 %if %{git}
 Release:	0.rc%{relc}.0.%{git}.1
@@ -131,7 +131,7 @@ Release:	0.rc%{relc}.1
 %if %{git}
 Release:	0.%{git}.1
 %else
-Release:	0.2
+Release:	0.1
 %endif
 %endif
 Group:		System/Libraries
