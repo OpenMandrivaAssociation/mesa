@@ -9,7 +9,7 @@
 
 %define opengl_ver 3.3
 
-%define relc	0
+%define relc 0
 
 # bootstrap option: Build without requiring an X server
 # (which in turn requires mesa to build)
@@ -120,7 +120,7 @@
 
 Summary:	OpenGL 3.0 compatible 3D graphics library
 Name:		mesa
-Version:	11.0.9
+Version:	11.1.2
 %if %{relc}
 %if %{git}
 Release:	0.rc%{relc}.0.%{git}.1
