@@ -661,7 +661,6 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno"
 	--enable-gallium-osmesa \
 	--with-dri-driverdir=%{driver_dir} \
 	--with-dri-drivers="%{dri_drivers}" \
-	--with-clang-libdir=%{_prefix}/lib \
 %if %{with egl}
 	--enable-egl \
 	--enable-gbm \
