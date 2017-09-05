@@ -97,6 +97,14 @@
 %define libxatracker	%mklibname %xatrackername %{xatrackermajor}
 %define devxatracker	%mklibname %xatrackername -d
 
+%define swravxmajor	0
+%define swravxname	swravx
+%define libswravx	%mklibname %swravxname %{swravxmajor}
+
+%define swravx2major	0
+%define swravx2name	swravx2
+%define libswravx2	%mklibname %swravx2name %{swravx2major}
+
 %define clmajor		1
 %define clname		opencl
 %define libcl		%mklibname %clname %clmajor
@@ -142,7 +150,7 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	17.1.8
+Version:	17.2.0
 %if "%{relc}%{git}" == ""
 Release:	1
 %else
@@ -150,7 +158,7 @@ Release:	1
 %if "%{git}" != ""
 Release:	%{?relc:0.rc%{relc}}.0.%{git}.1
 %else
-Release:	%{?relc:0.rc%{relc}}.1
+Release:	%{?relc:0.rc%{relc}}.3
 %endif
 %else
 Release:	%{?git:0.%{git}.}1
@@ -180,9 +188,8 @@ Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 
 # https://bugs.freedesktop.org/show_bug.cgi?id=74098
 Patch1:	mesa-10.2-clang-compilefix.patch
-#if %mdvver > 3000000
-#Patch3: clover-llvm-4.0.patch
-#endif
+Patch2: libmesautil-supc++-linkage.patch
+Patch3: mesa-17.2-rc3-llvm-5.0.patch
 
 # fedora patches
 Patch15: mesa-9.2-hardware-float.patch
@@ -225,6 +232,10 @@ Patch201: 0201-revert-fix-glxinitializevisualconfigfromtags-handling.patch
 Patch204:	mesa-11.1.0-fix-SSSE3.patch
 #Patch206:	mesa-11.2-arm-no-regparm.patch
 
+# Forward-port of reverting commit f50aa21456d82c8cb6fbaa565835f1acc1720a5d
+# because of https://bugs.freedesktop.org/show_bug.cgi?id=101832
+Patch205:	mesa-17.2.0-rc5-crash-on-startup.patch
+
 BuildRequires:	flex
 BuildRequires:	bison
 BuildRequires:	gccmakedep
@@ -247,6 +258,8 @@ BuildRequires:	pkgconfig(xproto)
 BuildRequires:	pkgconfig(xt)		>= 1.0.5
 BuildRequires:	pkgconfig(xxf86vm)	>= 1.1.0
 BuildRequires:	pkgconfig(xshmfence)	>= 1.1
+# for libsupc++.a
+BuildRequires:	stdc++-static-devel
 # (tpg) with openssl a steam crashes
 # Program received signal SIGSEGV, Segmentation fault.
 # 0xf63db8d5 in OPENSSL_ia32_cpuid () from /lib/libcrypto.so.1.0.0
@@ -266,6 +279,7 @@ BuildRequires:	pkgconfig(libva)	>= 0.31.0
 %if %{with wayland}
 BuildRequires:	pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(wayland-server)
+BuildRequires:  pkgconfig(wayland-protocols) >= 1.8
 %endif
 
 # package mesa
@@ -291,6 +305,9 @@ Requires:	%{dridrivers}-nouveau = %{EVRD}
 %ifarch %{armx}
 Requires:	%{dridrivers}-freedreno = %{EVRD}
 Requires:	%{dridrivers}-vc4 = %{EVRD}
+Requires:	%{dridrivers}-etnaviv = %{EVRD}
+Requires:	%{dridrivers}-imx = %{EVRD}
+Requires:	%{dridrivers}-pl111 = %{EVRD}
 %endif
 Provides:	dri-drivers = %{EVRD}
 
@@ -368,6 +385,30 @@ Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
 
 %description -n %{dridrivers}-vc4
 DRI and XvMC drivers for Broadcom VC4 graphics chips
+
+%package -n	%{dridrivers}-etnaviv
+Summary:	DRI Drivers for Vivante graphics chipsets
+Group:		System/Libraries
+Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
+
+%description -n %{dridrivers}-etnaviv
+DRI and XvMC drivers for Vivante graphics chips
+
+%package -n	%{dridrivers}-imx
+Summary:	DRI Drivers for i.MX graphics chipsets
+Group:		System/Libraries
+Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
+
+%description -n %{dridrivers}-imx
+DRI and XvMC drivers for i.MX graphics chips
+
+%package -n	%{dridrivers}-pl111
+Summary:	DRI Drivers for ARM PL111 displays
+Group:		System/Libraries
+Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
+
+%description -n %{dridrivers}-pl111
+DRI and XvMC drivers for ARM PL111 displays
 %endif
 
 %package -n	%{libosmesa}
@@ -493,6 +534,20 @@ Requires:	%{libxatracker} = %{version}-%{release}
 This package contains the headers needed to compile programs against
 the xatracker shared library.
 %endif
+
+%package -n %{libswravx}
+Summary:	AVX Software rendering library for Mesa
+Group:		System/Libraries
+
+%description -n %{libswravx}
+AVX Software rendering library for Mesa
+
+%package -n %{libswravx2}
+Summary:	AVX2 Software rendering library for Mesa
+Group:		System/Libraries
+
+%description -n %{libswravx2}
+AVX2 Software rendering library for Mesa
 
 %package -n %{libglesv1}
 Summary:	Files for Mesa (glesv1 libs)
@@ -746,9 +801,12 @@ export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
 
 GALLIUM_DRIVERS="swrast,virgl"
 %if %{with hardware}
-GALLIUM_DRIVERS="$GALLIUM_DRIVERS,svga,r300,nouveau"
+GALLIUM_DRIVERS="$GALLIUM_DRIVERS,r300,nouveau"
 %if %{with r600}
 GALLIUM_DRIVERS="$GALLIUM_DRIVERS,r600,radeonsi"
+%endif
+%ifarch %{ix86} x86_64
+GALLIUM_DRIVERS="$GALLIUM_DRIVERS,svga,swr"
 %endif
 %if %{with intel}
 # (tpg) i915 got removed as it does not load on wayland
@@ -757,7 +815,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,r600,radeonsi"
 # GALLIUM_DRIVERS="$GALLIUM_DRIVERS,ilo"
 %endif
 %ifarch %{armx}
-GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4"
+GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4,etnaviv,pl111,imx"
 %endif
 %endif
 
@@ -823,7 +881,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4"
 
 pushd build-osmesa
 %configure \
-	--enable-osmesa \
+	--enable-gallium-osmesa \
 	--disable-dri \
 	--disable-gbm \
 	--disable-glx \
@@ -831,7 +889,7 @@ pushd build-osmesa
 	--disable-shared-glapi \
 	--disable-gles1 \
 	--disable-gles2 \
-	--with-gallium-drivers=swrast
+	--with-gallium-drivers=swr,swrast
 popd
 
 %make
@@ -914,13 +972,13 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_datadir}/vulkan/icd.d/radeon_icd.*.json
 %endif
 
+%ifarch %{ix86} x86_64
 %files -n %{dridrivers}-vmwgfx
 %{_libdir}/dri/vmwgfx_dri.so
 %if %{with opencl}
 %{_libdir}/gallium-pipe/pipe_vmwgfx.so
 %endif
 
-%ifnarch %{armx}
 %files -n %{dridrivers}-intel
 %{_libdir}/dri/i9?5_dri.so
 %if %{with opencl}
@@ -956,6 +1014,15 @@ find %{buildroot} -name '*.la' |xargs rm -f
 
 %files -n %{dridrivers}-vc4
 %{_libdir}/dri/vc4_dri.so
+
+%files -n %{dridrivers}-etnaviv
+%{_libdir}/dri/etnaviv_dri.so
+
+%files -n %{dridrivers}-imx
+%{_libdir}/dri/imx-drm_dri.so
+
+%files -n %{dridrivers}-pl111
+%{_libdir}/dri/pl111_dri.so
 %endif
 %endif
 
@@ -994,6 +1061,16 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %if ! %{with bootstrap}
 %files -n %{libxatracker}
 %{_libdir}/libxatracker.so.%{xatrackermajor}*
+%endif
+
+%ifarch %{ix86} x86_64
+%files -n %{libswravx}
+%{_libdir}/libswrAVX.so
+%{_libdir}/libswrAVX.so.%{swravxmajor}*
+
+%files -n %{libswravx2}
+%{_libdir}/libswrAVX2.so
+%{_libdir}/libswrAVX2.so.%{swravxmajor}*
 %endif
 
 %files -n %{libglesv1}

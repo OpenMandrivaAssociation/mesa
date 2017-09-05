@@ -1,0 +1,23 @@
+--- mesa-17.2.0-rc3/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp.omv~	2017-08-09 23:48:02.267059766 +0200
++++ mesa-17.2.0-rc3/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp	2017-08-09 23:49:41.018328799 +0200
+@@ -501,17 +501,17 @@ StoreInst* ALIGNED_STORE(Value *Val, Val
+     return IRB()->CreateAlignedStore(Val, Ptr, Align, isVolatile);
+ }
+ 
+-FenceInst* FENCE(AtomicOrdering Ordering, SynchronizationScope SynchScope = CrossThread, const Twine &Name = "")
++FenceInst* FENCE(AtomicOrdering Ordering, SyncScope::ID SynchScope = SyncScope::System, const Twine &Name = "")
+ {
+     return IRB()->CreateFence(Ordering, SynchScope, Name);
+ }
+ 
+-AtomicCmpXchgInst* ATOMIC_CMP_XCHG(Value *Ptr, Value *Cmp, Value *New, AtomicOrdering SuccessOrdering, AtomicOrdering FailureOrdering, SynchronizationScope SynchScope = CrossThread)
++AtomicCmpXchgInst* ATOMIC_CMP_XCHG(Value *Ptr, Value *Cmp, Value *New, AtomicOrdering SuccessOrdering, AtomicOrdering FailureOrdering, SyncScope::ID SynchScope = SyncScope::System)
+ {
+     return IRB()->CreateAtomicCmpXchg(Ptr, Cmp, New, SuccessOrdering, FailureOrdering, SynchScope);
+ }
+ 
+-AtomicRMWInst* ATOMIC_RMW(AtomicRMWInst::BinOp Op, Value *Ptr, Value *Val, AtomicOrdering Ordering, SynchronizationScope SynchScope = CrossThread)
++AtomicRMWInst* ATOMIC_RMW(AtomicRMWInst::BinOp Op, Value *Ptr, Value *Val, AtomicOrdering Ordering, SyncScope::ID SynchScope = SyncScope::System)
+ {
+     return IRB()->CreateAtomicRMW(Op, Ptr, Val, Ordering, SynchScope);
+ }

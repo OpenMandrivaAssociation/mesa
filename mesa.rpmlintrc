@@ -1,2 +1,5 @@
 # False positive (9.1 vs. 9.1.0)
 addFilter("E: incoherent-version-in-name")
+
+# libswrAVX*.so files for dlopen-ing
+addFilter("E: devel-file-in-non-devel-package")
