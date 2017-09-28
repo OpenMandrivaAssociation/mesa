@@ -1,0 +1,23 @@
+--- mesa-13.0.0/src/gallium/state_trackers/clover/llvm/codegen/bitcode.cpp.omv~	2016-11-11 19:02:02.234615271 +0100
++++ mesa-13.0.0/src/gallium/state_trackers/clover/llvm/codegen/bitcode.cpp	2016-11-11 19:04:18.253532585 +0100
+@@ -37,7 +37,8 @@
+ #include "util/algorithm.hpp"
+ 
+ #include <map>
+-#include <llvm/Bitcode/ReaderWriter.h>
++#include <llvm/Bitcode/BitcodeReader.h>
++#include <llvm/Bitcode/BitcodeWriter.h>
+ #include <llvm/Support/raw_ostream.h>
+ 
+ using namespace clover;
+--- mesa-13.0.1/src/gallium/state_trackers/clover/llvm/codegen/bitcode.cpp.omv~	2016-11-22 20:06:00.129641391 +0100
++++ mesa-13.0.1/src/gallium/state_trackers/clover/llvm/codegen/bitcode.cpp	2016-11-22 20:20:07.166523589 +0100
+@@ -94,7 +94,7 @@ clover::llvm::parse_module_library(const
+    auto mod = ::llvm::parseBitcodeFile(::llvm::MemoryBufferRef(
+                                         as_string(m.secs[0].data), " "), ctx);
+    if (!mod)
+-      fail(r_log, error(CL_INVALID_PROGRAM), mod.getError().message());
++      fail(r_log, error(CL_INVALID_PROGRAM), errorToErrorCode(mod.takeError()).message());
+ 
+    return std::unique_ptr<::llvm::Module>(std::move(*mod));
+ }
