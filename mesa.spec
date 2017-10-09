@@ -23,7 +23,7 @@
 # bootstrap option: Build without requiring an X server
 # (which in turn requires mesa to build)
 %bcond_without hardware
-%bcond_with gcc
+%bcond_without gcc
 %bcond_with bootstrap
 %bcond_without vdpau
 %bcond_without va
