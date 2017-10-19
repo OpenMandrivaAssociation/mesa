@@ -150,15 +150,15 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	17.2.2
+Version:	17.2.3
 %if "%{relc}%{git}" == ""
-Release:	2
+Release:	1
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
 Release:	%{?relc:0.rc%{relc}}.0.%{git}.1
 %else
-Release:	%{?relc:0.rc%{relc}}.3
+Release:	%{?relc:0.rc%{relc}}.1
 %endif
 %else
 Release:	%{?git:0.%{git}.}1
@@ -232,10 +232,6 @@ Patch201:	0201-revert-fix-glxinitializevisualconfigfromtags-handling.patch
 # real fix is in one of millions commits in llvm git related to https://llvm.org/bugs/show_bug.cgi?id=24990
 Patch204:	mesa-11.1.0-fix-SSSE3.patch
 #Patch206:	mesa-11.2-arm-no-regparm.patch
-
-# Forward-port of reverting commit f50aa21456d82c8cb6fbaa565835f1acc1720a5d
-# because of https://bugs.freedesktop.org/show_bug.cgi?id=101832
-Patch205:	mesa-17.2.0-rc5-crash-on-startup.patch
 
 BuildRequires:	flex
 BuildRequires:	bison
