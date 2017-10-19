@@ -817,7 +817,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,svga,swr"
 %if %{with intel}
 # (tpg) i915 got removed as it does not load on wayland
 # http://wayland.freedesktop.org/building.html
-# ilo is gone as of 17.1-rc1 
+# ilo is gone as of 17.1-rc1
 # GALLIUM_DRIVERS="$GALLIUM_DRIVERS,ilo"
 %endif
 %ifarch %{armx}
@@ -974,9 +974,9 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %if %{with opencl}
 %{_libdir}/gallium-pipe/pipe_radeonsi.so
 %endif
+%endif
 %{_libdir}/libvulkan_radeon.so
 %{_datadir}/vulkan/icd.d/radeon_icd.*.json
-%endif
 
 %ifarch %{ix86} x86_64
 %files -n %{dridrivers}-vmwgfx
