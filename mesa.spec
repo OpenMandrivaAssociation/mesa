@@ -991,7 +991,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 
 %files -n %{dridrivers}-nouveau
 %{_libdir}/dri/nouveau*_dri.so
-%if ! %{with va}
+%if %{with va}
 %{_libdir}/dri/nouveau_drv_video.so
 %endif
 %if %{with opencl}
