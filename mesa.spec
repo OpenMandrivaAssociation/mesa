@@ -150,9 +150,9 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	17.2.3
+Version:	17.3.0
 %if "%{relc}%{git}" == ""
-Release:	1
+Release:	2
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
@@ -189,6 +189,7 @@ Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 # https://bugs.freedesktop.org/show_bug.cgi?id=74098
 Patch1:	mesa-10.2-clang-compilefix.patch
 Patch2: libmesautil-supc++-linkage.patch
+Patch3: mesa-17.3.0-llvm-6.0.patch
 
 # fedora patches
 Patch15: mesa-9.2-hardware-float.patch
@@ -207,9 +208,6 @@ Patch15: mesa-9.2-hardware-float.patch
 # git format-patch --start-number 100 mesa_7_5_1..mesa_7_5_branch | sed 's/^0\([0-9]\+\)-/Patch\1: 0\1-/'
 
 # Cherry picks
-# git format-patch --start-number 200 mesa_7_5_branch..mdv-cherry-picks
-# https://cgit.freedesktop.org/~ajax/mesa/log/?h=mesa-17.2-s3tc
-Patch100:	0001-mesa-Squash-merge-of-S3TC-support.patch
 
 # Mandriva & Mageia patches
 

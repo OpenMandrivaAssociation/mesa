@@ -1,13 +1,11 @@
-diff -Naur mesa-17.2.2/src/util/Makefile.am mesa-17.2.2.tpg/src/util/Makefile.am
---- mesa-17.2.2/src/util/Makefile.am	2017-10-02 15:49:03.000000000 +0000
-+++ mesa-17.2.2.tpg/src/util/Makefile.am	2017-10-06 20:56:51.092479002 +0000
-@@ -47,7 +47,8 @@
+--- mesa-17.3.0-rc1/src/util/Makefile.am.0002~	2017-10-27 18:36:49.923144171 +0200
++++ mesa-17.3.0-rc1/src/util/Makefile.am	2017-10-27 18:37:14.907058461 +0200
+@@ -52,7 +52,7 @@ libmesautil_la_SOURCES = \
  libmesautil_la_LIBADD = \
  	$(CLOCK_LIB) \
  	$(ZLIB_LIBS) \
 -	$(LIBATOMIC_LIBS)
 +	$(LIBATOMIC_LIBS) -lsupc++
-+
  
- u_atomic_test_LDADD = libmesautil.la
- roundeven_test_LDADD = -lm
+ libxmlconfig_la_SOURCES = $(XMLCONFIG_FILES)
+ libxmlconfig_la_CFLAGS = \
