@@ -5,6 +5,11 @@
 %define _disable_ld_no_undefined 1
 %define _disable_lto 1
 
+%ifarch %{ix86}
+#error: create archive failed on file /builddir/build/BUILDROOT/mesa-17.3.6-1-omv2015.0.i586-buildroot/usr/lib/debug/usr/lib/gallium-pipe/pipe_radeonsi.so.debug: cpio: Bad magic
+%debug_package %{nil}
+%endif
+
 %ifarch aarch64
 %global optflags %{optflags} -fuse-ld=bfd
 %bcond_with osmesa
