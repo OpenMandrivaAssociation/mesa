@@ -7,7 +7,8 @@
 
 %ifarch %{ix86}
 #error: create archive failed on file /builddir/build/BUILDROOT/mesa-17.3.6-1-omv2015.0.i586-buildroot/usr/lib/debug/usr/lib/gallium-pipe/pipe_radeonsi.so.debug: cpio: Bad magic
-%debug_package %{nil}
+%define _enable_debug_packages %{nil}
+%define debug_package          %{nil}
 %endif
 
 %ifarch aarch64
