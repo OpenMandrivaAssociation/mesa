@@ -1,7 +1,8 @@
---- mesa-17.3.0-rc1/src/util/Makefile.am.0002~	2017-10-27 18:36:49.923144171 +0200
-+++ mesa-17.3.0-rc1/src/util/Makefile.am	2017-10-27 18:37:14.907058461 +0200
-@@ -52,7 +52,7 @@ libmesautil_la_SOURCES = \
- libmesautil_la_LIBADD = \
+diff -Naur mesa-17.3.6/src/util/Makefile.am mesa-17.3.6.tpg/src/util/Makefile.am
+--- mesa-17.3.6/src/util/Makefile.am	2018-02-27 00:21:09.000000000 +0000
++++ mesa-17.3.6.tpg/src/util/Makefile.am	2018-03-02 18:03:23.089572671 +0000
+@@ -54,7 +54,7 @@
+ 	$(PTHREAD_LIBS) \
  	$(CLOCK_LIB) \
  	$(ZLIB_LIBS) \
 -	$(LIBATOMIC_LIBS)
