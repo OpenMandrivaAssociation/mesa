@@ -153,7 +153,7 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	17.3.8
+Version:	17.3.9
 %if "%{relc}%{git}" == ""
 Release:	1
 %else
@@ -862,7 +862,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4,etnaviv,pl111,imx"
 # See e.g. https://bugs.launchpad.net/ubuntu/+source/mesa/+bug/1066599
 # -Anssi 12/2012
 
-pushd build-osmesa
+cd build-osmesa
 %configure \
 	--enable-gallium-osmesa \
 	--disable-dri \
@@ -873,7 +873,7 @@ pushd build-osmesa
 	--disable-gles1 \
 	--disable-gles2 \
 	--with-gallium-drivers=swr,swrast
-popd
+cd -
 
 %make
 %ifarch i686
@@ -897,9 +897,9 @@ popd
 # (blino) hardlink libGL files in %{_libdir}/mesa
 # to prevent proprietary driver installers from removing them
 mkdir -p %{buildroot}%{_libdir}/mesa
-pushd %{buildroot}%{_libdir}/mesa
+cd %{buildroot}%{_libdir}/mesa
 for l in ../libGL.so.*; do cp -a $l .; done
-popd
+cd -
 
 %ifarch armv7hl
 ln -sf libGL.so.%{glmajor} %{buildroot}%{_libdir}/libGL.so
