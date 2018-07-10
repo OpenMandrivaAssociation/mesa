@@ -33,7 +33,6 @@
 %bcond_with bootstrap
 %bcond_without vdpau
 %bcond_without va
-%bcond_without wayland
 %bcond_without egl
 %bcond_without opencl
 %ifarch %arm mips sparc aarch64
@@ -115,11 +114,6 @@
 %define libcl		%mklibname %clname %clmajor
 %define devcl		%mklibname %clname -d
 
-%define waylandeglmajor	1
-%define waylandeglname	wayland-egl
-%define libwaylandegl	%mklibname %{waylandeglname} %{waylandeglmajor}
-%define devwaylandegl	%mklibname %{waylandeglname} -d
-
 %define mesasrcdir	%{_prefix}/src/Mesa/
 %define driver_dir	%{_libdir}/dri
 
@@ -153,7 +147,7 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	17.3.9
+Version:	18.1.3
 %if "%{relc}%{git}" == ""
 Release:	1
 %else
@@ -272,11 +266,6 @@ BuildRequires:	pkgconfig(vdpau)	>= 0.4.1
 %endif
 %if %{with va}
 BuildRequires:	pkgconfig(libva)	>= 0.31.0
-%endif
-%if %{with wayland}
-BuildRequires:	pkgconfig(wayland-client)
-BuildRequires:  pkgconfig(wayland-server)
-BuildRequires:  pkgconfig(wayland-protocols) >= 1.8
 %endif
 
 # package mesa
@@ -606,6 +595,13 @@ This package contains the headers needed to compile Direct3D 9 programs.
 %package -n %{libcl}
 Summary:	OpenCL libs
 Group:		System/Libraries
+%define libmesacl	%mklibname mesaopencl %clmajor
+Provides:	%{libmesacl} = %{EVRD}
+%if "%{_lib}" == "lib64"
+Provides:	libOpenCL.so.1()(64bit)
+%else
+Provides:	libOpenCL.so.1
+%endif
 
 %description -n %{libcl}
 Open Computing Language (OpenCL) is a framework for writing programs that
@@ -713,25 +709,6 @@ Mesa is an OpenGL %{opengl_ver} compatible 3D graphics library.
 GBM (Graphics Buffer Manager) development parts.
 %endif
 
-%if %{with wayland}
-%package -n %{libwaylandegl}
-Summary:	Files for Mesa (Wayland EGL libs)
-Group:		System/Libraries
-
-%description -n %{libwaylandegl}
-Mesa is an OpenGL %{opengl_ver} compatible 3D graphics library.
-Wayland EGL platform parts.
-
-%package -n %{devwaylandegl}
-Summary:	Development files for Mesa (Wayland EGL libs)
-Group:		Development/C
-Requires:	%{libwaylandegl} = %{version}-%{release}
-
-%description -n %{devwaylandegl}
-Mesa is an OpenGL %{opengl_ver} compatible 3D graphics library.
-Wayland EGL platform development parts.
-%endif
-
 %package	common-devel
 Summary:	Meta package for mesa devel
 Group:		Development/C
@@ -794,12 +771,6 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,r600,radeonsi"
 %ifarch %{ix86} x86_64
 GALLIUM_DRIVERS="$GALLIUM_DRIVERS,svga,swr"
 %endif
-%if %{with intel}
-# (tpg) i915 got removed as it does not load on wayland
-# http://wayland.freedesktop.org/building.html
-# ilo is gone as of 17.1-rc1
-# GALLIUM_DRIVERS="$GALLIUM_DRIVERS,ilo"
-%endif
 %ifarch %{armx}
 GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4,etnaviv,pl111,imx"
 %endif
@@ -821,11 +792,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4,etnaviv,pl111,imx"
 %else
 	--disable-egl \
 %endif
-%if %{with wayland}
-	--with-platforms=x11,drm,wayland,surfaceless \
-%else
 	--with-platforms=x11,drm,surfaceless \
-%endif
 	--enable-gles1 \
 	--enable-gles2 \
 %if %{with opencl}
@@ -862,7 +829,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4,etnaviv,pl111,imx"
 # See e.g. https://bugs.launchpad.net/ubuntu/+source/mesa/+bug/1066599
 # -Anssi 12/2012
 
-cd build-osmesa
+pushd build-osmesa
 %configure \
 	--enable-gallium-osmesa \
 	--disable-dri \
@@ -872,8 +839,13 @@ cd build-osmesa
 	--disable-shared-glapi \
 	--disable-gles1 \
 	--disable-gles2 \
+%ifarch %{ix86} x86_64 aarch64
+	--enable-llvm \
 	--with-gallium-drivers=swr,swrast
-cd -
+%else
+	--with-gallium-drivers=swrast
+%endif
+popd
 
 %make
 %ifarch i686
@@ -911,14 +883,22 @@ mkdir -p %{buildroot}%{_prefix}/lib/dri
 
 # FIXME workaround for Vulkan headers not being installed
 if [ -e %{buildroot}%{_includedir}/vulkan/vulkan.h ]; then
-	echo Vulkan headers are being installed correctly now. Please remove the workaround.
-	exit 1
+    echo Vulkan headers are being installed correctly now. Please remove the workaround.
+    exit 1
 else
-	mkdir -p %{buildroot}%{_includedir}/vulkan
-	cp -af include/vulkan/* %{buildroot}%{_includedir}/vulkan/
+    mkdir -p %{buildroot}%{_includedir}/vulkan
+    cp -af include/vulkan/* %{buildroot}%{_includedir}/vulkan/
 %ifnarch %{ix86} x86_64
-	rm -f %{buildroot}%{_includedir}/vulkan/vulkan_intel.h
+    rm -f %{buildroot}%{_includedir}/vulkan/vulkan_intel.h
 %endif
+fi
+
+# FIXME workaround for OpenCL headers not being installed
+if [ -e %{buildroot}%{_includedir}/CL/opencl.h ]; then
+    echo OpenCL headers are being installed correctly now. Please remove the workaround.
+    exit 1
+else
+    cp -af include/CL %{buildroot}%{_includedir}/
 fi
 
 # .so files are not needed by vdpau
@@ -926,6 +906,10 @@ rm -f %{buildroot}%{_libdir}/vdpau/libvdpau_*.so
 
 # .la files are not needed by mesa
 find %{buildroot} -name '*.la' |xargs rm -f
+
+# For compatibility...
+ln -s libMesaOpenCL.so.1 %{buildroot}%{_libdir}/libOpenCL.so.1
+ln -s libOpenCL.so.1 %{buildroot}%{_libdir}/libOpenCL.so
 
 # use swrastg if built (Anssi 12/2011)
 [ -e %{buildroot}%{_libdir}/dri/swrastg_dri.so ] && mv %{buildroot}%{_libdir}/dri/swrast{g,}_dri.so
@@ -944,10 +928,14 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_libdir}/gallium-pipe/pipe_r?00.so
 %endif
 %if %{with r600}
+%if %{with va}
 %{_libdir}/dri/r600_drv_video.so
+%endif
 %{_libdir}/libXvMCr?00.so.*
 %{_libdir}/dri/radeonsi_dri.so
+%if %{with va}
 %{_libdir}/dri/radeonsi_drv_video.so
+%endif
 %if %{with opencl}
 %{_libdir}/gallium-pipe/pipe_radeonsi.so
 %endif
@@ -1066,17 +1054,14 @@ find %{buildroot} -name '*.la' |xargs rm -f
 
 %if %{with opencl}
 %files -n %{libcl}
+%{_sysconfdir}/OpenCL
+%{_libdir}/libMesaOpenCL.so.%{clmajor}*
 %{_libdir}/libOpenCL.so.%{clmajor}*
 %endif
 
 %if %{with egl}
 %files -n %{libgbm}
 %{_libdir}/libgbm.so.%{gbmmajor}*
-%endif
-
-%if %{with wayland}
-%files -n %{libwaylandegl}
-%{_libdir}/libwayland-egl.so.%{waylandeglmajor}*
 %endif
 
 %files -n %{devgl}
@@ -1161,6 +1146,7 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %files -n %{devcl}
 %{_includedir}/CL
 %{_libdir}/libOpenCL.so
+%{_libdir}/libMesaOpenCL.so
 %endif
 
 %if %{with egl}
@@ -1168,12 +1154,6 @@ find %{buildroot} -name '*.la' |xargs rm -f
 %{_includedir}/gbm.h
 %{_libdir}/libgbm.so
 %{_libdir}/pkgconfig/gbm.pc
-%endif
-
-%if %{with wayland}
-%files -n %{devwaylandegl}
-%{_libdir}/libwayland-egl.so
-%{_libdir}/pkgconfig/wayland-egl.pc
 %endif
 
 %files -n %{devvulkan}

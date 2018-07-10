@@ -1,0 +1,119 @@
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/blend_jit.cpp.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/blend_jit.cpp
+--- mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/blend_jit.cpp.omv~	2018-04-26 12:40:16.517739232 +0200
++++ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/blend_jit.cpp	2018-04-26 12:47:02.208398587 +0200
+@@ -33,6 +33,12 @@
+ #include "blend_jit.h"
+ #include "gen_state_llvm.h"
+ #include "functionpasses/passes.h"
++#if LLVM_VERSION_MAJOR >= 7
++#ifdef NDEBUG
++#define DEBUG(x)
++#endif
++#include <llvm/Transforms/InstCombine/InstCombine.h>
++#endif
+ 
+ // components with bit-widths <= the QUANTIZE_THRESHOLD will be quantized
+ #define QUANTIZE_THRESHOLD 2
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/builder.h.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/builder.h
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/fetch_jit.cpp.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/fetch_jit.cpp
+--- mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/fetch_jit.cpp.omv~	2018-04-26 12:45:15.299823237 +0200
++++ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/fetch_jit.cpp	2018-04-26 12:46:50.544658687 +0200
+@@ -33,6 +33,12 @@
+ #include "fetch_jit.h"
+ #include "gen_state_llvm.h"
+ #include "functionpasses/passes.h"
++#if LLVM_VERSION_MAJOR >= 7
++#ifdef NDEBUG
++#define DEBUG(x)
++#endif
++#include <llvm/Transforms/InstCombine/InstCombine.h>
++#endif
+ 
+ //#define FETCH_DUMP_VERTEX 1
+ using namespace llvm;
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/functionpasses/passes.h.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/functionpasses/passes.h
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp
+--- mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp.omv~	2018-04-26 12:32:49.452069747 +0200
++++ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp	2018-04-26 12:47:43.732470979 +0200
+@@ -57,22 +57,38 @@ CallInst* MEMSET(Value *Ptr, Value *Val,
+ 
+ CallInst* MEMCOPY(Value *Dst, Value *Src, uint64_t Size, unsigned Align, bool isVolatile = false, MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
+ {
++#if LLVM_VERSION_MAJOR < 7
+     return IRB()->CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
++#else
++    return IRB()->CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
++#endif
+ }
+ 
+ CallInst* MEMCOPY(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile = false, MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
+ {
++#if LLVM_VERSION_MAJOR < 7
+     return IRB()->CreateMemCpy(Dst, Src, Size, Align, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
++#else
++    return IRB()->CreateMemCpy(Dst, Align, Src, Align, Size, isVolatile, TBAATag, TBAAStructTag, ScopeTag, NoAliasTag);
++#endif
+ }
+ 
+ CallInst* MEMMOVE(Value *Dst, Value *Src, uint64_t Size, unsigned Align, bool isVolatile = false, MDNode *TBAATag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
+ {
++#if LLVM_VERSION_MAJOR < 7
+     return IRB()->CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
++#else
++    return IRB()->CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
++#endif
+ }
+ 
+ CallInst* MEMMOVE(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile = false, MDNode *TBAATag = nullptr, MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr)
+ {
++#if LLVM_VERSION_MAJOR < 7
+     return IRB()->CreateMemMove(Dst, Src, Size, Align, isVolatile, TBAATag, ScopeTag, NoAliasTag);
++#else
++    return IRB()->CreateMemMove(Dst, Align, Src, Align, Size, isVolatile, TBAATag, ScopeTag, NoAliasTag);
++#endif
+ }
+ 
+ CallInst* LIFETIME_START(Value *Ptr, ConstantInt *Size = nullptr)
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp
+--- mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp.omv~	2018-04-26 12:46:04.947673493 +0200
++++ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp	2018-04-26 12:46:36.447972763 +0200
+@@ -509,7 +509,11 @@ static inline uint32_t ComputeModuleCRC(
+     std::string bitcodeBuffer;
+     raw_string_ostream bitcodeStream(bitcodeBuffer);
+ 
++#if LLVM_VERSION_MAJOR >= 7
++    llvm::WriteBitcodeToFile(*M, bitcodeStream);
++#else
+     llvm::WriteBitcodeToFile(M, bitcodeStream);
++#endif
+     //M->print(bitcodeStream, nullptr, false);
+ 
+     bitcodeStream.flush();
+diff -up mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/streamout_jit.cpp.omv~ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/streamout_jit.cpp
+--- mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/streamout_jit.cpp.omv~	2018-04-26 12:48:42.503154063 +0200
++++ mesa-18.1.0-rc1/src/gallium/drivers/swr/rasterizer/jitter/streamout_jit.cpp	2018-04-26 12:48:47.952031743 +0200
+@@ -33,6 +33,12 @@
+ #include "streamout_jit.h"
+ #include "gen_state_llvm.h"
+ #include "functionpasses/passes.h"
++#if LLVM_VERSION_MAJOR >= 7
++#ifdef NDEBUG
++#define DEBUG(x)
++#endif
++#include <llvm/Transforms/InstCombine/InstCombine.h>
++#endif
+ 
+ using namespace llvm;
+ using namespace SwrJit;
+diff -up mesa-18.1.0-rc4/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp.omv~ mesa-18.1.0-rc4/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp
+--- mesa-18.1.0-rc4/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp.omv~	2018-05-14 12:03:39.808374700 +0200
++++ mesa-18.1.0-rc4/src/gallium/drivers/swr/rasterizer/jitter/gen_builder.hpp	2018-05-14 12:03:54.228045023 +0200
+@@ -918,7 +918,7 @@ Value* PTR_DIFF(Value *LHS, Value *RHS,
+ 
+ Value* INVARIANT_GROUP_BARRIER(Value *Ptr)
+ {
+-    return IRB()->CreateInvariantGroupBarrier(Ptr);
++    return IRB()->CreateLaunderInvariantGroup(Ptr);
+ }
+ 
+ Value* VECTOR_SPLAT(unsigned NumElts, Value *V, const Twine &Name = "")

@@ -1,0 +1,40 @@
+diff -up mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/functionpasses/lower_x86.cpp.omv~ mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/functionpasses/lower_x86.cpp
+--- mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/functionpasses/lower_x86.cpp.omv~	2018-05-24 01:07:11.220728010 +0200
++++ mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/functionpasses/lower_x86.cpp	2018-05-24 01:08:34.191732290 +0200
+@@ -122,12 +122,9 @@ namespace SwrJit
+     },
+     {   // AVX512
+         {"meta.intrinsic.VRCPPS",      {{Intrinsic::x86_avx512_rcp14_ps_256,         Intrinsic::x86_avx512_rcp14_ps_512},            NO_EMU}},
+-        {"meta.intrinsic.VPERMPS",     {{Intrinsic::x86_avx512_mask_permvar_sf_256,  Intrinsic::x86_avx512_mask_permvar_sf_512},     NO_EMU}},
+-        {"meta.intrinsic.VPERMD",      {{Intrinsic::x86_avx512_mask_permvar_si_256,  Intrinsic::x86_avx512_mask_permvar_si_512},     NO_EMU}},
+         {"meta.intrinsic.VGATHERPD",   {{Intrinsic::not_intrinsic,                   Intrinsic::not_intrinsic},                      VGATHER_EMU}},
+         {"meta.intrinsic.VGATHERPS",   {{Intrinsic::not_intrinsic,                   Intrinsic::not_intrinsic},                      VGATHER_EMU}},
+         {"meta.intrinsic.VGATHERDD",   {{Intrinsic::not_intrinsic,                   Intrinsic::not_intrinsic},                      VGATHER_EMU}},
+-        {"meta.intrinsic.VCVTPD2PS",   {{Intrinsic::x86_avx512_mask_cvtpd2ps_256,    Intrinsic::x86_avx512_mask_cvtpd2ps_512 },      NO_EMU}},
+         {"meta.intrinsic.VCVTPH2PS",   {{Intrinsic::x86_avx512_mask_vcvtph2ps_256,   Intrinsic::x86_avx512_mask_vcvtph2ps_512 },     NO_EMU}},
+         {"meta.intrinsic.VROUND",      {{Intrinsic::not_intrinsic,                   Intrinsic::not_intrinsic},                      VROUND_EMU}},
+         {"meta.intrinsic.VHSUBPS",     {{Intrinsic::not_intrinsic,                   Intrinsic::not_intrinsic},                      VHSUB_EMU}},
+diff -up mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp.omv~ mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp
+--- mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp.omv~	2018-05-24 00:50:25.045676102 +0200
++++ mesa-18.1.0/src/gallium/drivers/swr/rasterizer/jitter/JitManager.cpp	2018-05-24 00:51:49.927680481 +0200
+@@ -329,7 +329,7 @@ void JitManager::DumpAsm(Function* pFunc
+         legacy::PassManager* pMPasses = new legacy::PassManager();
+         auto* pTarget = mpExec->getTargetMachine();
+         pTarget->Options.MCOptions.AsmVerbose = true;
+-        pTarget->addPassesToEmitFile(*pMPasses, filestream, TargetMachine::CGFT_AssemblyFile);
++        pTarget->addPassesToEmitFile(*pMPasses, filestream, nullptr, TargetMachine::CGFT_AssemblyFile);
+         pMPasses->run(*pModule);
+         delete pMPasses;
+         pTarget->Options.MCOptions.AsmVerbose = false;
+diff -up mesa-18.1.0/src/gallium/state_trackers/clover/llvm/codegen/native.cpp.omv~ mesa-18.1.0/src/gallium/state_trackers/clover/llvm/codegen/native.cpp
+--- mesa-18.1.0/src/gallium/state_trackers/clover/llvm/codegen/native.cpp.omv~	2018-05-24 01:19:08.131764995 +0200
++++ mesa-18.1.0/src/gallium/state_trackers/clover/llvm/codegen/native.cpp	2018-05-24 01:19:16.175765410 +0200
+@@ -132,7 +132,7 @@ namespace {
+          tm->Options.MCOptions.AsmVerbose =
+             (ft == TargetMachine::CGFT_AssemblyFile);
+ 
+-         if (tm->addPassesToEmitFile(pm, fos, ft))
++         if (tm->addPassesToEmitFile(pm, fos, nullptr, ft))
+             fail(r_log, build_error(), "TargetMachine can't emit this file");
+ 
+          pm.run(mod);
