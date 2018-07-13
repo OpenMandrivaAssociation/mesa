@@ -149,7 +149,7 @@ Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
 Version:	18.1.3
 %if "%{relc}%{git}" == ""
-Release:	1
+Release:	2
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
@@ -267,6 +267,9 @@ BuildRequires:	pkgconfig(vdpau)	>= 0.4.1
 %if %{with va}
 BuildRequires:	pkgconfig(libva)	>= 0.31.0
 %endif
+BuildRequires:	pkgconfig(wayland-client)
+BuildRequires:	pkgconfig(wayland-server)
+BuildRequires:	pkgconfig(wayland-protocols) >= 1.8
 
 # package mesa
 Requires:	libGL.so.%{glmajor}%{_arch_tag_suffix}
@@ -792,7 +795,7 @@ GALLIUM_DRIVERS="$GALLIUM_DRIVERS,freedreno,vc4,etnaviv,pl111,imx"
 %else
 	--disable-egl \
 %endif
-	--with-platforms=x11,drm,surfaceless \
+	--with-platforms=x11,drm,wayland,surfaceless \
 	--enable-gles1 \
 	--enable-gles2 \
 %if %{with opencl}
@@ -914,6 +917,9 @@ ln -s libOpenCL.so.1 %{buildroot}%{_libdir}/libOpenCL.so
 # use swrastg if built (Anssi 12/2011)
 [ -e %{buildroot}%{_libdir}/dri/swrastg_dri.so ] && mv %{buildroot}%{_libdir}/dri/swrast{g,}_dri.so
 
+# (tpg) remove wayland files as they are not part of wayland package
+rm -rf %{buildroot}%{_libdir}/libwayland-egl.so*
+rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 
 %files
 %doc docs/README.*
