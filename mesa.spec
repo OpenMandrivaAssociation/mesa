@@ -762,8 +762,8 @@ cp -a $all build-osmesa
 export CC=gcc
 export CXX=g++
 %endif
-export CFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
-export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast"
+export CFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast -fno-strict-aliasing"
+export CXXFLAGS="%{optflags} -fno-optimize-sibling-calls -Ofast -fno-strict-aliasing"
 
 GALLIUM_DRIVERS="swrast,virgl"
 %if %{with hardware}
