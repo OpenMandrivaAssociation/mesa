@@ -29,7 +29,7 @@
 # bootstrap option: Build without requiring an X server
 # (which in turn requires mesa to build)
 %bcond_without hardware
-%bcond_without gcc
+%bcond_with gcc
 %bcond_with bootstrap
 %bcond_without vdpau
 %bcond_without va
@@ -149,7 +149,7 @@ Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
 Version:	18.1.4
 %if "%{relc}%{git}" == ""
-Release:	2
+Release:	3
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
