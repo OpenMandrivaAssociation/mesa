@@ -254,6 +254,10 @@ BuildRequires:	pkgconfig(xproto)
 BuildRequires:	pkgconfig(xt)		>= 1.0.5
 BuildRequires:	pkgconfig(xxf86vm)	>= 1.1.0
 BuildRequires:	pkgconfig(xshmfence)	>= 1.1
+BuildRequires: pkgconfig(xrandr)
+BuildRequires: pkgconfig(xcb-dri3)
+BuildRequires: pkgconfig(xcb-present)
+
 # for libsupc++.a
 BuildRequires:	stdc++-static-devel
 # (tpg) with openssl a steam crashes
