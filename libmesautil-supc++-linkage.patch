@@ -1,11 +1,11 @@
 --- mesa-18.0.0-rc2/src/util/Makefile.am.0002~	2018-01-24 09:23:04.056094031 +0100
 +++ mesa-18.0.0-rc2/src/util/Makefile.am	2018-01-24 09:25:24.085422816 +0100
 @@ -54,7 +54,7 @@ libmesautil_la_LIBADD = \
- 	$(PTHREAD_LIBS) \
  	$(CLOCK_LIB) \
  	$(ZLIB_LIBS) \
--	$(LIBATOMIC_LIBS)
-+	$(LIBATOMIC_LIBS) -lsupc++
+ 	$(LIBATOMIC_LIBS) \
+-	-lm
++	-lm -lsupc++
  
  libxmlconfig_la_SOURCES = $(XMLCONFIG_FILES)
  libxmlconfig_la_CFLAGS = \

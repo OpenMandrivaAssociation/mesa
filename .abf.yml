@@ -1,2 +1,4 @@
-sources:
+removed_sources:
   mesa-18.1.5.tar.xz: 1ca7d5f5d12c95f8da137be34223229b9f0594fe
+sources:
+  mesa-18.2.5.tar.xz: 1ada7d5fc5fabca63c78396b5afa587b94b9f2e0
