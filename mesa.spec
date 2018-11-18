@@ -191,6 +191,9 @@ Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 Patch1:	mesa-10.2-clang-compilefix.patch
 Patch2: libmesautil-supc++-linkage.patch
 
+# Don't assume non-WIN is always 64 bit, instead use the x86_64 define
+Patch3:	mesa-18.2.5-swr_32_bit_fix.patch
+
 # fedora patches
 Patch15: mesa-9.2-hardware-float.patch
 
