@@ -153,7 +153,7 @@ Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
 Version:	18.2.5
 %if "%{relc}%{git}" == ""
-Release:	1
+Release:	2
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
@@ -450,6 +450,8 @@ Conflicts:	%{libgl} < %{version}-%{release}
 %else
 Requires:	%{libgl} = %{version}-%{release}
 %endif
+# for KHR/khrplatform.h
+Requires:	%{devegl} = %{version}-%{release}
 Obsoletes:	%{_lib}mesagl1-devel < 8.0
 Obsoletes:	%{_lib}gl1-devel < %{version}-%{release}
 
@@ -551,6 +553,8 @@ This package provides the OpenGL ES library version 1.
 Summary:	Development files for glesv1 libs
 Group:		Development/C
 Requires:	%{libglesv1} = %{version}-%{release}
+# for KHR/khrplatform.h
+Requires:       %{devegl} = %{version}-%{release}
 Obsoletes:	%{_lib}mesaglesv1_1-devel < 8.0
 Obsoletes:	%{_lib}glesv1_1-devel < %{version}-%{release}
 
@@ -572,6 +576,8 @@ This package provides the OpenGL ES library version 2.
 Summary:	Development files for glesv2 libs
 Group:		Development/C
 Requires:	%{libglesv2} = %{version}-%{release}
+# for KHR/khrplatform.h
+Requires:       %{devegl} = %{version}-%{release}
 Obsoletes:	%{_lib}mesaglesv2_2-devel < 8.0
 Obsoletes:	%{_lib}glesv2_2-devel < %{version}-%{release}
 
@@ -581,6 +587,8 @@ This package contains the headers needed to compile OpenGL ES 2 programs.
 %package -n %{devglesv3}
 Summary:	Development files for glesv3 libs
 Group:		Development/C
+# for KHR/khrplatform.h
+Requires:       %{devegl} = %{version}-%{release}
 # there is no pkgconfig
 Provides:	glesv3-devel = %{version}-%{release}
 
