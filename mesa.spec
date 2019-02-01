@@ -3,6 +3,7 @@
 
 # (aco) Needed for the dri drivers
 %define _disable_ld_no_undefined 1
+# (tpg) 2019-01-09 with LLVM/clang-7.0.1 still segfaults
 %define _disable_lto 1
 
 %ifarch aarch64
@@ -16,7 +17,7 @@
 %define git_branch %(echo %{version} |cut -d. -f1-2)
 
 # (tpg) starting version 11.1.1 this may fully support OGL 4.1
-%define opengl_ver 3.3
+%define opengl_ver 4.5
 
 %define relc %{nil}
 
@@ -26,7 +27,11 @@
 # With clang 7.0, X crashes on startup on machines without AVX.
 # Apparently AVX instructions make it into the drivers even when
 # targeting generic CPUs.
+%ifarch %{ix86} x86_64
 %bcond_without gcc
+%else
+%bcond_with gcc
+%endif
 %bcond_with bootstrap
 %bcond_without vdpau
 %bcond_without va
@@ -146,18 +151,18 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	18.3.1
+Version:	18.3.3
 %if "%{relc}%{git}" == ""
 Release:	3a
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
-Release:	%{?relc:0.rc%{relc}}.0.%{git}.1
+Release:	%{?relc:1.rc%{relc}}.0.%{git}.1
 %else
-Release:	%{?relc:0.rc%{relc}}.3
+Release:	%{?relc:1.rc%{relc}}.3
 %endif
 %else
-Release:	%{?git:0.%{git}.}1
+Release:	%{?git:1.%{git}.}1
 %endif
 %endif
 Group:		System/Libraries
