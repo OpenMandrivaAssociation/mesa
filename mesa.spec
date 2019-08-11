@@ -4,9 +4,10 @@
 # (aco) Needed for the dri drivers
 %define _disable_ld_no_undefined 1
 
-%ifarch %{aarch64}
-%global optflags %{optflags} -fuse-ld=bfd
-%endif
+# LLD fails because of https://bugs.llvm.org/show_bug.cgi?id=42447
+# BFD fails because it can't handle clang LTO bitcode in static libraries
+%global optflags %{optflags} -O3 -fuse-ld=gold
+%global ldflags %{ldflags} -fuse-ld=gold
 
 %define git %{nil}
 %define git_branch %(echo %{version} |cut -d. -f1-2)
@@ -16,9 +17,6 @@
 
 %define relc %{nil}
 
-# bootstrap option: Build without requiring an X server
-# (which in turn requires mesa to build)
-%bcond_without hardware
 %ifarch %{ix86}
 %define _disable_lto 1
 %endif
@@ -120,7 +118,7 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	19.1.0
+Version:	19.1.4
 %if "%{relc}%{git}" == ""
 Release:	1
 %else
@@ -159,7 +157,6 @@ Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 
 # https://bugs.freedesktop.org/show_bug.cgi?id=74098
 Patch1:		mesa-10.2-clang-compilefix.patch
-Patch2:		mesa-19.1.0-compile-bug-110709.patch
 Patch3:		mesa-19.0.0-rc2-more-ARM-drivers.patch
 
 # fedora patches
@@ -185,6 +182,9 @@ Patch15:	mesa-9.2-hardware-float.patch
 # git format-patch --start-number 100 mesa_7_5_1..mesa_7_5_branch | sed 's/^0\([0-9]\+\)-/Patch\1: 0\1-/'
 Patch201:	0201-revert-fix-glxinitializevisualconfigfromtags-handling.patch
 Patch202:	riscv64.patch
+# https://bugs.freedesktop.org/show_bug.cgi?id=110783
+# https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1084
+#Patch203:	https://gitlab.freedesktop.org/mesa/mesa/merge_requests/1084.diff
 
 # Direct3D patchset -- https://wiki.ixit.cz/d3d9
 #
@@ -214,7 +214,6 @@ BuildRequires:	libatomic-devel
 BuildRequires:	python-mako >= 0.8.0
 BuildRequires:	pkgconfig(libdrm) >= 2.4.56
 BuildRequires:	pkgconfig(libudev) >= 186
-BuildRequires:	pkgconfig(talloc)
 %if %{with glvnd}
 BuildRequires:	pkgconfig(libglvnd)
 %endif
@@ -242,7 +241,8 @@ BuildRequires:	stdc++-static-devel
 BuildRequires:	pkgconfig(libssl) >= 1.1.1b-5
 %if %{with opencl}
 BuildRequires:	pkgconfig(libclc)
-BuildRequires:	clang-devel clang
+BuildRequires:	clang-devel
+BuildRequires:	clang
 %endif
 BuildRequires:	pkgconfig(xvmc)
 %if %{with vdpau}
@@ -281,6 +281,8 @@ Requires:	%{dridrivers}-vc4 = %{EVRD}
 Requires:	%{dridrivers}-v3d = %{EVRD}
 Requires:	%{dridrivers}-etnaviv = %{EVRD}
 Requires:	%{dridrivers}-tegra = %{EVRD}
+Requires:	%{dridrivers}-lima = %{EVRD}
+Requires:	%{dridrivers}-panfrost = %{EVRD}
 Requires:	%{dridrivers}-kmsro = %{EVRD}
 %endif
 Provides:	dri-drivers = %{EVRD}
@@ -294,7 +296,6 @@ Summary:	DRI Drivers for AMD/ATI Radeon graphics chipsets
 Group:		System/Libraries
 Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
 Conflicts:	libva-vdpau-driver < 17.3.0
-%define __noautoreq '.*llvmradeon.*'
 
 %description -n %{dridrivers}-radeon
 DRI and XvMC drivers for AMD/ATI Radeon graphics chipsets
@@ -385,6 +386,20 @@ Conflicts:	%{mklibname dri-drivers} < 9.1.0-0.20130130.2
 
 %description -n %{dridrivers}-tegra
 DRI and XvMC drivers for Tegra graphics chips
+
+%package -n %{dridrivers}-lima
+Summary:	DRI Drivers for Mali Utgard devices
+Group:		System/Libraries
+
+%description -n %{dridrivers}-lima
+DRI drivers for Mali Utgard devices
+
+%package -n %{dridrivers}-panfrost
+Summary:	DRI Drivers for Mali Midgard and Bifrost devices
+Group:		System/Libraries
+
+%description -n %{dridrivers}-panfrost
+DRI drivers for Mali Midgard and Bifrost devices
 
 %package -n %{dridrivers}-kmsro
 Summary:	DRI Drivers for KMS-only devices
@@ -786,7 +801,7 @@ export CC=gcc
 export CXX=g++
 %endif
 
-%meson \
+if ! %meson \
 	-Db_ndebug=true \
 	-Dc_std=c11 \
 	-Dcpp_std=c++17 \
@@ -824,7 +839,10 @@ export CXX=g++
 	-Dshared-glapi=true \
 	-Dshared-llvm=true \
 	-Dswr-arches=avx,avx2,knl,skx \
-	-Dtools=all
+	-Dtools=all; then
+
+	cat build/meson-logs/meson-log.txt >/dev/stderr
+fi
 
 %ninja_build -C build/
 
@@ -962,10 +980,26 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %files -n %{dridrivers}-tegra
 %{_libdir}/dri/tegra_dri.so
 
+%files -n %{dridrivers}-lima
+%{_libdir}/dri/lima_dri.so
+
+%files -n %{dridrivers}-panfrost
+%{_libdir}/dri/panfrost_dri.so
+
 %files -n %{dridrivers}-kmsro
-%{_libdir}/dri/pl111_dri.so
+%{_libdir}/dri/armada-drm_dri.so
+%{_libdir}/dri/exynos_dri.so
 %{_libdir}/dri/hx8357d_dri.so
+%{_libdir}/dri/ili9???_dri.so
 %{_libdir}/dri/imx-drm_dri.so
+%{_libdir}/dri/meson_dri.so
+%{_libdir}/dri/mi0283qt_dri.so
+%{_libdir}/dri/pl111_dri.so
+%{_libdir}/dri/repaper_dri.so
+%{_libdir}/dri/rockchip_dri.so
+%{_libdir}/dri/st7586_dri.so
+%{_libdir}/dri/st7735r_dri.so
+%{_libdir}/dri/sun4i-drm_dri.so
 %endif
 
 %files -n %{libosmesa}
