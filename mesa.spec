@@ -6,9 +6,10 @@
 
 # We disable LTO because of a compile error in the Intel Vulkan driver
 # last seen with Mesa 19.2.0-rc1 and (interestingly) both gcc 9.2 and clang 9.0-rc2
+# Use BFD as ith LLD this errors occurs ld: error: TLS attribute mismatch: _glapi_tls_Dispatch
 # -fno-strict-aliasing is added because of numerous warnings, strict
 # aliasing might generate broekn code.
-%global optflags %{optflags} -O3 -fno-lto -fno-strict-aliasing
+%global optflags %{optflags} -O3 -fno-strict-aliasing -fuse-ld=gold
 %global ldflags %{ldflags} -fno-strict-aliasing
 
 %define git %{nil}
@@ -23,13 +24,10 @@
 %bcond_without gcc
 %bcond_with opencl
 %else
-%ifarch %{aarch64}
 %bcond_with gcc
-%else
-%bcond_without gcc
-%endif
 %bcond_without opencl
 %endif
+
 %bcond_with bootstrap
 %bcond_without vdpau
 %bcond_without va
@@ -121,7 +119,7 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	19.3.4
+Version:	20.0.2
 %if "%{relc}%{git}" == ""
 Release:	1
 %else
@@ -162,13 +160,15 @@ Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 #Patch1:		mesa-10.2-clang-compilefix.patch
 #Patch3:		mesa-19.0.0-rc2-more-ARM-drivers.patch
 Patch1:		mesa-19.2.3-arm32-buildfix.patch
-#Patch2:		radv-armx.patch
+Patch2:		mesa-20.0.0-rc1-amd-non-x86.patch
 %ifarch %{ix86}
 Patch4:		mesa-19.2.0-rc3-32bit-buildfix.patch
 %endif
 %ifarch %{armx} riscv64
 Patch5:		mesa-19.2.0-rc3-meson-radeon-arm-riscv.patch
 %endif
+# https://gitlab.freedesktop.org/mesa/mesa/merge_requests/3449
+Patch6:		https://gitlab.freedesktop.org/mesa/mesa/merge_requests/3449.patch
 # fedora patches
 #Patch15:	mesa-9.2-hardware-float.patch
 
@@ -232,6 +232,7 @@ BuildRequires:	pkgconfig(libglvnd)
 BuildRequires:	pkgconfig(epoxy)
 BuildRequires:	pkgconfig(gtk+-3.0)
 %endif
+BuildRequires:	pkgconfig(libzstd)
 BuildRequires:	pkgconfig(vulkan)
 BuildRequires:	pkgconfig(x11) >= 1.3.3
 BuildRequires:	pkgconfig(xdamage) >= 1.1.1
@@ -825,7 +826,7 @@ cp -f src/mesa/drivers/dri/{radeon,r200}/radeon_screen.c || :
 export CC=gcc
 export CXX=g++
 %else
-%global ldflags %{ldflags} -fuse-ld=bfd
+%global ldflags %{ldflags} -fuse-ld=gold
 %endif
 
 if ! %meson \
@@ -996,6 +997,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 
 %files -n %{dridrivers}-intel
 %{_libdir}/dri/i9?5_dri.so
+%{_libdir}/dri/iris_dri.so
 %{_libdir}/libvulkan_intel.so
 %{_datadir}/vulkan/icd.d/intel_icd.*.json
 %endif
@@ -1040,6 +1042,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 
 %files -n %{dridrivers}-etnaviv
 %{_libdir}/dri/etnaviv_dri.so
+%{_libdir}/libetnaviv_noop_drm_shim.so
 
 %files -n %{dridrivers}-tegra
 %{_libdir}/dri/tegra_dri.so
@@ -1060,6 +1063,9 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_libdir}/dri/hx8357d_dri.so
 %{_libdir}/dri/ili9???_dri.so
 %{_libdir}/dri/imx-drm_dri.so
+%{_libdir}/dri/imx-dcss_dri.so
+%{_libdir}/dri/ingenic-drm_dri.so
+%{_libdir}/dri/mcde_dri.so
 %{_libdir}/dri/meson_dri.so
 %{_libdir}/dri/mi0283qt_dri.so
 %{_libdir}/dri/mxsfb-drm_dri.so
