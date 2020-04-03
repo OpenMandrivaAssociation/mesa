@@ -1,0 +1,12 @@
+diff -up mesa-20.0.3/src/amd/addrlib/inc/addrtypes.h.2~ mesa-20.0.3/src/amd/addrlib/inc/addrtypes.h
+--- mesa-20.0.3/src/amd/addrlib/inc/addrtypes.h.2~	2020-04-02 13:35:20.510114470 +0200
++++ mesa-20.0.3/src/amd/addrlib/inc/addrtypes.h	2020-04-02 13:36:48.386741907 +0200
+@@ -87,7 +87,7 @@ typedef int            INT;
+ #endif
+ 
+ #ifndef ADDR_FASTCALL
+-    #if defined(__GNUC__)
++    #if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+         #define ADDR_FASTCALL __attribute__((regparm(0)))
+     #else
+         #define ADDR_FASTCALL __fastcall
