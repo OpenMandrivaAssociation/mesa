@@ -1,3 +1,5 @@
+%define _disable_lto 1
+
 # (cg) Cheater...
 %define Werror_cflags %{nil}
 
