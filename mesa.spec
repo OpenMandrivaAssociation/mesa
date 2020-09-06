@@ -27,7 +27,7 @@
 # (tpg) starting version 11.1.1 this may fully support OGL 4.1
 %define opengl_ver 4.6
 
-%define relc 3
+%define relc 4
 
 %ifarch %{riscv}
 %bcond_without gcc
@@ -160,7 +160,7 @@ Release:	1
 %else
 %if "%{relc}" != ""
 %if "%{git}" != ""
-Release:	%{?relc:0.rc%{relc}}.0.%{git}.2
+Release:	%{?relc:0.rc%{relc}}.0.%{git}.1
 %else
 Release:	%{?relc:0.rc%{relc}}.1
 %endif
