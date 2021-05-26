@@ -1,0 +1,31 @@
+From 1fcc853eb869bf40409331dfd33e9ba51c4fbc0c Mon Sep 17 00:00:00 2001
+From: Icecream95 <ixn@disroot.org>
+Date: Sun, 23 May 2021 07:10:19 +1200
+Subject: [PATCH] panfrost: Fix polygon list size computations
+
+As noted in f5c293425fa ("panfrost: Correct polygon size computations"),
+"We do have to be careful to add the header size to total comptued BO
+size."
+
+Fixes: ff3eada7eb4 ("panfrost: Use the generic preload and FB helpers in the gallium driver")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/4660
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/4737
+---
+ src/panfrost/lib/pan_tiler.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/panfrost/lib/pan_tiler.c b/src/panfrost/lib/pan_tiler.c
+index 4493f5c01c9..e45240eeac6 100644
+--- a/src/panfrost/lib/pan_tiler.c
++++ b/src/panfrost/lib/pan_tiler.c
+@@ -389,5 +389,6 @@ panfrost_tiler_get_polygon_list_size(const struct panfrost_device *dev,
+         unsigned hierarchy_mask =
+                 panfrost_choose_hierarchy_mask(fb_width, fb_height, 1, hierarchy);
+ 
+-        return panfrost_tiler_full_size(fb_width, fb_height, hierarchy_mask, hierarchy);
++        return panfrost_tiler_full_size(fb_width, fb_height, hierarchy_mask, hierarchy) +
++                panfrost_tiler_header_size(fb_width, fb_height, hierarchy_mask, hierarchy);
+ }
+-- 
+GitLab
+
