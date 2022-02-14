@@ -149,7 +149,7 @@
 
 Summary:	OpenGL %{opengl_ver} compatible 3D graphics library
 Name:		mesa
-Version:	21.3.5
+Version:	21.3.6
 %if "%{relc}%{git}" == ""
 Release:	1
 %else
@@ -361,6 +361,7 @@ BuildRequires:	devel(libOpenGL)
 BuildRequires:	devel(libGLdispatch)
 BuildRequires:	devel(libXrandr)
 BuildRequires:	devel(libXrender)
+BuildRequires:	devel(libatomic)
 %endif
 
 %description
