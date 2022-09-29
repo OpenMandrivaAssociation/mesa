@@ -7,7 +7,7 @@
 # LTOing Mesa takes insane amounts of RAM :/
 # So you may want to disable it for anything
 # but final builds...
-#define _disable_lto 1
+%define _disable_lto 1
 
 # Mesa is used by wine and steam
 %ifarch %{x86_64}
@@ -150,7 +150,7 @@ Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	22.2.0
 %if "%{?relc:1}%{git}" == ""
-Release:	1
+Release:	2
 %else
 %if "%{?relc:1}" != ""
 %if "%{git}" != ""
