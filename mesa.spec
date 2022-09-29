@@ -1059,6 +1059,7 @@ if ! %meson \
 	-Dvulkan-drivers=auto,virtio-experimental \
 %endif
 %endif
+        -Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec \
 	-Dxlib-lease=auto \
 	-Dosmesa=true \
 	-Dglvnd=true \
