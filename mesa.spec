@@ -24,7 +24,7 @@
 %define git %{nil}
 %define git_branch %(echo %{version} |cut -d. -f1-2)
 
-#define relc 3
+%define relc %nil
 
 %ifarch %{riscv}
 %bcond_without gcc
@@ -43,14 +43,15 @@
 %else
 %bcond_with intel
 %endif
-# aubinator_viewer (part of Intel bits) requires gtk
-# which in turn requires mesa, breaking bootstrapping
-%bcond_with aubinatorviewer
 # Sometimes it's necessary to disable r600 while bootstrapping
 # an LLVM change (such as the r600 -> AMDGPU rename)
 %bcond_without r600
 
-%define vsuffix %{?relc:-rc%{relc}}
+%if "%{relc}" != ""
+%define vsuffix -rc%{relc}
+%else
+%define vsuffix %{nil}
+%endif
 
 %define osmesamajor 8
 %define libosmesa %mklibname osmesa %{osmesamajor}
@@ -149,14 +150,14 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	22.1.7
-%if "%{?relc:1}%{git}" == ""
+%if "%{relc}%{git}" == ""
 Release:	1
 %else
-%if "%{?relc:1}" != ""
+%if "%{relc}" != ""
 %if "%{git}" != ""
-Release:	%{?relc:0.rc%{relc}.}0.%{git}.1
+Release:	%{?relc:0.rc%{relc}}.0.%{git}.1
 %else
-Release:	%{?relc:0.rc%{relc}.}1
+Release:	%{?relc:0.rc%{relc}}.1
 %endif
 %else
 Release:	%{?git:0.%{git}.}1
@@ -203,12 +204,6 @@ Patch2:		mesa-22.1.0-rc4-compile.patch
 Patch5:		mesa-20.3.0-meson-radeon-arm-riscv-ppc.patch
 # fedora patches
 #Patch15:	mesa-9.2-hardware-float.patch
-
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/7170
-#Patch6:		https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/17803.patch
-#Patch7:		https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/18039.patch
-
-#Patch8:		mesa-buildsystem-improvements.patch
 
 # Instructions to setup your repository clone
 # git://git.freedesktop.org/git/mesa/mesa
@@ -263,11 +258,9 @@ BuildRequires:	pkgconfig(libdrm) >= 2.4.56
 BuildRequires:	pkgconfig(libudev) >= 186
 BuildRequires:	pkgconfig(libglvnd)
 %ifnarch %{armx} %{riscv}
-%if %{with aubinatorviewer}
 # needed only for intel binaries
 BuildRequires:	pkgconfig(epoxy)
 BuildRequires:	pkgconfig(gtk+-3.0)
-%endif
 %endif
 BuildRequires:	pkgconfig(libzstd)
 BuildRequires:	pkgconfig(vulkan)
@@ -338,7 +331,7 @@ BuildRequires:	devel(libXau)
 BuildRequires:	devel(libXdmcp)
 BuildRequires:	devel(libsensors)
 BuildRequires:	libsensors.so.5
-BuildRequires:	devel(libLLVM-15)
+BuildRequires:	devel(libLLVM-14)
 BuildRequires:	devel(libclang)
 BuildRequires:	devel(libzstd)
 BuildRequires:	devel(libwayland-client)
@@ -357,7 +350,6 @@ BuildRequires:	devel(libXrender)
 BuildRequires:	devel(libatomic)
 BuildRequires:	devel(libudev)
 BuildRequires:	devel(libSPIRV-Tools-shared)
-BuildRequires:	devel(libvulkan)
 BuildRequires:	libLLVMSPIRVLib-devel
 BuildRequires:	libLLVMSPIRVLib-static-devel
 %endif
@@ -1010,16 +1002,13 @@ rm llvm-config
 %endif
 
 # FIXME keep in sync with with_tools=all definition from meson.build
-TOOLS="drm-shim,dlclose-skip,glsl,nir,nouveau,xvmc"
+TOOLS="drm-shim,dlclose-skip,glsl,nir,nouveau,xvmc,asahi"
 %ifarch %{armx}
 TOOLS="$TOOLS,etnaviv,freedreno,lima,panfrost"
 %endif
 %ifarch %{ix86} %{x86_64}
 %if %{with intel}
-TOOLS="$TOOLS,intel"
-%if %{with aubinatorviewer}
-TOOLS="$TOOLS,intel-ui"
-%endif
+TOOLS="$TOOLS,intel,intel-ui"
 %endif
 %endif
 
@@ -1030,9 +1019,9 @@ if ! %meson \
 	-Dc_std=c11 \
 	-Dcpp_std=c++17 \
 %ifarch %{armx}
-	-Dgallium-drivers=auto,r300,r600,svga,radeonsi,freedreno,etnaviv,tegra,vc4,v3d,kmsro,lima,panfrost,zink \
+	-Dgallium-drivers=auto,r300,r600,iris,svga,radeonsi,freedreno,etnaviv,tegra,vc4,v3d,kmsro,lima,panfrost,zink,d3d12 \
 %else
-	-Dgallium-drivers=auto,crocus,zink \
+	-Dgallium-drivers=auto,d3d12,crocus,zink \
 %endif
 %if %{with opencl}
 	-Dgallium-opencl=icd \
@@ -1051,13 +1040,9 @@ if ! %meson \
 	-Degl-native-platform=wayland \
 	-Dvulkan-layers=device-select,overlay \
 %ifarch %{armx}
-	-Dvulkan-drivers=auto,broadcom,freedreno,panfrost,virtio-experimental,imagination-experimental \
+	-Dvulkan-drivers=amd,broadcom,freedreno,panfrost,swrast \
 %else
-%ifarch %{riscv}
-	-Dvulkan-drivers=auto,virtio-experimental,imagination-experimental \
-%else
-	-Dvulkan-drivers=auto,virtio-experimental \
-%endif
+	-Dvulkan-drivers=auto \
 %endif
 	-Dxlib-lease=auto \
 	-Dosmesa=true \
@@ -1134,9 +1119,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_bindir}/lima_disasm
 %endif
 %{_libdir}/dri/*.so
-%ifarch %{armx} %{riscv}
-%{_libdir}/libpowervr_rogue.so
-%endif
 %if %{with opencl}
 %{_libdir}/gallium-pipe/*.so
 %endif
@@ -1266,9 +1248,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %ifarch %{ix86} %{x86_64}
 %{_bindir}/aubinator
 %{_bindir}/aubinator_error_decode
-%if %{with aubinatorviewer}
 %{_bindir}/aubinator_viewer
-%endif
 %{_bindir}/i965_asm
 %{_bindir}/i965_disasm
 %{_bindir}/intel_dev_info
