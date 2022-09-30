@@ -148,7 +148,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	22.2.0
+Version:	22.1.7
 %if "%{?relc:1}%{git}" == ""
 Release:	1
 %else
@@ -205,10 +205,10 @@ Patch5:		mesa-20.3.0-meson-radeon-arm-riscv-ppc.patch
 #Patch15:	mesa-9.2-hardware-float.patch
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/7170
-Patch6:		https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/17803.patch
-Patch7:		https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/18039.patch
+#Patch6:		https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/17803.patch
+#Patch7:		https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/18039.patch
 
-Patch8:		mesa-buildsystem-improvements.patch
+#Patch8:		mesa-buildsystem-improvements.patch
 
 # Instructions to setup your repository clone
 # git://git.freedesktop.org/git/mesa/mesa
