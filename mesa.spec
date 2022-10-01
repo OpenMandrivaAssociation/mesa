@@ -311,6 +311,7 @@ BuildRequires:	glslang
 Requires:	libGL.so.1%{_arch_tag_suffix}
 
 %if %{with compat32}
+BuildRequires:	libc6
 BuildRequires:	devel(libdrm)
 BuildRequires:	devel(libX11)
 BuildRequires:	devel(libXdamage)
