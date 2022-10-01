@@ -30,7 +30,7 @@
 %bcond_without gcc
 %bcond_with opencl
 %else
-%bcond_without gcc
+%bcond_with gcc
 %bcond_without opencl
 %endif
 
