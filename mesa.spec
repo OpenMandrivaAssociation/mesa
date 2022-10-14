@@ -205,6 +205,8 @@ Patch5:		mesa-20.3.0-meson-radeon-arm-riscv-ppc.patch
 # fedora patches
 #Patch15:	mesa-9.2-hardware-float.patch
 
+Patch200:	llvm-15.patch
+
 # Instructions to setup your repository clone
 # git://git.freedesktop.org/git/mesa/mesa
 # git checkout mesa_7_5_branch
