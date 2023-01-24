@@ -252,6 +252,7 @@ BuildRequires:	bison
 BuildRequires:	libxml2-python
 BuildRequires:	meson
 BuildRequires:	lm_sensors-devel
+BuildRequires:	rust
 BuildRequires:	cmake(LLVM)
 BuildRequires:	pkgconfig(LLVMSPIRVLib)
 BuildRequires:	pkgconfig(expat)
