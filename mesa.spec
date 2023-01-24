@@ -152,7 +152,7 @@ Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	23.0.0
 %if "%{?relc:1}%{git}" == ""
-Release:	1
+Release:	100
 %else
 %if "%{?relc:1}" != ""
 %if "%{git}" != ""
@@ -1079,6 +1079,7 @@ if ! %meson \
 	-Dshader-cache=enabled \
 	-Dshared-glapi=enabled \
 	-Dshared-llvm=enabled \
+	-Dgallium-rusticl=true \
 	-Dselinux=false \
 	-Dbuild-tests=false \
 	-Dtools="$TOOLS"; then
