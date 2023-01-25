@@ -861,7 +861,6 @@ Recommends:	cmake(OpenCLICDLoader)
 %description -n %{devcl}
 Development files for the OpenCL library
 
--------------
 %package -n %{rusticl}
 Summary:	An open-source implementation of the OpenCL specification writed in Rust.
 Group:		System/Libraries
