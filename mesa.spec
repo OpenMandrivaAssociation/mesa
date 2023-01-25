@@ -869,7 +869,7 @@ Recommends:	%{_lib}OpenCL
 %description -n %{rusticl}
 An open-source implementation of the OpenCL specification writed in Rust.
 
-package -n %{devrusticl}
+%package -n %{devrusticl}
 Summary:	Development files for Rust OpenCL libs
 Group:		Development/Other
 Requires:	%{libcl} = %{EVRD}
