@@ -158,10 +158,10 @@ Release:	1
 %if "%{git}" != ""
 Release:	%{?relc:0.rc%{relc}.}0.%{git}.1
 %else
-Release:	%{?relc:0.rc%{relc}.}1
+Release:	%{?relc:0.rc%{relc}.}2
 %endif
 %else
-Release:	%{?git:0.%{git}.}1
+Release:	%{?git:0.%{git}.}2
 %endif
 %endif
 Group:		System/Libraries
@@ -209,7 +209,7 @@ Patch8:		mesa-buildsystem-improvements.patch
 
 # Make VirtualBox great again
 # Broken by commit 2569215f43f6ce71fb8eb2181b36c6cf976bce2a
-Patch10:	mesa-22.3-make-vbox-great-again.patch
+#Patch10:	mesa-22.3-make-vbox-great-again.patch
 
 # Instructions to setup your repository clone
 # git://git.freedesktop.org/git/mesa/mesa
@@ -987,7 +987,7 @@ if ! %meson32 \
 	-Dgallium-vdpau=enabled \
 	-Dgallium-xa=enabled \
 	-Dgallium-nine=true \
-	-Dgallium-drivers=auto,crocus \
+	-Dgallium-drivers=auto,crocus,zink \
 	-Ddri3=enabled \
 	-Degl=enabled \
 	-Dgbm=enabled \
@@ -1034,7 +1034,7 @@ if ! %meson \
 %ifarch %{armx}
 	-Dgallium-drivers=auto,r300,r600,svga,radeonsi,freedreno,etnaviv,tegra,vc4,v3d,kmsro,lima,panfrost,zink \
 %else
-	-Dgallium-drivers=auto,crocus \
+	-Dgallium-drivers=auto,crocus,zink \
 %endif
 %ifarch %{x86_64}
 	-Dintel-clc=enabled \
