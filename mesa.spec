@@ -143,6 +143,9 @@
 %define lib32cl lib%{clname}%{clmajor}
 %define dev32cl lib%{clname}-devel
 
+%define rusticl %mklibname %clmajor
+%define devrusticl %mklibname %clmajor -d
+
 %define mesasrcdir %{_prefix}/src/Mesa/
 %define driver_dir %{_libdir}/dri
 
@@ -284,6 +287,8 @@ BuildRequires:	bison
 BuildRequires:	libxml2-python
 BuildRequires:	meson
 BuildRequires:	lm_sensors-devel
+BuildRequires:	rust
+BuildRequires:	bindgen
 BuildRequires:	cmake(LLVM)
 BuildRequires:	pkgconfig(LLVMSPIRVLib)
 BuildRequires:	pkgconfig(expat)
@@ -889,6 +894,24 @@ Recommends:	cmake(OpenCLICDLoader)
 
 %description -n %{devcl}
 Development files for the OpenCL library
+	
+%package -n %{rusticl}
+Summary:	An open-source implementation of the OpenCL specification writed in Rust.
+Group:		System/Libraries
+Recommends:	%{_lib}OpenCL
+
+%description -n %{rusticl}
+An open-source implementation of the OpenCL specification writed in Rust.
+
+%package -n %{devrusticl}
+Summary:	Development files for Rust OpenCL libs
+Group:		Development/Other
+Requires:	%{libcl} = %{EVRD}
+Requires:	opencl-headers
+Recommends:	cmake(OpenCLICDLoader)
+
+%description -n %{devrusticl}
+Development files for the Rust based OpenCL library	
 %endif
 
 %if %{with vdpau}
@@ -1078,6 +1101,7 @@ if ! %meson \
 %if %{with opencl}
 	-Dgallium-opencl=icd \
 	-Dopencl-spirv=true \
+	-Dgallium-rusticl=true \	
 %else
 	-Dgallium-opencl=disabled \
 %endif
@@ -1241,6 +1265,9 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %files -n %{libcl}
 %{_sysconfdir}/OpenCL
 %{_libdir}/libMesaOpenCL.so.%{clmajor}*
+			
+%files -n %{rusticl}
+%{_libdir}/libRusticlOpenCL.so.%{clmajor}*		
 %endif
 
 %if %{with egl}
@@ -1291,6 +1318,9 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %if %{with opencl}
 %files -n %{devcl}
 %{_libdir}/libMesaOpenCL.so
+		
+%files -n %{devrusticl}
+%{_libdir}/libRusticlOpenCL.so		
 %endif
 
 %if %{with egl}
