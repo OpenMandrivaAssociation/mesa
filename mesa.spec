@@ -155,13 +155,13 @@ Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	23.1.0
 %if ! 0%{?relc:1}%{?git:1}
-Release:	1
+Release:	2
 %else
 %if "%{?relc:1}" != ""
 %if 0%{?git:1}
 Release:	%{?relc:0.rc%{relc}.}0.%{git}.1
 %else
-Release:	%{?relc:0.rc%{relc}.}1
+Release:	%{?relc:0.rc%{relc}.}2
 %endif
 %else
 Release:	%{?git:0.%{git}.}1
@@ -1101,7 +1101,7 @@ if ! %meson \
 %if %{with opencl}
 	-Dgallium-opencl=icd \
 	-Dopencl-spirv=true \
-	-Dgallium-rusticl=true \	
+	-Dgallium-rusticl=true \
 %else
 	-Dgallium-opencl=disabled \
 %endif
