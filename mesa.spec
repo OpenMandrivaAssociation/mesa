@@ -143,8 +143,10 @@
 %define lib32cl lib%{clname}%{clmajor}
 %define dev32cl lib%{clname}-devel
 
-%define rusticl %mklibname %clmajor
-%define devrusticl %mklibname %clmajor -d
+%define libname %mklibname shumate %{api} %{major}
+
+%define rusticl %mklibname rusticl
+%define devrusticl %mklibname rusticl -d
 
 %define mesasrcdir %{_prefix}/src/Mesa/
 %define driver_dir %{_libdir}/dri
@@ -1102,6 +1104,7 @@ if ! %meson \
 	-Dgallium-opencl=icd \
 	-Dopencl-spirv=true \
 	-Dgallium-rusticl=true \
+	-Drust_std=2021 \
 %else
 	-Dgallium-opencl=disabled \
 %endif
