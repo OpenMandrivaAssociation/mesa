@@ -1,0 +1,72 @@
+From 1fa7c37a3622283f96aed700ab34d619110aaec1 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Sat, 30 Sep 2023 02:16:51 -0500
+Subject: [PATCH 751/834] nir: Add NVIDIA-specific I/O intrinsics
+
+NVIDIA hardware doesn't take a vertex index for per-vertex I/O.
+Instead, it takes an offset into the primitive.  This has to be fetched
+using a combination of SR_INVOCATION_INFO and the ISBERD instruction.
+To keep things simple and allow for maximum CSE, we do the lowering in
+NIR and patch the load/store_per_vertex_input/output intrinsic.
+
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir.h                     |  1 +
+ src/compiler/nir/nir_divergence_analysis.c |  3 +++
+ src/compiler/nir/nir_intrinsics.py         | 13 +++++++++++++
+ 3 files changed, 17 insertions(+)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 13a935ddedb..16be72b7376 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -2085,6 +2085,7 @@ nir_intrinsic_can_reorder(nir_intrinsic_instr *instr)
+               instr->intrinsic == nir_intrinsic_bindless_image_load ||
+               instr->intrinsic == nir_intrinsic_image_deref_load ||
+               instr->intrinsic == nir_intrinsic_image_load ||
++              instr->intrinsic == nir_intrinsic_ald_nv ||
+               instr->intrinsic == nir_intrinsic_load_sysval_nv) {
+       return nir_intrinsic_access(instr) & ACCESS_CAN_REORDER;
+    } else {
+diff --git a/src/compiler/nir/nir_divergence_analysis.c b/src/compiler/nir/nir_divergence_analysis.c
+index c6f24bb02b7..37ce3ccc43c 100644
+--- a/src/compiler/nir/nir_divergence_analysis.c
++++ b/src/compiler/nir/nir_divergence_analysis.c
+@@ -614,6 +614,9 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
+    case nir_intrinsic_load_ray_triangle_vertex_positions:
+    case nir_intrinsic_cmat_extract:
+    case nir_intrinsic_cmat_muladd_amd:
++   case nir_intrinsic_isberd_nv:
++   case nir_intrinsic_al2p_nv:
++   case nir_intrinsic_ald_nv:
+       is_divergent = true;
+       break;
+ 
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index a3b570f6cde..576defa2f2a 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1958,6 +1958,19 @@ system_value("ray_query_global_intel", 1, bit_sizes=[64])
+ # NVIDIA-specific intrinsics
+ intrinsic("load_sysval_nv", dest_comp=1, src_comp=[], bit_sizes=[32, 64],
+           indices=[ACCESS, BASE], flags=[CAN_ELIMINATE])
++intrinsic("isberd_nv", dest_comp=1, src_comp=[1], bit_sizes=[32],
++          flags=[CAN_ELIMINATE, CAN_REORDER])
++intrinsic("al2p_nv", dest_comp=1, src_comp=[1], bit_sizes=[32],
++          indices=[BASE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
++# src[] = { vtx, offset }.
++# FLAGS is struct nak_nir_attr_io_flags
++intrinsic("ald_nv", dest_comp=0, src_comp=[1, 1], bit_sizes=[32],
++          indices=[BASE, RANGE_BASE, RANGE, FLAGS, ACCESS],
++          flags=[CAN_ELIMINATE])
++# src[] = { data, vtx, offset }.
++# FLAGS is struct nak_nir_attr_io_flags
++intrinsic("ast_nv", src_comp=[0, 1, 1],
++          indices=[BASE, RANGE_BASE, RANGE, FLAGS], flags=[])
+ 
+ # In order to deal with flipped render targets, gl_PointCoord may be flipped
+ # in the shader requiring a shader key or extra instructions or it may be
+-- 
+2.42.0
+

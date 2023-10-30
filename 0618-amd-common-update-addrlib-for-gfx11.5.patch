@@ -1,0 +1,99 @@
+From 3b4424a4a6b35332e3d38431687d4f2ab93aabee Mon Sep 17 00:00:00 2001
+From: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Date: Mon, 18 Sep 2023 21:47:49 +0200
+Subject: [PATCH 618/834] amd/common: update addrlib for gfx11.5
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25278>
+---
+ src/amd/addrlib/src/amdgpu_asic_addr.h     | 4 ++++
+ src/amd/addrlib/src/core/addrlib.cpp       | 1 +
+ src/amd/addrlib/src/gfx11/gfx11addrlib.cpp | 7 +++++++
+ src/amd/addrlib/src/gfx11/gfx11addrlib.h   | 2 +-
+ 4 files changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/src/amd/addrlib/src/amdgpu_asic_addr.h b/src/amd/addrlib/src/amdgpu_asic_addr.h
+index be3aa8a0271..ae035fdfbcf 100644
+--- a/src/amd/addrlib/src/amdgpu_asic_addr.h
++++ b/src/amd/addrlib/src/amdgpu_asic_addr.h
+@@ -29,6 +29,7 @@
+ #define FAMILY_VGH     0x90 //# 144 / Van Gogh
+ #define FAMILY_NV3     0x91 //# 145 / Navi: 3x
+ #define FAMILY_GFX1103 0x94
++#define FAMILY_GFX1150 0x96
+ #define FAMILY_RMB     0x92 //# 146 / Rembrandt
+ #define FAMILY_RPL     0x95 //# 149 / Raphael
+ #define FAMILY_MDN     0x97 //# 151 / Mendocino
+@@ -101,6 +102,8 @@
+ #define AMDGPU_GFX1103_R1_RANGE 0x01, 0x80 //# 1 <= x < 128
+ #define AMDGPU_GFX1103_R2_RANGE 0x80, 0xFF //# 128 <= x < max
+ 
++#define AMDGPU_GFX1150_RANGE    0x01, 0xFF //# 1 <= x < max
++
+ #define AMDGPU_REMBRANDT_RANGE  0x01, 0xFF //# 01 <= x < 255
+ 
+ #define AMDGPU_RAPHAEL_RANGE    0x01, 0xFF //# 1 <= x < max
+@@ -172,6 +175,7 @@
+ #define ASICREV_IS_NAVI33_P(r)         ASICREV_IS(r, NAVI33)
+ #define ASICREV_IS_GFX1103_R1(r)       ASICREV_IS(r, GFX1103_R1)
+ #define ASICREV_IS_GFX1103_R2(r)       ASICREV_IS(r, GFX1103_R2)
++#define ASICREV_IS_GFX1150(r)          ASICREV_IS(r, GFX1150)
+ 
+ #define ASICREV_IS_REMBRANDT(r)        ASICREV_IS(r, REMBRANDT)
+ 
+diff --git a/src/amd/addrlib/src/core/addrlib.cpp b/src/amd/addrlib/src/core/addrlib.cpp
+index f0a99b200d7..407a1b38a5e 100644
+--- a/src/amd/addrlib/src/core/addrlib.cpp
++++ b/src/amd/addrlib/src/core/addrlib.cpp
+@@ -217,6 +217,7 @@ ADDR_E_RETURNCODE Lib::Create(
+                         break;
+                     case FAMILY_NV3:
+                     case FAMILY_GFX1103:
++                    case FAMILY_GFX1150:
+                         pLib = Gfx11HwlInit(&client);
+                         break;
+                     default:
+diff --git a/src/amd/addrlib/src/gfx11/gfx11addrlib.cpp b/src/amd/addrlib/src/gfx11/gfx11addrlib.cpp
+index a343e56a750..88b761bec7f 100644
+--- a/src/amd/addrlib/src/gfx11/gfx11addrlib.cpp
++++ b/src/amd/addrlib/src/gfx11/gfx11addrlib.cpp
+@@ -739,6 +739,12 @@ ChipFamily Gfx11Lib::HwlConvertChipFamily(
+             {
+             }
+             break;
++        case FAMILY_GFX1150:
++            if (ASICREV_IS_GFX1150(chipRevision))
++            {
++                m_settings.isGfx1150 = 1;
++            }
++            break;
+         case FAMILY_GFX1103:
+             m_settings.isGfx1103 = 1;
+             break;
+@@ -1331,6 +1337,7 @@ UINT_32 Gfx11Lib::GetValidDisplaySwizzleModes(
+ 
+         if (false
+             || (m_settings.isGfx1103)
++            || (m_settings.isGfx1150)
+            )
+         {
+             // Not all GPUs support displaying with 256kB swizzle modes.
+diff --git a/src/amd/addrlib/src/gfx11/gfx11addrlib.h b/src/amd/addrlib/src/gfx11/gfx11addrlib.h
+index b67ea72dbdf..b07c989126c 100644
+--- a/src/amd/addrlib/src/gfx11/gfx11addrlib.h
++++ b/src/amd/addrlib/src/gfx11/gfx11addrlib.h
+@@ -34,7 +34,7 @@ struct Gfx11ChipSettings
+ {
+     struct
+     {
+-        UINT_32 reserved0           :  1;
++        UINT_32 isGfx1150           :  1;
+         UINT_32 isGfx1103           :  1;
+         UINT_32 reserved1           : 30;
+ 
+-- 
+2.42.0
+

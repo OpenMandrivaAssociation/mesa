@@ -1,0 +1,79 @@
+From b91ed68fa0e9203aaf226ec85dfd081b42e3bde8 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sun, 22 Oct 2023 14:36:03 -0700
+Subject: [PATCH 730/834] intel/compiler: Don't emit calls to validate() in
+ release build
+
+While the fs_visitor::validate() implementation is empty in release
+build, we still emit calls to it since it is defined in a separate
+compilation unit than its callers.  To fix this, just expose an inline
+empty function in the header for the release mode.
+
+Fossil run time differences in TGL laptop (difference at 95.0% confidence):
+
+```
+Rise of The Tomb Rider (Native) [n=7]
+        -0.482857 +/- 0.010932
+        -1.60608% +/- 0.0363621%
+
+Cyberpunk 2077 (DXVK) [n=7]
+        -0.987143 +/- 0.0904516
+        -0.82996% +/- 0.076049%
+
+Batman Arkham City (DXVK) [n=7]
+        -7.74857 +/- 0.329561
+        -1.46298% +/- 0.0622231%
+```
+
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25847>
+---
+ src/intel/compiler/brw_fs.h            | 6 ++++++
+ src/intel/compiler/brw_fs_validate.cpp | 4 ++--
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/intel/compiler/brw_fs.h b/src/intel/compiler/brw_fs.h
+index 7239f42585f..778853fa0cf 100644
+--- a/src/intel/compiler/brw_fs.h
++++ b/src/intel/compiler/brw_fs.h
+@@ -256,7 +256,13 @@ public:
+                       unsigned *out_pull_index);
+    bool lower_constant_loads();
+    virtual void invalidate_analysis(brw::analysis_dependency_class c);
++
++#ifndef NDEBUG
+    void validate();
++#else
++   void validate() {}
++#endif
++
+    bool opt_algebraic();
+    bool opt_redundant_halt();
+    bool opt_cse();
+diff --git a/src/intel/compiler/brw_fs_validate.cpp b/src/intel/compiler/brw_fs_validate.cpp
+index 35cf4399984..c285cc2dc26 100644
+--- a/src/intel/compiler/brw_fs_validate.cpp
++++ b/src/intel/compiler/brw_fs_validate.cpp
+@@ -86,10 +86,10 @@
+       }                                                                 \
+    }
+ 
++#ifndef NDEBUG
+ void
+ fs_visitor::validate()
+ {
+-#ifndef NDEBUG
+    foreach_block_and_inst (block, fs_inst, inst, cfg) {
+       switch (inst->opcode) {
+       case SHADER_OPCODE_SEND:
+@@ -193,5 +193,5 @@ fs_visitor::validate()
+          fsv_assert_eq(inst->dst.stride, 1);
+       }
+    }
+-#endif
+ }
++#endif
+-- 
+2.42.0
+

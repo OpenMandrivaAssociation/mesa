@@ -1,0 +1,37 @@
+From 6f9904923a9c98e94ab2b14f537b66e74ba971ab Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 10:43:28 +0200
+Subject: [PATCH 003/834] docs: update anchor for link
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+GitLab has renamed "specific" runners to "project"-runners. And
+additionally, they currently document two ways of creating them.
+
+Let's update the link to point to the new, non-deprecated way.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/ci/index.rst | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/docs/ci/index.rst b/docs/ci/index.rst
+index d7aee72f144..4db0719e9d4 100644
+--- a/docs/ci/index.rst
++++ b/docs/ci/index.rst
+@@ -199,8 +199,8 @@ faster personal machine as a runner.  You can find the gitlab-runner
+ package in Debian, or use GitLab's own builds.
+ 
+ To do so, follow `GitLab's instructions
+-<https://docs.gitlab.com/ee/ci/runners/runners_scope.html#create-a-specific-runner>`__ to
+-register your personal GitLab runner in your Mesa fork.  Then, tell
++<https://docs.gitlab.com/ee/ci/runners/runners_scope.html#create-a-project-runner-with-a-runner-authentication-token>`__
++to register your personal GitLab runner in your Mesa fork.  Then, tell
+ Mesa how many jobs it should serve (``concurrent=``) and how many
+ cores those jobs should use (``FDO_CI_CONCURRENT=``) by editing these
+ lines in ``/etc/gitlab-runner/config.toml``, for example:
+-- 
+2.42.0
+

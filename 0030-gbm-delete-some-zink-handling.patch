@@ -1,0 +1,54 @@
+From 3438304c0061d9f27d89050faed672702f759001 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 3 Oct 2023 10:40:11 -0400
+Subject: [PATCH 030/834] gbm: delete some zink handling
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+this has never been functional and may never be
+
+Fixes: d760a9151b7 ("gallium: Learn about kopper")
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Acked-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25526>
+---
+ src/gbm/backends/dri/gbm_dri.c | 17 +++++------------
+ 1 file changed, 5 insertions(+), 12 deletions(-)
+
+diff --git a/src/gbm/backends/dri/gbm_dri.c b/src/gbm/backends/dri/gbm_dri.c
+index dd38f8f6435..91fcc1fd29f 100644
+--- a/src/gbm/backends/dri/gbm_dri.c
++++ b/src/gbm/backends/dri/gbm_dri.c
+@@ -365,22 +365,15 @@ dri_screen_create_sw(struct gbm_dri_device *dri)
+    char *driver_name;
+    int ret;
+ 
+-   driver_name = strdup("zink");
++   driver_name = strdup("kms_swrast");
+    if (!driver_name)
+       return -errno;
+ 
+    ret = dri_screen_create_for_driver(dri, driver_name);
+-   if (ret != 0) {
+-      driver_name = strdup("kms_swrast");
+-      if (!driver_name)
+-         return -errno;
+-
+-      ret = dri_screen_create_for_driver(dri, driver_name);
+-      if (ret != 0)
+-         ret = dri_screen_create_for_driver(dri, NULL);
+-      if (ret != 0)
+-         return ret;
+-   }
++   if (ret != 0)
++      ret = dri_screen_create_for_driver(dri, NULL);
++   if (ret != 0)
++      return ret;
+ 
+    dri->software = true;
+    return 0;
+-- 
+2.42.0
+

@@ -1,0 +1,39 @@
+From 316af8c965142c3879f90ed85b6fd92aefa8b322 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Mon, 14 Aug 2023 10:41:23 -0400
+Subject: [PATCH 092/834] nir: Assert the nir_src union is used safely
+
+It is undefined behaviour in C to read a different member of a union than was
+written. Nothing in-tree should be using this behaviour with the nir_src union:
+nir_if should never be read as nir_instr and vice versa. Assert this.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24671>
+---
+ src/compiler/nir/nir.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 0c936401458..0597cddcd8e 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -1018,12 +1018,14 @@ nir_src_is_if(const nir_src *src)
+ static inline nir_instr *
+ nir_src_parent_instr(const nir_src *src)
+ {
++   assert(!nir_src_is_if(src));
+    return src->renamed_parent_instr;
+ }
+ 
+ static inline struct nir_if *
+ nir_src_parent_if(const nir_src *src)
+ {
++   assert(nir_src_is_if(src));
+    return src->parent_if;
+ }
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,181 @@
+From dfcb8d47847027033950152e0b8673acf45567f2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Fri, 6 Oct 2023 02:13:30 +0200
+Subject: [PATCH 549/834] ac: Add amd_ip_type argument to ac_parse_ib and
+ ac_parse_ib_chunk.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The current parser only supports PKT3 packets, but not all HW IP
+types use this format. This makes it possible to support more
+than one format depending on the IP type.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25769>
+---
+ src/amd/common/ac_debug.c                     | 12 ++++++++----
+ src/amd/common/ac_debug.h                     |  4 ++--
+ src/amd/common/ac_gpu_info.c                  |  2 +-
+ src/amd/common/ac_parse_ib.c                  |  2 +-
+ src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c |  6 +++---
+ src/gallium/drivers/radeonsi/si_debug.c       |  8 ++++----
+ 6 files changed, 19 insertions(+), 15 deletions(-)
+
+diff --git a/src/amd/common/ac_debug.c b/src/amd/common/ac_debug.c
+index c8f0765ab9c..f74b3c12cef 100644
+--- a/src/amd/common/ac_debug.c
++++ b/src/amd/common/ac_debug.c
+@@ -730,6 +730,8 @@ static void format_ib_output(FILE *f, char *out)
+  * \param ib_ptr       IB
+  * \param num_dw       size of the IB
+  * \param gfx_level   gfx level
++ * \param family	chip family
++ * \param ip_type IP type
+  * \param trace_ids	the last trace IDs that are known to have been reached
+  *			and executed by the CP, typically read from a buffer
+  * \param trace_id_count The number of entries in the trace_ids array.
+@@ -739,7 +741,7 @@ static void format_ib_output(FILE *f, char *out)
+  */
+ void ac_parse_ib_chunk(FILE *f, uint32_t *ib_ptr, int num_dw, const int *trace_ids,
+                        unsigned trace_id_count, enum amd_gfx_level gfx_level,
+-                       enum radeon_family family,
++                       enum radeon_family family, enum amd_ip_type ip_type,
+                        ac_debug_addr_callback addr_callback, void *addr_callback_data)
+ {
+    struct ac_ib_parser ib = {0};
+@@ -779,6 +781,8 @@ void ac_parse_ib_chunk(FILE *f, uint32_t *ib_ptr, int num_dw, const int *trace_i
+  * \param ib		IB
+  * \param num_dw	size of the IB
+  * \param gfx_level	gfx level
++ * \param family	chip family
++ * \param ip_type IP type
+  * \param trace_ids	the last trace IDs that are known to have been reached
+  *			and executed by the CP, typically read from a buffer
+  * \param trace_id_count The number of entries in the trace_ids array.
+@@ -788,12 +792,12 @@ void ac_parse_ib_chunk(FILE *f, uint32_t *ib_ptr, int num_dw, const int *trace_i
+  */
+ void ac_parse_ib(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids, unsigned trace_id_count,
+                  const char *name, enum amd_gfx_level gfx_level, enum radeon_family family,
+-                 ac_debug_addr_callback addr_callback, void *addr_callback_data)
++                 enum amd_ip_type ip_type, ac_debug_addr_callback addr_callback, void *addr_callback_data)
+ {
+    fprintf(f, "------------------ %s begin ------------------\n", name);
+ 
+-   ac_parse_ib_chunk(f, ib, num_dw, trace_ids, trace_id_count, gfx_level, family, addr_callback,
+-                     addr_callback_data);
++   ac_parse_ib_chunk(f, ib, num_dw, trace_ids, trace_id_count, gfx_level, family, ip_type,
++                     addr_callback, addr_callback_data);
+ 
+    fprintf(f, "------------------- %s end -------------------\n\n", name);
+ }
+diff --git a/src/amd/common/ac_debug.h b/src/amd/common/ac_debug.h
+index 957b06474e4..411096a76e7 100644
+--- a/src/amd/common/ac_debug.h
++++ b/src/amd/common/ac_debug.h
+@@ -47,11 +47,11 @@ void ac_dump_reg(FILE *file, enum amd_gfx_level gfx_level, enum radeon_family fa
+                  unsigned offset, uint32_t value, uint32_t field_mask);
+ void ac_parse_ib_chunk(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids,
+                        unsigned trace_id_count, enum amd_gfx_level gfx_level,
+-                       enum radeon_family family,
++                       enum radeon_family family, enum amd_ip_type ip_type,
+                        ac_debug_addr_callback addr_callback, void *addr_callback_data);
+ void ac_parse_ib(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids, unsigned trace_id_count,
+                  const char *name, enum amd_gfx_level gfx_level, enum radeon_family family,
+-                 ac_debug_addr_callback addr_callback, void *addr_callback_data);
++                 enum amd_ip_type ip_type, ac_debug_addr_callback addr_callback, void *addr_callback_data);
+ 
+ bool ac_vm_fault_occurred(enum amd_gfx_level gfx_level, uint64_t *old_dmesg_timestamp,
+                          uint64_t *out_addr);
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 665279ec391..4d99554ffbe 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -1592,7 +1592,7 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+          }
+ 
+          ac_parse_ib(stdout, ib, size / 4, NULL, 0, "IB", info->gfx_level, info->family,
+-                     NULL, NULL);
++                     AMD_IP_GFX, NULL, NULL);
+          free(ib);
+          exit(0);
+       }
+diff --git a/src/amd/common/ac_parse_ib.c b/src/amd/common/ac_parse_ib.c
+index d9cb1a626c6..02e59018261 100644
+--- a/src/amd/common/ac_parse_ib.c
++++ b/src/amd/common/ac_parse_ib.c
+@@ -55,7 +55,7 @@ int main(int argc, char **argv)
+       }
+       fclose(f);
+ 
+-      ac_parse_ib(stdout, ib, size / 4, NULL, 0, filename, gfx_level, family, NULL, NULL);
++      ac_parse_ib(stdout, ib, size / 4, NULL, 0, filename, gfx_level, family, AMD_IP_GFX, NULL, NULL);
+       free(ib);
+    }
+ 
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+index 9ecc7d4f01d..39c8887785b 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+@@ -1362,7 +1362,7 @@ radv_amdgpu_winsys_cs_dump(struct radeon_cmdbuf *_cs, FILE *file, const int *tra
+       void *ib = radv_amdgpu_winsys_get_cpu_addr(cs, ib_info.ib_mc_address);
+       assert(ib);
+       ac_parse_ib(file, ib, cs->ib_buffers[0].cdw, trace_ids, trace_id_count, "main IB", ws->info.gfx_level,
+-                  ws->info.family, radv_amdgpu_winsys_get_cpu_addr, cs);
++                  ws->info.family, cs->hw_ip, radv_amdgpu_winsys_get_cpu_addr, cs);
+    } else {
+       for (unsigned i = 0; i < cs->num_ib_buffers; i++) {
+          struct radv_amdgpu_ib *ib = &cs->ib_buffers[i];
+@@ -1379,8 +1379,8 @@ radv_amdgpu_winsys_cs_dump(struct radeon_cmdbuf *_cs, FILE *file, const int *tra
+             snprintf(name, sizeof(name), "main IB");
+          }
+ 
+-         ac_parse_ib(file, mapped, ib->cdw, trace_ids, trace_id_count, name, ws->info.gfx_level, ws->info.family, NULL,
+-                     NULL);
++         ac_parse_ib(file, mapped, ib->cdw, trace_ids, trace_id_count, name, ws->info.gfx_level, ws->info.family,
++                     cs->hw_ip, NULL, NULL);
+       }
+    }
+ }
+diff --git a/src/gallium/drivers/radeonsi/si_debug.c b/src/gallium/drivers/radeonsi/si_debug.c
+index 98ea24673c2..511bf51e852 100644
+--- a/src/gallium/drivers/radeonsi/si_debug.c
++++ b/src/gallium/drivers/radeonsi/si_debug.c
+@@ -348,7 +348,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
+ 
+       if (begin < chunk->cdw) {
+          ac_parse_ib_chunk(f, chunk->buf + begin, MIN2(end, chunk->cdw) - begin, last_trace_id,
+-                           trace_id_count, gfx_level, family, NULL, NULL);
++                           trace_id_count, gfx_level, family, AMD_IP_GFX, NULL, NULL);
+       }
+ 
+       if (end <= chunk->cdw)
+@@ -364,7 +364,7 @@ static void si_parse_current_ib(FILE *f, struct radeon_cmdbuf *cs, unsigned begi
+    assert(end <= cs->current.cdw);
+ 
+    ac_parse_ib_chunk(f, cs->current.buf + begin, end - begin, last_trace_id, trace_id_count,
+-                     gfx_level, family, NULL, NULL);
++                     gfx_level, family, AMD_IP_GFX, NULL, NULL);
+ 
+    fprintf(f, "------------------- %s end (dw = %u) -------------------\n\n", name, orig_end);
+ }
+@@ -395,12 +395,12 @@ static void si_log_chunk_type_cs_print(void *data, FILE *f)
+       if (chunk->gfx_begin == 0) {
+          if (ctx->cs_preamble_state)
+             ac_parse_ib(f, ctx->cs_preamble_state->pm4, ctx->cs_preamble_state->ndw, NULL, 0,
+-                        "IB2: Init config", ctx->gfx_level, ctx->family, NULL, NULL);
++                        "IB2: Init config", ctx->gfx_level, ctx->family, AMD_IP_GFX, NULL, NULL);
+       }
+ 
+       if (scs->flushed) {
+          ac_parse_ib(f, scs->gfx.ib + chunk->gfx_begin, chunk->gfx_end - chunk->gfx_begin,
+-                     &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, ctx->family, NULL, NULL);
++                     &last_trace_id, map ? 1 : 0, "IB", ctx->gfx_level, ctx->family, AMD_IP_GFX, NULL, NULL);
+       } else {
+          si_parse_current_ib(f, &ctx->gfx_cs, chunk->gfx_begin, chunk->gfx_end, &last_trace_id,
+                              map ? 1 : 0, "IB", ctx->gfx_level, ctx->family);
+-- 
+2.42.0
+

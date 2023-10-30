@@ -1,0 +1,32 @@
+From e9c21952aa5e04750f161a8b1c597f9a4f757246 Mon Sep 17 00:00:00 2001
+From: Gert Wollny <gert.wollny@collabora.com>
+Date: Sun, 15 Oct 2023 21:56:04 +0200
+Subject: [PATCH 468/834] r600/sfn: Don't override a chgr pinning during copy
+ propagation
+
+Fixes: c0b6c59e0 (r600/sfn: Copy propagate into TEX source)
+Related: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9998
+
+Signed-off-by: Gert Wollny <gert.wollny@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25741>
+---
+ src/gallium/drivers/r600/sfn/sfn_optimizer.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/r600/sfn/sfn_optimizer.cpp b/src/gallium/drivers/r600/sfn/sfn_optimizer.cpp
+index 5ab1e880cad..f8bc69fe0b0 100644
+--- a/src/gallium/drivers/r600/sfn/sfn_optimizer.cpp
++++ b/src/gallium/drivers/r600/sfn/sfn_optimizer.cpp
+@@ -640,7 +640,8 @@ CopyPropFwdVisitor::propagate_to(RegisterVec4& value, Instr *instr)
+ 
+          value.set_value(i, new_src[i]);
+ 
+-         if (new_src[i]->pin() != pin_fully) {
++         if (new_src[i]->pin() != pin_fully &&
++             new_src[i]->pin() != pin_chgr) {
+             if (new_src[i]->pin() == pin_chan)
+                new_src[i]->set_pin(pin_chgr);
+             else
+-- 
+2.42.0
+

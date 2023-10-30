@@ -1,0 +1,63 @@
+From 44b07649302c95f0765a61956ef242bfa30c125e Mon Sep 17 00:00:00 2001
+From: Eric Engestrom <eric@igalia.com>
+Date: Fri, 13 Oct 2023 17:29:54 +0100
+Subject: [PATCH 455/834] util/xmlconfig: drop driInjectDataDir() now that
+ DRIRC_CONFIGDIR is always supported
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21808>
+---
+ src/util/tests/xmlconfig.cpp | 5 -----
+ src/util/xmlconfig.c         | 6 ------
+ src/util/xmlconfig.h         | 1 -
+ 3 files changed, 12 deletions(-)
+
+diff --git a/src/util/tests/xmlconfig.cpp b/src/util/tests/xmlconfig.cpp
+index 62170a59b7a..ed5a19c9857 100644
+--- a/src/util/tests/xmlconfig.cpp
++++ b/src/util/tests/xmlconfig.cpp
+@@ -191,11 +191,6 @@ xmlconfig_test::drirc_init(const char *driver, const char *drm,
+                            const char *app, int appver,
+                            const char *engine, int enginever)
+ {
+-   /* Make the parser look in the directory of config files for the test,
+-    * passed in by meson.build.
+-    */
+-   driInjectDataDir(getenv("DRIRC_CONFIGDIR"));
+-
+    driInjectExecName(exec_name);
+ 
+    driOptionDescription driconf[] = {
+diff --git a/src/util/xmlconfig.c b/src/util/xmlconfig.c
+index f275166b1e6..fbd034e6552 100644
+--- a/src/util/xmlconfig.c
++++ b/src/util/xmlconfig.c
+@@ -1176,12 +1176,6 @@ initOptionCache(driOptionCache *cache, const driOptionCache *info)
+ static const char *datadir = DATADIR "/drirc.d";
+ static const char *execname;
+ 
+-void
+-driInjectDataDir(const char *dir)
+-{
+-   datadir = dir;
+-}
+-
+ void
+ driInjectExecName(const char *exec)
+ {
+diff --git a/src/util/xmlconfig.h b/src/util/xmlconfig.h
+index 7405f0cb98d..8d063974cb9 100644
+--- a/src/util/xmlconfig.h
++++ b/src/util/xmlconfig.h
+@@ -159,7 +159,6 @@ float driQueryOptionf(const driOptionCache *cache, const char *name);
+ char *driQueryOptionstr(const driOptionCache *cache, const char *name);
+ 
+ /* Overrides for the unit tests to control drirc parsing. */
+-void driInjectDataDir(const char *dir);
+ void driInjectExecName(const char *exec);
+ 
+ /**
+-- 
+2.42.0
+

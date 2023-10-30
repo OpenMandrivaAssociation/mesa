@@ -1,0 +1,137 @@
+From d31c62f3840faf32a978fa8013e7eebf56374fa7 Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Fri, 25 Aug 2023 18:22:45 -0400
+Subject: [PATCH 677/834] anv: Wrap aux surface image binding queries
+
+Add and use anv_image_get_aux_memory_range.
+
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_image.c       | 34 ++++++++++++++++++------------
+ src/intel/vulkan/anv_private.h     |  7 ++++++
+ src/intel/vulkan/genX_cmd_buffer.c |  2 +-
+ 3 files changed, 28 insertions(+), 15 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index 48726fd91c0..8f9b4dbf3ee 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -1064,7 +1064,9 @@ check_memory_bindings(const struct anv_device *device,
+                          .expect_binding = primary_binding);
+ 
+       /* Check aux_surface */
+-      if (anv_surface_is_valid(&plane->aux_surface)) {
++      const struct anv_image_memory_range *aux_mem_range =
++         anv_image_get_aux_memory_range(image, p);
++      if (aux_mem_range->size > 0) {
+          enum anv_image_memory_binding binding = primary_binding;
+ 
+          /* If an auxiliary surface is used for an externally-shareable image,
+@@ -1084,7 +1086,7 @@ check_memory_bindings(const struct anv_device *device,
+           * the image is sent to display.
+           */
+          check_memory_range(accum_ranges,
+-                            .test_surface = &plane->aux_surface,
++                            .test_range = aux_mem_range,
+                             .expect_binding = binding);
+       }
+ 
+@@ -2299,7 +2301,8 @@ anv_get_image_subresource_layout(const struct anv_image *image,
+                                  const VkImageSubresource2KHR *subresource,
+                                  VkSubresourceLayout2KHR *layout)
+ {
+-   const struct anv_surface *surface;
++   const struct anv_image_memory_range *mem_range;
++   const struct isl_surf *isl_surf;
+ 
+    assert(__builtin_popcount(subresource->imageSubresource.aspectMask) == 1);
+ 
+@@ -2343,30 +2346,33 @@ anv_get_image_subresource_layout(const struct anv_image *image,
+          /* If the memory binding differs between primary and aux, then the
+           * returned offset will be incorrect.
+           */
+-         assert(image->planes[0].aux_surface.memory_range.binding ==
++         mem_range = anv_image_get_aux_memory_range(image, 0);
++         assert(mem_range->binding ==
+                 image->planes[0].primary_surface.memory_range.binding);
+-         surface = &image->planes[0].aux_surface;
++         isl_surf = &image->planes[0].aux_surface.isl;
+       } else {
+          assert(mem_plane < image->n_planes);
+-         surface = &image->planes[mem_plane].primary_surface;
++         mem_range = &image->planes[mem_plane].primary_surface.memory_range;
++         isl_surf = &image->planes[mem_plane].primary_surface.isl;
+       }
+    } else {
+       const uint32_t plane =
+          anv_image_aspect_to_plane(image, subresource->imageSubresource.aspectMask);
+-      surface = &image->planes[plane].primary_surface;
++      mem_range = &image->planes[plane].primary_surface.memory_range;
++      isl_surf = &image->planes[plane].primary_surface.isl;
+    }
+ 
+-   layout->subresourceLayout.offset = surface->memory_range.offset;
+-   layout->subresourceLayout.rowPitch = surface->isl.row_pitch_B;
+-   layout->subresourceLayout.depthPitch = isl_surf_get_array_pitch(&surface->isl);
+-   layout->subresourceLayout.arrayPitch = isl_surf_get_array_pitch(&surface->isl);
++   layout->subresourceLayout.offset = mem_range->offset;
++   layout->subresourceLayout.rowPitch = isl_surf->row_pitch_B;
++   layout->subresourceLayout.depthPitch = isl_surf_get_array_pitch(isl_surf);
++   layout->subresourceLayout.arrayPitch = isl_surf_get_array_pitch(isl_surf);
+ 
+    if (subresource->imageSubresource.mipLevel > 0 ||
+        subresource->imageSubresource.arrayLayer > 0) {
+-      assert(surface->isl.tiling == ISL_TILING_LINEAR);
++      assert(isl_surf->tiling == ISL_TILING_LINEAR);
+ 
+       uint64_t offset_B;
+-      isl_surf_get_image_offset_B_tile_sa(&surface->isl,
++      isl_surf_get_image_offset_B_tile_sa(isl_surf,
+                                           subresource->imageSubresource.mipLevel,
+                                           subresource->imageSubresource.arrayLayer,
+                                           0 /* logical_z_offset_px */,
+@@ -2378,7 +2384,7 @@ anv_get_image_subresource_layout(const struct anv_image *image,
+                   subresource->imageSubresource.mipLevel) *
+          image->vk.extent.depth;
+    } else {
+-      layout->subresourceLayout.size = surface->memory_range.size;
++      layout->subresourceLayout.size = mem_range->size;
+    }
+ }
+ 
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index e75ff8d02e7..36b70ada8f8 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -4850,6 +4850,13 @@ anv_image_get_compression_state_addr(const struct anv_device *device,
+       offset);
+ }
+ 
++static inline const struct anv_image_memory_range *
++anv_image_get_aux_memory_range(const struct anv_image *image,
++                               uint32_t plane)
++{
++  return &image->planes[plane].aux_surface.memory_range;
++}
++
+ /* Returns true if a HiZ-enabled depth buffer can be sampled from. */
+ static inline bool
+ anv_can_sample_with_hiz(const struct intel_device_info * const devinfo,
+diff --git a/src/intel/vulkan/genX_cmd_buffer.c b/src/intel/vulkan/genX_cmd_buffer.c
+index ff040e4a7a9..f46a24a7dfd 100644
+--- a/src/intel/vulkan/genX_cmd_buffer.c
++++ b/src/intel/vulkan/genX_cmd_buffer.c
+@@ -1142,7 +1142,7 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
+               ANV_IMAGE_MEMORY_BINDING_PRIVATE);
+       must_init_fast_clear_state = true;
+ 
+-      if (image->planes[plane].aux_surface.memory_range.binding ==
++      if (anv_image_get_aux_memory_range(image, plane)->binding ==
+           ANV_IMAGE_MEMORY_BINDING_PRIVATE) {
+          /* The aux surface, like the fast clear state, lives in
+           * a driver-private bo.  We must initialize the aux surface for the
+-- 
+2.42.0
+

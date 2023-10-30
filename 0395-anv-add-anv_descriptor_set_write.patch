@@ -1,0 +1,178 @@
+From 710c14f20bfc90378d3f37ce3c45f97de75c7f85 Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Mon, 9 Oct 2023 15:23:07 -0700
+Subject: [PATCH 395/834] anv: add anv_descriptor_set_write
+
+Add anv_descriptor_set_write as a helper for both
+anv_UpdateDescriptorSets and anv_CmdPushDescriptorSetKHR.
+
+v2: rename push_set to the more generic set_override
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com> (v1)
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/intel/vulkan/anv_cmd_buffer.c     | 75 +--------------------------
+ src/intel/vulkan/anv_descriptor_set.c | 34 ++++++++----
+ src/intel/vulkan/anv_private.h        |  6 +++
+ 3 files changed, 31 insertions(+), 84 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_cmd_buffer.c b/src/intel/vulkan/anv_cmd_buffer.c
+index 3a5ba185b78..3b2ddc8d93e 100644
+--- a/src/intel/vulkan/anv_cmd_buffer.c
++++ b/src/intel/vulkan/anv_cmd_buffer.c
+@@ -1166,79 +1166,8 @@ void anv_CmdPushDescriptorSetKHR(
+                                      pipelineBindPoint)->push_descriptor;
+    anv_push_descriptor_set_init(cmd_buffer, push_set, set_layout);
+ 
+-   /* Go through the user supplied descriptors. */
+-   for (uint32_t i = 0; i < descriptorWriteCount; i++) {
+-      const VkWriteDescriptorSet *write = &pDescriptorWrites[i];
+-
+-      switch (write->descriptorType) {
+-      case VK_DESCRIPTOR_TYPE_SAMPLER:
+-      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+-      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+-      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+-      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+-         for (uint32_t j = 0; j < write->descriptorCount; j++) {
+-            anv_descriptor_set_write_image_view(cmd_buffer->device,
+-                                                &push_set->set,
+-                                                write->pImageInfo + j,
+-                                                write->descriptorType,
+-                                                write->dstBinding,
+-                                                write->dstArrayElement + j);
+-         }
+-         break;
+-
+-      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+-      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+-         for (uint32_t j = 0; j < write->descriptorCount; j++) {
+-            ANV_FROM_HANDLE(anv_buffer_view, bview,
+-                            write->pTexelBufferView[j]);
+-
+-            anv_descriptor_set_write_buffer_view(cmd_buffer->device,
+-                                                 &push_set->set,
+-                                                 write->descriptorType,
+-                                                 bview,
+-                                                 write->dstBinding,
+-                                                 write->dstArrayElement + j);
+-         }
+-         break;
+-
+-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+-      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+-      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+-         for (uint32_t j = 0; j < write->descriptorCount; j++) {
+-            ANV_FROM_HANDLE(anv_buffer, buffer, write->pBufferInfo[j].buffer);
+-
+-            anv_descriptor_set_write_buffer(cmd_buffer->device,
+-                                            &push_set->set,
+-                                            write->descriptorType,
+-                                            buffer,
+-                                            write->dstBinding,
+-                                            write->dstArrayElement + j,
+-                                            write->pBufferInfo[j].offset,
+-                                            write->pBufferInfo[j].range);
+-         }
+-         break;
+-
+-      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+-         const VkWriteDescriptorSetAccelerationStructureKHR *accel_write =
+-            vk_find_struct_const(write, WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR);
+-         assert(accel_write->accelerationStructureCount ==
+-                write->descriptorCount);
+-         for (uint32_t j = 0; j < write->descriptorCount; j++) {
+-            ANV_FROM_HANDLE(vk_acceleration_structure, accel,
+-                            accel_write->pAccelerationStructures[j]);
+-            anv_descriptor_set_write_acceleration_structure(cmd_buffer->device,
+-                                                            &push_set->set, accel,
+-                                                            write->dstBinding,
+-                                                            write->dstArrayElement + j);
+-         }
+-         break;
+-      }
+-
+-      default:
+-         break;
+-      }
+-   }
++   anv_descriptor_set_write(cmd_buffer->device, &push_set->set,
++                            descriptorWriteCount, pDescriptorWrites);
+ 
+    anv_cmd_buffer_bind_descriptor_set(cmd_buffer, pipelineBindPoint,
+                                       layout, _set, &push_set->set,
+diff --git a/src/intel/vulkan/anv_descriptor_set.c b/src/intel/vulkan/anv_descriptor_set.c
+index 1945fafee66..0d335b806f3 100644
+--- a/src/intel/vulkan/anv_descriptor_set.c
++++ b/src/intel/vulkan/anv_descriptor_set.c
+@@ -2047,18 +2047,17 @@ anv_descriptor_set_write_acceleration_structure(struct anv_device *device,
+    memcpy(desc_map, &desc_data, sizeof(desc_data));
+ }
+ 
+-void anv_UpdateDescriptorSets(
+-    VkDevice                                    _device,
+-    uint32_t                                    descriptorWriteCount,
+-    const VkWriteDescriptorSet*                 pDescriptorWrites,
+-    uint32_t                                    descriptorCopyCount,
+-    const VkCopyDescriptorSet*                  pDescriptorCopies)
++void
++anv_descriptor_set_write(struct anv_device *device,
++                         struct anv_descriptor_set *set_override,
++                         uint32_t write_count,
++                         const VkWriteDescriptorSet *writes)
+ {
+-   ANV_FROM_HANDLE(anv_device, device, _device);
+-
+-   for (uint32_t i = 0; i < descriptorWriteCount; i++) {
+-      const VkWriteDescriptorSet *write = &pDescriptorWrites[i];
+-      ANV_FROM_HANDLE(anv_descriptor_set, set, write->dstSet);
++   for (uint32_t i = 0; i < write_count; i++) {
++      const VkWriteDescriptorSet *write = &writes[i];
++      struct anv_descriptor_set *set = unlikely(set_override) ?
++         set_override :
++         anv_descriptor_set_from_handle(write->dstSet);
+ 
+       switch (write->descriptorType) {
+       case VK_DESCRIPTOR_TYPE_SAMPLER:
+@@ -2138,6 +2137,19 @@ void anv_UpdateDescriptorSets(
+          break;
+       }
+    }
++}
++
++void anv_UpdateDescriptorSets(
++    VkDevice                                    _device,
++    uint32_t                                    descriptorWriteCount,
++    const VkWriteDescriptorSet*                 pDescriptorWrites,
++    uint32_t                                    descriptorCopyCount,
++    const VkCopyDescriptorSet*                  pDescriptorCopies)
++{
++   ANV_FROM_HANDLE(anv_device, device, _device);
++
++   anv_descriptor_set_write(device, NULL, descriptorWriteCount,
++                            pDescriptorWrites);
+ 
+    for (uint32_t i = 0; i < descriptorCopyCount; i++) {
+       const VkCopyDescriptorSet *copy = &pDescriptorCopies[i];
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index fb65719f48b..71b8951e9e4 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -2490,6 +2490,12 @@ anv_descriptor_set_write_inline_uniform_data(struct anv_device *device,
+                                              size_t offset,
+                                              size_t size);
+ 
++void
++anv_descriptor_set_write(struct anv_device *device,
++                         struct anv_descriptor_set *set_override,
++                         uint32_t write_count,
++                         const VkWriteDescriptorSet *writes);
++
+ void
+ anv_descriptor_set_write_template(struct anv_device *device,
+                                   struct anv_descriptor_set *set,
+-- 
+2.42.0
+

@@ -1,0 +1,331 @@
+From ae3fb3089f50a5f7bc42f209656b783ac98ec509 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Fri, 6 Oct 2023 21:19:45 -0400
+Subject: [PATCH 808/834] panfrost: Add infrastructure for internal AFBC
+ compute shaders
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A few compute shaders are needed to support AFBC-packing. Here is
+just the boilerplate to create, compile and retrieve the shaders.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/gallium/drivers/panfrost/meson.build     |   1 +
+ src/gallium/drivers/panfrost/pan_afbc_cso.c  | 114 +++++++++++++++++++
+ src/gallium/drivers/panfrost/pan_afbc_cso.h  |  58 ++++++++++
+ src/gallium/drivers/panfrost/pan_cmdstream.c |  42 +++++++
+ src/gallium/drivers/panfrost/pan_context.c   |   2 +
+ src/gallium/drivers/panfrost/pan_context.h   |   3 +
+ src/gallium/drivers/panfrost/pan_screen.h    |   1 +
+ 7 files changed, 221 insertions(+)
+ create mode 100644 src/gallium/drivers/panfrost/pan_afbc_cso.c
+ create mode 100644 src/gallium/drivers/panfrost/pan_afbc_cso.h
+
+diff --git a/src/gallium/drivers/panfrost/meson.build b/src/gallium/drivers/panfrost/meson.build
+index 1e3142367fd..071620bd95c 100644
+--- a/src/gallium/drivers/panfrost/meson.build
++++ b/src/gallium/drivers/panfrost/meson.build
+@@ -20,6 +20,7 @@
+ # SOFTWARE.
+ 
+ files_panfrost = files(
++  'pan_afbc_cso.c',
+   'pan_disk_cache.c',
+   'pan_fence.c',
+   'pan_helpers.c',
+diff --git a/src/gallium/drivers/panfrost/pan_afbc_cso.c b/src/gallium/drivers/panfrost/pan_afbc_cso.c
+new file mode 100644
+index 00000000000..a57d1021803
+--- /dev/null
++++ b/src/gallium/drivers/panfrost/pan_afbc_cso.c
+@@ -0,0 +1,114 @@
++/*
++ * Copyright (C) 2023 Amazon.com, Inc. or its affiliates
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++#include "pan_afbc_cso.h"
++#include "nir_builder.h"
++#include "pan_context.h"
++#include "pan_resource.h"
++#include "pan_screen.h"
++
++#define panfrost_afbc_add_info_ubo(name, b)                                    \
++   nir_variable *info_ubo = nir_variable_create(                               \
++      b.shader, nir_var_mem_ubo,                                               \
++      glsl_array_type(glsl_uint_type(),                                        \
++                      sizeof(struct panfrost_afbc_##name##_info) / 4, 0),      \
++      "info_ubo");                                                             \
++   info_ubo->data.driver_location = 0;
++
++#define panfrost_afbc_get_info_field(name, b, field)                           \
++   nir_load_ubo(                                                               \
++      (b), 1, sizeof(((struct panfrost_afbc_##name##_info *)0)->field) * 8,    \
++      nir_imm_int(b, 0),                                                       \
++      nir_imm_int(b, offsetof(struct panfrost_afbc_##name##_info, field)),     \
++      .align_mul = 4, .range = ~0)
++
++struct pan_afbc_shader_data *
++panfrost_afbc_get_shaders(struct panfrost_context *ctx,
++                          struct panfrost_resource *rsrc, unsigned align)
++{
++   struct pipe_context *pctx = &ctx->base;
++   struct panfrost_screen *screen = pan_screen(ctx->base.screen);
++   bool tiled = rsrc->image.layout.modifier & AFBC_FORMAT_MOD_TILED;
++   struct pan_afbc_shader_key key = {
++      .bpp = util_format_get_blocksizebits(rsrc->base.format),
++      .align = align,
++      .tiled = tiled,
++   };
++
++   pthread_mutex_lock(&ctx->afbc_shaders.lock);
++   struct hash_entry *he =
++      _mesa_hash_table_search(ctx->afbc_shaders.shaders, &key);
++   struct pan_afbc_shader_data *shader = he ? he->data : NULL;
++   pthread_mutex_unlock(&ctx->afbc_shaders.lock);
++
++   if (shader)
++      return shader;
++
++   shader = rzalloc(ctx->afbc_shaders.shaders, struct pan_afbc_shader_data);
++   shader->key = key;
++   _mesa_hash_table_insert(ctx->afbc_shaders.shaders, &shader->key, shader);
++
++#define COMPILE_SHADER(name, ...)                                              \
++   {                                                                           \
++      nir_shader *nir =                                                        \
++         panfrost_afbc_create_##name##_shader(screen, __VA_ARGS__);            \
++      nir->info.num_ubos = 1;                                                  \
++      struct pipe_compute_state cso = {PIPE_SHADER_IR_NIR, nir};               \
++      shader->name##_cso = pctx->create_compute_state(pctx, &cso);             \
++   }
++
++#undef COMPILE_SHADER
++
++   pthread_mutex_lock(&ctx->afbc_shaders.lock);
++   _mesa_hash_table_insert(ctx->afbc_shaders.shaders, &shader->key, shader);
++   pthread_mutex_unlock(&ctx->afbc_shaders.lock);
++
++   return shader;
++}
++
++static uint32_t
++panfrost_afbc_shader_key_hash(const void *key)
++{
++   return _mesa_hash_data(key, sizeof(struct pan_afbc_shader_key));
++}
++
++static bool
++panfrost_afbc_shader_key_equal(const void *a, const void *b)
++{
++   return !memcmp(a, b, sizeof(struct pan_afbc_shader_key));
++}
++
++void
++panfrost_afbc_context_init(struct panfrost_context *ctx)
++{
++   ctx->afbc_shaders.shaders = _mesa_hash_table_create(
++      NULL, panfrost_afbc_shader_key_hash, panfrost_afbc_shader_key_equal);
++   pthread_mutex_init(&ctx->afbc_shaders.lock, NULL);
++}
++
++void
++panfrost_afbc_context_destroy(struct panfrost_context *ctx)
++{
++   _mesa_hash_table_destroy(ctx->afbc_shaders.shaders, NULL);
++   pthread_mutex_destroy(&ctx->afbc_shaders.lock);
++}
+diff --git a/src/gallium/drivers/panfrost/pan_afbc_cso.h b/src/gallium/drivers/panfrost/pan_afbc_cso.h
+new file mode 100644
+index 00000000000..a9616829364
+--- /dev/null
++++ b/src/gallium/drivers/panfrost/pan_afbc_cso.h
+@@ -0,0 +1,58 @@
++/*
++ * Copyright (C) 2023 Amazon.com, Inc. or its affiliates
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++ * SOFTWARE.
++ */
++
++#ifndef __PAN_AFBC_CSO_H__
++#define __PAN_AFBC_CSO_H__
++
++#include "util/hash_table.h"
++
++#include "panfrost/util/pan_ir.h"
++#include "pan_texture.h"
++
++struct panfrost_context;
++struct panfrost_resource;
++struct panfrost_screen;
++
++struct pan_afbc_shader_key {
++   unsigned bpp;
++   unsigned align;
++   bool tiled;
++};
++
++struct pan_afbc_shader_data {
++   struct pan_afbc_shader_key key;
++};
++
++struct pan_afbc_shaders {
++   struct hash_table *shaders;
++   pthread_mutex_t lock;
++};
++
++void panfrost_afbc_context_init(struct panfrost_context *ctx);
++void panfrost_afbc_context_destroy(struct panfrost_context *ctx);
++
++struct pan_afbc_shader_data *
++panfrost_afbc_get_shaders(struct panfrost_context *ctx,
++                          struct panfrost_resource *rsrc, unsigned align);
++
++#endif
+diff --git a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
+index 75960171eb2..8052e1289b3 100644
+--- a/src/gallium/drivers/panfrost/pan_cmdstream.c
++++ b/src/gallium/drivers/panfrost/pan_cmdstream.c
+@@ -3891,6 +3891,48 @@ panfrost_launch_grid(struct pipe_context *pipe,
+    panfrost_flush_all_batches(ctx, "Launch grid post-barrier");
+ }
+ 
++#define AFBC_BLOCK_ALIGN 16
++
++static void
++panfrost_launch_afbc_shader(struct panfrost_batch *batch, void *cso,
++                            struct pipe_constant_buffer *cbuf,
++                            unsigned nr_blocks)
++{
++   struct pipe_context *pctx = &batch->ctx->base;
++   void *saved_cso = NULL;
++   struct pipe_constant_buffer saved_const = {};
++   struct pipe_grid_info grid = {
++      .block[0] = 1,
++      .block[1] = 1,
++      .block[2] = 1,
++      .grid[0] = nr_blocks,
++      .grid[1] = 1,
++      .grid[2] = 1,
++   };
++
++   struct panfrost_constant_buffer *pbuf =
++      &batch->ctx->constant_buffer[PIPE_SHADER_COMPUTE];
++   saved_cso = batch->ctx->uncompiled[PIPE_SHADER_COMPUTE];
++   util_copy_constant_buffer(&pbuf->cb[0], &saved_const, true);
++
++   pctx->bind_compute_state(pctx, cso);
++   pctx->set_constant_buffer(pctx, PIPE_SHADER_COMPUTE, 0, false, cbuf);
++
++   panfrost_launch_grid_on_batch(pctx, batch, &grid);
++
++   pctx->bind_compute_state(pctx, saved_cso);
++   pctx->set_constant_buffer(pctx, PIPE_SHADER_COMPUTE, 0, true, &saved_const);
++}
++
++#define LAUNCH_AFBC_SHADER(name, batch, rsrc, consts, nr_blocks)               \
++   struct pan_afbc_shader_data *shaders =                                      \
++      panfrost_afbc_get_shaders(batch->ctx, rsrc, AFBC_BLOCK_ALIGN);           \
++   struct pipe_constant_buffer constant_buffer = {                             \
++      .buffer_size = sizeof(consts),                                           \
++      .user_buffer = &consts};                                                 \
++   panfrost_launch_afbc_shader(batch, shaders->name##_cso, &constant_buffer,   \
++                               nr_blocks);
++
+ static void *
+ panfrost_create_rasterizer_state(struct pipe_context *pctx,
+                                  const struct pipe_rasterizer_state *cso)
+diff --git a/src/gallium/drivers/panfrost/pan_context.c b/src/gallium/drivers/panfrost/pan_context.c
+index 6c381bce00c..ae5e2608909 100644
+--- a/src/gallium/drivers/panfrost/pan_context.c
++++ b/src/gallium/drivers/panfrost/pan_context.c
+@@ -560,6 +560,7 @@ panfrost_destroy(struct pipe_context *pipe)
+ 
+    panfrost_pool_cleanup(&panfrost->descs);
+    panfrost_pool_cleanup(&panfrost->shaders);
++   panfrost_afbc_context_destroy(panfrost);
+ 
+    drmSyncobjDestroy(dev->fd, panfrost->in_sync_obj);
+    if (panfrost->in_sync_fd != -1)
+@@ -943,6 +944,7 @@ panfrost_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
+ 
+    panfrost_resource_context_init(gallium);
+    panfrost_shader_context_init(gallium);
++   panfrost_afbc_context_init(ctx);
+ 
+    gallium->stream_uploader = u_upload_create_default(gallium);
+    gallium->const_uploader = gallium->stream_uploader;
+diff --git a/src/gallium/drivers/panfrost/pan_context.h b/src/gallium/drivers/panfrost/pan_context.h
+index 32be6d7f6d1..dbf0d503ae9 100644
+--- a/src/gallium/drivers/panfrost/pan_context.h
++++ b/src/gallium/drivers/panfrost/pan_context.h
+@@ -28,6 +28,7 @@
+ #define _LARGEFILE64_SOURCE 1
+ #include <assert.h>
+ #include <sys/mman.h>
++#include "pan_afbc_cso.h"
+ #include "pan_blend_cso.h"
+ #include "pan_earlyzs.h"
+ #include "pan_encoder.h"
+@@ -200,6 +201,8 @@ struct panfrost_context {
+ 
+    struct blitter_context *blitter;
+ 
++   struct pan_afbc_shaders afbc_shaders;
++
+    struct panfrost_blend_state *blend;
+ 
+    /* On Valhall, does the current blend state use a blend shader for any
+diff --git a/src/gallium/drivers/panfrost/pan_screen.h b/src/gallium/drivers/panfrost/pan_screen.h
+index f813725d7d7..8c1f7412c8a 100644
+--- a/src/gallium/drivers/panfrost/pan_screen.h
++++ b/src/gallium/drivers/panfrost/pan_screen.h
+@@ -41,6 +41,7 @@
+ 
+ #include "pan_device.h"
+ #include "pan_mempool.h"
++#include "pan_texture.h"
+ 
+ #define PAN_QUERY_DRAW_CALLS (PIPE_QUERY_DRIVER_SPECIFIC + 0)
+ 
+-- 
+2.42.0
+

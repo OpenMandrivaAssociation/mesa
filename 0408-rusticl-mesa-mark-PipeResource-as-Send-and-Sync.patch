@@ -1,0 +1,39 @@
+From 54920462402284eb2fee1a830b0f7e2a253bc843 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Thu, 5 Oct 2023 12:54:51 +0200
+Subject: [PATCH 408/834] rusticl/mesa: mark PipeResource as Send and Sync
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ src/gallium/frontends/rusticl/mesa/pipe/resource.rs | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/rusticl/mesa/pipe/resource.rs b/src/gallium/frontends/rusticl/mesa/pipe/resource.rs
+index 8c2ef2e0080..521b8c5f908 100644
+--- a/src/gallium/frontends/rusticl/mesa/pipe/resource.rs
++++ b/src/gallium/frontends/rusticl/mesa/pipe/resource.rs
+@@ -7,6 +7,10 @@ pub struct PipeResource {
+     pub is_user: bool,
+ }
+ 
++// SAFETY: pipe_resource is considered a thread safe type
++unsafe impl Send for PipeResource {}
++unsafe impl Sync for PipeResource {}
++
+ // Image dimensions provide by application to be used in both
+ // image and sampler views when image is created from buffer
+ #[derive(PartialEq, Eq)]
+@@ -27,7 +31,7 @@ impl AppImgInfo {
+ }
+ 
+ impl PipeResource {
+-    pub fn new(res: *mut pipe_resource, is_user: bool) -> Option<Self> {
++    pub(super) fn new(res: *mut pipe_resource, is_user: bool) -> Option<Self> {
+         if res.is_null() {
+             return None;
+         }
+-- 
+2.42.0
+

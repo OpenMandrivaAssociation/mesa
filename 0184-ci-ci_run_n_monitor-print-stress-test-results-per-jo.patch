@@ -1,0 +1,70 @@
+From f838499901ae15fa5b430547b7d45c8f999db080 Mon Sep 17 00:00:00 2001
+From: Helen Koike <helen.koike@collabora.com>
+Date: Fri, 29 Sep 2023 10:17:29 -0300
+Subject: [PATCH 184/834] ci/ci_run_n_monitor: print stress test results per
+ job
+
+Since we can monitor multiple jobs, print the result of the stress test
+per job name.
+
+Signed-off-by: Helen Koike <helen.koike@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25473>
+---
+ bin/ci/ci_run_n_monitor.py | 20 ++++++++++----------
+ 1 file changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index 38c433e556d..d06f1768dc3 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -17,6 +17,7 @@ import re
+ from subprocess import check_output
+ import sys
+ import time
++from collections import defaultdict
+ from concurrent.futures import ThreadPoolExecutor
+ from functools import partial
+ from itertools import chain
+@@ -99,8 +100,7 @@ def monitor_pipeline(
+     """Monitors pipeline and delegate canceling jobs"""
+     statuses = {}
+     target_statuses = {}
+-    stress_succ = 0
+-    stress_fail = 0
++    stress_status_counter = defaultdict(lambda: defaultdict(int))
+ 
+     if target_job:
+         target_jobs_regex = re.compile(target_job.strip())
+@@ -114,10 +114,7 @@ def monitor_pipeline(
+                     enable_job(project, job, True)
+ 
+                 if stress and job.status in ["success", "failed"]:
+-                    if job.status == "success":
+-                        stress_succ += 1
+-                    if job.status == "failed":
+-                        stress_fail += 1
++                    stress_status_counter[job.name][job.status] += 1
+                     retry_job(project, job)
+ 
+                 if (job.id not in target_statuses) or (
+@@ -152,10 +149,13 @@ def monitor_pipeline(
+             cancel_jobs(project, to_cancel)
+ 
+         if stress:
+-            print(
+-                "∑ succ: " + str(stress_succ) + "; fail: " + str(stress_fail),
+-                flush=False,
+-            )
++            for job_name, status in stress_status_counter.items():
++                print(
++                    f"{job_name}\tsucc: {status['success']}; "
++                    f"fail: {status['failed']}; "
++                    f"total: {sum(status.values())}",
++                    flush=False,
++                )
+             pretty_wait(REFRESH_WAIT_JOBS)
+             continue
+ 
+-- 
+2.42.0
+

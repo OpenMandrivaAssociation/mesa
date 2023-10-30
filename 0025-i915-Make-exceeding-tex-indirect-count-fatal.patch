@@ -1,0 +1,32 @@
+From af823b5d58c4de1b974923065e399ecfb8253683 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 3 Oct 2023 11:46:55 -0700
+Subject: [PATCH 025/834] i915: Make exceeding tex indirect count fatal.
+
+The HW should fail to run shaders that have too many phases, so do this so
+that we get link failures.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25533>
+---
+ src/gallium/drivers/i915/i915_fpc_translate.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/i915/i915_fpc_translate.c b/src/gallium/drivers/i915/i915_fpc_translate.c
+index 72eb73ed3c2..6bd7a073d81 100644
+--- a/src/gallium/drivers/i915/i915_fpc_translate.c
++++ b/src/gallium/drivers/i915/i915_fpc_translate.c
+@@ -986,8 +986,9 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
+    unsigned long decl_size = (unsigned long)(p->decl - p->declarations);
+ 
+    if (p->nr_tex_indirect > I915_MAX_TEX_INDIRECT) {
+-      debug_printf("Exceeded max nr indirect texture lookups (%d/%d)\n",
+-                   p->nr_tex_indirect, I915_MAX_TEX_INDIRECT);
++      i915_program_error(p,
++                         "Exceeded max nr indirect texture lookups (%d/%d)\n",
++                         p->nr_tex_indirect, I915_MAX_TEX_INDIRECT);
+    }
+ 
+    if (p->nr_tex_insn > I915_MAX_TEX_INSN) {
+-- 
+2.42.0
+

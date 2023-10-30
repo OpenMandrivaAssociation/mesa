@@ -1,0 +1,27 @@
+From d3d5122f7cff7876d7dfb796868493784d8fd425 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Mon, 10 Apr 2023 17:23:30 -0500
+Subject: [PATCH 745/834] nir: Add convert_alu_types to divergence analysis
+
+Reviewed-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir_divergence_analysis.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/compiler/nir/nir_divergence_analysis.c b/src/compiler/nir/nir_divergence_analysis.c
+index eb6f6405099..b6504ce6019 100644
+--- a/src/compiler/nir/nir_divergence_analysis.c
++++ b/src/compiler/nir/nir_divergence_analysis.c
+@@ -407,6 +407,7 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
+       break;
+ 
+    /* Intrinsics with divergence depending on sources */
++   case nir_intrinsic_convert_alu_types:
+    case nir_intrinsic_ballot_bitfield_extract:
+    case nir_intrinsic_ballot_find_lsb:
+    case nir_intrinsic_ballot_find_msb:
+-- 
+2.42.0
+

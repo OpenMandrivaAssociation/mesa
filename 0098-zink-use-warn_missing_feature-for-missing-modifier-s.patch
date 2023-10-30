@@ -1,0 +1,31 @@
+From ea0e22da4424a2015a894e7f4dce89870b74d234 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Tue, 10 Oct 2023 13:09:43 +0200
+Subject: [PATCH 098/834] zink: use warn_missing_feature for missing modifier
+ support
+
+To avoid spamming VKCTS output.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25636>
+---
+ src/gallium/drivers/zink/zink_resource.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_resource.c b/src/gallium/drivers/zink/zink_resource.c
+index a698be9c6d3..f41504889bf 100644
+--- a/src/gallium/drivers/zink/zink_resource.c
++++ b/src/gallium/drivers/zink/zink_resource.c
+@@ -1764,7 +1764,8 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
+             assert(!res->all_binds); //TODO handle if problematic
+             assert(!zink_resource_usage_is_unflushed(res));
+             if (!screen->info.have_EXT_image_drm_format_modifier) {
+-               mesa_loge("zink: EXT_image_drm_format_modifier support required");
++               static bool warned = false;
++               warn_missing_feature(warned, "zink: EXT_image_drm_format_modifier support required");
+                return false;
+             }
+             unsigned bind = ZINK_BIND_DMABUF;
+-- 
+2.42.0
+

@@ -1,0 +1,222 @@
+From a86a4e5fcf4459ae1ed7ac50848948ec1f24063c Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Mon, 9 Oct 2023 15:30:23 -0700
+Subject: [PATCH 393/834] anv: add anv_push_descriptor_set_{init,finish}
+
+Refactor anv_cmd_buffer_alloc_push_descriptor_set and add
+anv_push_descriptor_set_{init,finish}.  Note that
+anv_push_descriptor_set_init still supports re-initialization.
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/intel/vulkan/anv_cmd_buffer.c     | 66 ++----------------------
+ src/intel/vulkan/anv_descriptor_set.c | 73 +++++++++++++++++++++++++++
+ src/intel/vulkan/anv_private.h        |  8 +++
+ 3 files changed, 84 insertions(+), 63 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_cmd_buffer.c b/src/intel/vulkan/anv_cmd_buffer.c
+index 748a2ae5f45..3a5ba185b78 100644
+--- a/src/intel/vulkan/anv_cmd_buffer.c
++++ b/src/intel/vulkan/anv_cmd_buffer.c
+@@ -62,10 +62,7 @@ static void
+ anv_cmd_pipeline_state_finish(struct anv_cmd_buffer *cmd_buffer,
+                               struct anv_cmd_pipeline_state *pipe_state)
+ {
+-   if (pipe_state->push_descriptor.set.layout) {
+-      anv_descriptor_set_layout_unref(cmd_buffer->device,
+-                                      pipe_state->push_descriptor.set.layout);
+-   }
++   anv_push_descriptor_set_finish(&pipe_state->push_descriptor);
+ }
+ 
+ static void
+@@ -1148,61 +1145,6 @@ anv_cmd_buffer_get_pipe_state(struct anv_cmd_buffer *cmd_buffer,
+    }
+ }
+ 
+-static void
+-anv_cmd_buffer_alloc_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
+-                                         struct anv_descriptor_set_layout *layout,
+-                                         uint32_t _set,
+-                                         struct anv_push_descriptor_set *push_set)
+-{
+-   struct anv_descriptor_set *set = &push_set->set;
+-
+-   if (set->layout != layout) {
+-      if (set->layout)
+-         anv_descriptor_set_layout_unref(cmd_buffer->device, set->layout);
+-      anv_descriptor_set_layout_ref(layout);
+-      set->layout = layout;
+-      set->generate_surface_states = 0;
+-   }
+-   set->is_push = true;
+-   set->size = anv_descriptor_set_layout_size(layout, false /* host_only */, 0);
+-   set->buffer_view_count = layout->buffer_view_count;
+-   set->descriptor_count = layout->descriptor_count;
+-   set->buffer_views = push_set->buffer_views;
+-
+-   if (layout->descriptor_buffer_size &&
+-       (push_set->set_used_on_gpu ||
+-        set->desc_mem.alloc_size < layout->descriptor_buffer_size)) {
+-      struct anv_physical_device *pdevice = cmd_buffer->device->physical;
+-      struct anv_state_stream *push_stream =
+-         pdevice->indirect_descriptors ?
+-         &cmd_buffer->push_descriptor_stream :
+-         &cmd_buffer->surface_state_stream;
+-      uint64_t push_base_address = pdevice->indirect_descriptors ?
+-         pdevice->va.push_descriptor_pool.addr :
+-         pdevice->va.internal_surface_state_pool.addr;
+-
+-      /* The previous buffer is either actively used by some GPU command (so
+-       * we can't modify it) or is too small.  Allocate a new one.
+-       */
+-      struct anv_state desc_mem =
+-         anv_state_stream_alloc(push_stream,
+-                                anv_descriptor_set_layout_descriptor_buffer_size(layout, 0),
+-                                ANV_UBO_ALIGNMENT);
+-      if (set->desc_mem.alloc_size) {
+-         /* TODO: Do we really need to copy all the time? */
+-         memcpy(desc_mem.map, set->desc_mem.map,
+-                MIN2(desc_mem.alloc_size, set->desc_mem.alloc_size));
+-      }
+-      set->desc_mem = desc_mem;
+-
+-      set->desc_addr = anv_state_pool_state_address(
+-         push_stream->state_pool,
+-         set->desc_mem);
+-      set->desc_offset = anv_address_physical(set->desc_addr) -
+-                         push_base_address;
+-   }
+-}
+-
+ void anv_CmdPushDescriptorSetKHR(
+     VkCommandBuffer commandBuffer,
+     VkPipelineBindPoint pipelineBindPoint,
+@@ -1222,8 +1164,7 @@ void anv_CmdPushDescriptorSetKHR(
+    struct anv_push_descriptor_set *push_set =
+       &anv_cmd_buffer_get_pipe_state(cmd_buffer,
+                                      pipelineBindPoint)->push_descriptor;
+-   anv_cmd_buffer_alloc_push_descriptor_set(cmd_buffer, set_layout,
+-                                            _set, push_set);
++   anv_push_descriptor_set_init(cmd_buffer, push_set, set_layout);
+ 
+    /* Go through the user supplied descriptors. */
+    for (uint32_t i = 0; i < descriptorWriteCount; i++) {
+@@ -1324,8 +1265,7 @@ void anv_CmdPushDescriptorSetWithTemplateKHR(
+    struct anv_push_descriptor_set *push_set =
+       &anv_cmd_buffer_get_pipe_state(cmd_buffer,
+                                      template->bind_point)->push_descriptor;
+-   anv_cmd_buffer_alloc_push_descriptor_set(cmd_buffer, set_layout,
+-                                            _set, push_set);
++   anv_push_descriptor_set_init(cmd_buffer, push_set, set_layout);
+ 
+    anv_descriptor_set_write_template(cmd_buffer->device, &push_set->set,
+                                      template,
+diff --git a/src/intel/vulkan/anv_descriptor_set.c b/src/intel/vulkan/anv_descriptor_set.c
+index 4b82a02a321..bb08cb2dce3 100644
+--- a/src/intel/vulkan/anv_descriptor_set.c
++++ b/src/intel/vulkan/anv_descriptor_set.c
+@@ -1526,6 +1526,79 @@ VkResult anv_FreeDescriptorSets(
+    return VK_SUCCESS;
+ }
+ 
++void
++anv_push_descriptor_set_init(struct anv_cmd_buffer *cmd_buffer,
++                             struct anv_push_descriptor_set *push_set,
++                             struct anv_descriptor_set_layout *layout)
++{
++   struct anv_descriptor_set *set = &push_set->set;
++
++   if (set->layout != layout) {
++      if (set->layout) {
++         anv_descriptor_set_layout_unref(cmd_buffer->device, set->layout);
++      } else {
++         /* one-time initialization */
++         vk_object_base_init(&cmd_buffer->device->vk, &set->base,
++                             VK_OBJECT_TYPE_DESCRIPTOR_SET);
++         set->is_push = true;
++         set->buffer_views = push_set->buffer_views;
++      }
++
++      anv_descriptor_set_layout_ref(layout);
++      set->layout = layout;
++      set->generate_surface_states = 0;
++   }
++
++   assert(set->is_push && set->buffer_views);
++   set->size = anv_descriptor_set_layout_size(layout, false /* host_only */, 0);
++   set->buffer_view_count = layout->buffer_view_count;
++   set->descriptor_count = layout->descriptor_count;
++
++   if (layout->descriptor_buffer_size &&
++       (push_set->set_used_on_gpu ||
++        set->desc_mem.alloc_size < layout->descriptor_buffer_size)) {
++      struct anv_physical_device *pdevice = cmd_buffer->device->physical;
++      struct anv_state_stream *push_stream =
++         pdevice->indirect_descriptors ?
++         &cmd_buffer->push_descriptor_stream :
++         &cmd_buffer->surface_state_stream;
++      uint64_t push_base_address = pdevice->indirect_descriptors ?
++         pdevice->va.push_descriptor_pool.addr :
++         pdevice->va.internal_surface_state_pool.addr;
++
++      /* The previous buffer is either actively used by some GPU command (so
++       * we can't modify it) or is too small.  Allocate a new one.
++       */
++      struct anv_state desc_mem =
++         anv_state_stream_alloc(push_stream,
++                                anv_descriptor_set_layout_descriptor_buffer_size(layout, 0),
++                                ANV_UBO_ALIGNMENT);
++      if (set->desc_mem.alloc_size) {
++         /* TODO: Do we really need to copy all the time? */
++         memcpy(desc_mem.map, set->desc_mem.map,
++                MIN2(desc_mem.alloc_size, set->desc_mem.alloc_size));
++      }
++      set->desc_mem = desc_mem;
++
++      set->desc_addr = anv_state_pool_state_address(
++         push_stream->state_pool,
++         set->desc_mem);
++      set->desc_offset = anv_address_physical(set->desc_addr) -
++                         push_base_address;
++   }
++}
++
++void
++anv_push_descriptor_set_finish(struct anv_push_descriptor_set *push_set)
++{
++   struct anv_descriptor_set *set = &push_set->set;
++   if (set->layout) {
++      struct anv_device *device =
++         container_of(set->base.device, struct anv_device, vk);
++      anv_descriptor_set_layout_unref(device, set->layout);
++   }
++}
++
+ static uint32_t
+ anv_surface_state_to_handle(struct anv_physical_device *device,
+                             struct anv_state state)
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index c2a7bb4ca30..b745837a19b 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -2436,6 +2436,14 @@ uint32_t
+ anv_descriptor_set_layout_descriptor_buffer_size(const struct anv_descriptor_set_layout *set_layout,
+                                                  uint32_t var_desc_count);
+ 
++void
++anv_push_descriptor_set_init(struct anv_cmd_buffer *cmd_buffer,
++                             struct anv_push_descriptor_set *push_set,
++                             struct anv_descriptor_set_layout *layout);
++
++void
++anv_push_descriptor_set_finish(struct anv_push_descriptor_set *push_set);
++
+ void
+ anv_descriptor_set_write_image_view(struct anv_device *device,
+                                     struct anv_descriptor_set *set,
+-- 
+2.42.0
+

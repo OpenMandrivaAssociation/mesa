@@ -1,0 +1,56 @@
+From 3bf1b7deba8267eac9a16807cc748e6c8a863a5f Mon Sep 17 00:00:00 2001
+From: Rohan Garg <rohan.garg@intel.com>
+Date: Mon, 23 Oct 2023 12:02:32 +0200
+Subject: [PATCH 728/834] anv: selectively enable FCV optimization for DG2
+
+Enabling FCV on MTL breaks a number of games and benchmarks. Let's
+disable it for now till we can root cause the issue.
+
+Closes: #9987
+Fixes: 26c2c9 ('anv: enable FCV for Gen12.5')
+Signed-off-by: Rohan Garg <rohan.garg@intel.com>
+Reviewed-by: Nanley Chery <nanley.g.chery@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25863>
+---
+ src/intel/vulkan/anv_image.c       |  2 +-
+ src/intel/vulkan/genX_init_state.c | 11 +++++++++--
+ 2 files changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index 37e96b3f57a..4f73ac52d62 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -830,7 +830,7 @@ add_aux_surface_if_supported(struct anv_device *device,
+          if (intel_needs_workaround(device->info, 1607794140)) {
+             /* FCV is permanently enabled on this HW. */
+             image->planes[plane].aux_usage = ISL_AUX_USAGE_FCV_CCS_E;
+-         } else if (device->info->verx10 == 125) {
++         } else if (intel_device_info_is_dg2(device->info)) {
+             /* FCV is enabled via 3DSTATE_3D_MODE. We'd expect plain CCS_E to
+              * perform better because it allows for non-zero fast clear colors,
+              * but we've run into regressions in several benchmarks (F1 22 and
+diff --git a/src/intel/vulkan/genX_init_state.c b/src/intel/vulkan/genX_init_state.c
+index e514857026e..f8bab0c7f26 100644
+--- a/src/intel/vulkan/genX_init_state.c
++++ b/src/intel/vulkan/genX_init_state.c
+@@ -155,8 +155,15 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
+       mode.CrossSliceHashingMode = (util_bitcount(ppipe_mask) > 1 ?
+ 				    hashing32x32 : NormalMode);
+       mode.CrossSliceHashingModeMask = -1;
+-      mode.FastClearOptimizationEnable = true;
+-      mode.FastClearOptimizationEnableMask = true;
++      /* TODO: Figure out FCV support for other platforms
++       * Testing indicates that FCV is broken on MTL, but works fine on DG2.
++       * Let's disable FCV on MTL for now till we figure out what's wrong.
++       *
++       * Ref: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9987
++       */
++      mode.FastClearOptimizationEnable = intel_device_info_is_dg2(device->info);
++      mode.FastClearOptimizationEnableMask =
++         intel_device_info_is_dg2(device->info);
+    }
+ #endif
+ }
+-- 
+2.42.0
+

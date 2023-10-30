@@ -1,0 +1,378 @@
+From 0e284876ca1d24b3e38ca4c882cf51e2913bf884 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 3 Oct 2023 11:42:34 -0700
+Subject: [PATCH 020/834] i915: Re-clang-format and enforce it in CI.
+
+I want to be able to mash the format button at any point when hacking on
+this thing instead of doing bespoke whitespace.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25533>
+---
+ .clang-format-include                         |  1 +
+ src/gallium/drivers/i915/i915_fpc.h           |  3 +-
+ src/gallium/drivers/i915/i915_fpc_translate.c | 55 ++++++++-----------
+ src/gallium/drivers/i915/i915_prim_vbuf.c     |  3 +-
+ .../drivers/i915/i915_resource_texture.c      | 19 +++----
+ src/gallium/drivers/i915/i915_screen.c        | 20 ++++---
+ src/gallium/drivers/i915/i915_state.c         | 22 ++++----
+ src/gallium/drivers/i915/i915_state_derived.c |  1 -
+ src/gallium/drivers/i915/i915_state_inlines.h |  2 +-
+ 9 files changed, 58 insertions(+), 68 deletions(-)
+
+diff --git a/.clang-format-include b/.clang-format-include
+index e8b0e948365..ca132cddc9b 100644
+--- a/.clang-format-include
++++ b/.clang-format-include
+@@ -3,6 +3,7 @@
+ 
+ src/**/asahi/**/*
+ src/**/panfrost/**/*
++src/gallium/drivers/i915
+ src/amd/vulkan/**/*
+ src/amd/compiler/**/*
+ src/egl/**/*
+diff --git a/src/gallium/drivers/i915/i915_fpc.h b/src/gallium/drivers/i915/i915_fpc.h
+index 141180d88cc..8e17c90f7f8 100644
+--- a/src/gallium/drivers/i915/i915_fpc.h
++++ b/src/gallium/drivers/i915/i915_fpc.h
+@@ -285,6 +285,7 @@ extern struct i915_token_list *i915_optimize(const struct tgsi_token *tokens);
+ 
+ extern void i915_optimize_free(struct i915_token_list *tokens);
+ 
+-extern uint32_t i915_coord_mask(enum tgsi_opcode opcode, enum tgsi_texture_type tex);
++extern uint32_t i915_coord_mask(enum tgsi_opcode opcode,
++                                enum tgsi_texture_type tex);
+ 
+ #endif
+diff --git a/src/gallium/drivers/i915/i915_fpc_translate.c b/src/gallium/drivers/i915/i915_fpc_translate.c
+index ef8d292ad94..6148bae517c 100644
+--- a/src/gallium/drivers/i915/i915_fpc_translate.c
++++ b/src/gallium/drivers/i915/i915_fpc_translate.c
+@@ -202,19 +202,11 @@ src_vector(struct i915_fp_compile *p,
+    case TGSI_FILE_IMMEDIATE: {
+       assert(index < p->num_immediates);
+ 
+-      uint8_t swiz[4] = {
+-         source->Register.SwizzleX,
+-         source->Register.SwizzleY,
+-         source->Register.SwizzleZ,
+-         source->Register.SwizzleW
+-      };
+-
+-      uint8_t neg[4] = {
+-         source->Register.Negate,
+-         source->Register.Negate,
+-         source->Register.Negate,
+-         source->Register.Negate
+-      };
++      uint8_t swiz[4] = {source->Register.SwizzleX, source->Register.SwizzleY,
++                         source->Register.SwizzleZ, source->Register.SwizzleW};
++
++      uint8_t neg[4] = {source->Register.Negate, source->Register.Negate,
++                        source->Register.Negate, source->Register.Negate};
+ 
+       unsigned i;
+ 
+@@ -234,9 +226,9 @@ src_vector(struct i915_fp_compile *p,
+       }
+ 
+       if (i == 4) {
+-         return negate(swizzle(UREG(REG_TYPE_R, 0),
+-                               swiz[0], swiz[1], swiz[2], swiz[3]),
+-                       neg[0], neg[1], neg[2], neg[3]);
++         return negate(
++            swizzle(UREG(REG_TYPE_R, 0), swiz[0], swiz[1], swiz[2], swiz[3]),
++            neg[0], neg[1], neg[2], neg[3]);
+       }
+ 
+       index = p->immediates_map[index];
+@@ -564,12 +556,12 @@ i915_translate_instruction(struct i915_fp_compile *p,
+       src0 = src_vector(p, &inst->Src[0], fs);
+       tmp = i915_get_utemp(p);
+ 
+-      i915_emit_texld(p, tmp,              /* dest reg: a dummy reg */
+-                      A0_DEST_CHANNEL_ALL, /* dest writemask */
+-                      0,                   /* sampler */
+-                      src0,                /* coord*/
+-                      T0_TEXKILL,          /* opcode */
+-                      TGSI_WRITEMASK_XYZW);/* coord_mask */
++      i915_emit_texld(p, tmp,               /* dest reg: a dummy reg */
++                      A0_DEST_CHANNEL_ALL,  /* dest writemask */
++                      0,                    /* sampler */
++                      src0,                 /* coord*/
++                      T0_TEXKILL,           /* opcode */
++                      TGSI_WRITEMASK_XYZW); /* coord_mask */
+       break;
+ 
+    case TGSI_OPCODE_KILL:
+@@ -706,8 +698,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
+       break;
+ 
+    case TGSI_OPCODE_SEQ: {
+-      const uint32_t zero = swizzle(UREG(REG_TYPE_R, 0),
+-                                    SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
++      const uint32_t zero =
++         swizzle(UREG(REG_TYPE_R, 0), SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
+ 
+       /* if we're both >= and <= then we're == */
+       src0 = src_vector(p, &inst->Src[0], fs);
+@@ -724,8 +716,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
+          i915_emit_arith(p, A0_MAX, tmp, A0_DEST_CHANNEL_ALL, 0, src0,
+                          negate(src0, 1, 1, 1, 1), 0);
+          i915_emit_arith(p, A0_SGE, get_result_vector(p, &inst->Dst[0]),
+-                         get_result_flags(inst), 0,
+-                         negate(tmp, 1, 1, 1, 1), zero, 0);
++                         get_result_flags(inst), 0, negate(tmp, 1, 1, 1, 1),
++                         zero, 0);
+       } else {
+          i915_emit_arith(p, A0_SGE, tmp, A0_DEST_CHANNEL_ALL, 0, src0, src1, 0);
+ 
+@@ -759,8 +751,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
+       break;
+ 
+    case TGSI_OPCODE_SNE: {
+-      const uint32_t zero = swizzle(UREG(REG_TYPE_R, 0),
+-                                    SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
++      const uint32_t zero =
++         swizzle(UREG(REG_TYPE_R, 0), SRC_ZERO, SRC_ZERO, SRC_ZERO, SRC_ZERO);
+ 
+       /* if we're < or > then we're != */
+       src0 = src_vector(p, &inst->Src[0], fs);
+@@ -777,8 +769,8 @@ i915_translate_instruction(struct i915_fp_compile *p,
+          i915_emit_arith(p, A0_MAX, tmp, A0_DEST_CHANNEL_ALL, 0, src0,
+                          negate(src0, 1, 1, 1, 1), 0);
+          i915_emit_arith(p, A0_SLT, get_result_vector(p, &inst->Dst[0]),
+-                         get_result_flags(inst), 0,
+-                         negate(tmp, 1, 1, 1, 1), zero, 0);
++                         get_result_flags(inst), 0, negate(tmp, 1, 1, 1, 1),
++                         zero, 0);
+       } else {
+          i915_emit_arith(p, A0_SLT, tmp, A0_DEST_CHANNEL_ALL, 0, src0, src1, 0);
+ 
+@@ -1048,8 +1040,7 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
+          "%s shader: %d inst, %d tex, %d tex_indirect, %d temps, %d const",
+          _mesa_shader_stage_to_abbrev(MESA_SHADER_FRAGMENT), (int)program_size,
+          p->nr_tex_insn, p->nr_tex_indirect,
+-         p->shader->info.file_max[TGSI_FILE_TEMPORARY] + 1,
+-         ifs->num_constants);
++         p->shader->info.file_max[TGSI_FILE_TEMPORARY] + 1, ifs->num_constants);
+    }
+ 
+    /* Release the compilation struct:
+diff --git a/src/gallium/drivers/i915/i915_prim_vbuf.c b/src/gallium/drivers/i915/i915_prim_vbuf.c
+index af14ff49652..6a45e4916bf 100644
+--- a/src/gallium/drivers/i915/i915_prim_vbuf.c
++++ b/src/gallium/drivers/i915/i915_prim_vbuf.c
+@@ -284,8 +284,7 @@ i915_vbuf_ensure_index_bounds(struct vbuf_render *render, unsigned max_index)
+ }
+ 
+ static void
+-i915_vbuf_render_set_primitive(struct vbuf_render *render,
+-                               enum mesa_prim prim)
++i915_vbuf_render_set_primitive(struct vbuf_render *render, enum mesa_prim prim)
+ {
+    struct i915_vbuf_render *i915_render = i915_vbuf_render(render);
+    i915_render->prim = prim;
+diff --git a/src/gallium/drivers/i915/i915_resource_texture.c b/src/gallium/drivers/i915/i915_resource_texture.c
+index 73eebf6f546..ccfb7b54f64 100644
+--- a/src/gallium/drivers/i915/i915_resource_texture.c
++++ b/src/gallium/drivers/i915/i915_resource_texture.c
+@@ -155,8 +155,8 @@ i915_texture_set_image_offset(struct i915_texture *tex, unsigned level,
+    tex->image_offset[level][img].nblocksy = nblocksy;
+ 
+ #if DEBUG_TEXTURES
+-   debug_printf("%s: %p level %u, img %u (%u, %u)\n", __func__, tex, level,
+-                img, x, y);
++   debug_printf("%s: %p level %u, img %u (%u, %u)\n", __func__, tex, level, img,
++                x, y);
+ #endif
+ }
+ 
+@@ -208,12 +208,10 @@ i9x5_scanout_layout(struct i915_texture *tex)
+    i915_texture_set_level_info(tex, 0, 1);
+    i915_texture_set_image_offset(tex, 0, 0, 0, 0);
+ 
+-
+ #if DEBUG_TEXTURES
+-   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __func__,
+-                pt->width0, pt->height0, util_format_get_blocksize(pt->format),
+-                tex->stride, tex->total_nblocksy,
+-                tex->stride * tex->total_nblocksy);
++   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __func__, pt->width0,
++                pt->height0, util_format_get_blocksize(pt->format), tex->stride,
++                tex->total_nblocksy, tex->stride * tex->total_nblocksy);
+ #endif
+ 
+    return true;
+@@ -242,10 +240,9 @@ i9x5_display_target_layout(struct i915_texture *tex)
+    tex->tiling = I915_TILE_X;
+ 
+ #if DEBUG_TEXTURES
+-   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __func__,
+-                pt->width0, pt->height0, util_format_get_blocksize(pt->format),
+-                tex->stride, tex->total_nblocksy,
+-                tex->stride * tex->total_nblocksy);
++   debug_printf("%s size: %d,%d,%d offset %d,%d (0x%x)\n", __func__, pt->width0,
++                pt->height0, util_format_get_blocksize(pt->format), tex->stride,
++                tex->total_nblocksy, tex->stride * tex->total_nblocksy);
+ #endif
+ 
+    return true;
+diff --git a/src/gallium/drivers/i915/i915_screen.c b/src/gallium/drivers/i915/i915_screen.c
+index ae5c9f782f0..6462ced9992 100644
+--- a/src/gallium/drivers/i915/i915_screen.c
++++ b/src/gallium/drivers/i915/i915_screen.c
+@@ -203,7 +203,9 @@ i915_optimize_nir(struct nir_shader *s)
+       NIR_PASS(progress, s, nir_opt_dead_cf);
+       NIR_PASS(progress, s, nir_opt_cse);
+       NIR_PASS(progress, s, nir_opt_find_array_copies);
+-      NIR_PASS(progress, s, nir_opt_if, nir_opt_if_aggressive_last_continue | nir_opt_if_optimize_phi_true_false);
++      NIR_PASS(progress, s, nir_opt_if,
++               nir_opt_if_aggressive_last_continue |
++                  nir_opt_if_optimize_phi_true_false);
+       NIR_PASS(progress, s, nir_opt_peephole_select, ~0 /* flatten all IFs. */,
+                true, true);
+       NIR_PASS(progress, s, nir_opt_algebraic);
+@@ -220,7 +222,8 @@ i915_optimize_nir(struct nir_shader *s)
+             NULL);
+ }
+ 
+-static char *i915_check_control_flow(nir_shader *s)
++static char *
++i915_check_control_flow(nir_shader *s)
+ {
+    if (s->info.stage == MESA_SHADER_FRAGMENT) {
+       nir_function_impl *impl = nir_shader_get_entrypoint(s);
+@@ -230,9 +233,11 @@ static char *i915_check_control_flow(nir_shader *s)
+       if (next) {
+          switch (next->type) {
+          case nir_cf_node_if:
+-            return "if/then statements not supported by i915 fragment shaders, should have been flattened by peephole_select.";
++            return "if/then statements not supported by i915 fragment shaders, "
++                   "should have been flattened by peephole_select.";
+          case nir_cf_node_loop:
+-            return "looping not supported i915 fragment shaders, all loops must be statically unrollable.";
++            return "looping not supported i915 fragment shaders, all loops "
++                   "must be statically unrollable.";
+          default:
+             return "Unknown control flow type";
+          }
+@@ -256,8 +261,7 @@ i915_finalize_nir(struct pipe_screen *pscreen, void *nir)
+     * because they're needed for YUV variant lowering.
+     */
+    nir_remove_dead_derefs(s);
+-   nir_foreach_uniform_variable_safe(var, s)
+-   {
++   nir_foreach_uniform_variable_safe (var, s) {
+       if (var->data.mode == nir_var_uniform &&
+           (glsl_type_get_image_count(var->type) ||
+            glsl_type_get_sampler_count(var->type)))
+@@ -672,8 +676,8 @@ i915_screen_create(struct i915_winsys *iws)
+       break;
+ 
+    default:
+-      debug_printf("%s: unknown pci id 0x%x, cannot create screen\n",
+-                   __func__, iws->pci_id);
++      debug_printf("%s: unknown pci id 0x%x, cannot create screen\n", __func__,
++                   iws->pci_id);
+       FREE(is);
+       return NULL;
+    }
+diff --git a/src/gallium/drivers/i915/i915_state.c b/src/gallium/drivers/i915/i915_state.c
+index fd53daa1a27..eff9ce2e836 100644
+--- a/src/gallium/drivers/i915/i915_state.c
++++ b/src/gallium/drivers/i915/i915_state.c
+@@ -609,7 +609,7 @@ i915_create_vs_state(struct pipe_context *pipe,
+ {
+    struct i915_context *i915 = i915_context(pipe);
+ 
+-   struct pipe_shader_state from_nir = { PIPE_SHADER_IR_TGSI };
++   struct pipe_shader_state from_nir = {PIPE_SHADER_IR_TGSI};
+    if (templ->type == PIPE_SHADER_IR_NIR) {
+       nir_shader *s = templ->ir.nir;
+ 
+@@ -717,8 +717,7 @@ i915_set_constant_buffer(struct pipe_context *pipe,
+ static void
+ i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
+                        unsigned start, unsigned num,
+-                       unsigned unbind_num_trailing_slots,
+-                       bool take_ownership,
++                       unsigned unbind_num_trailing_slots, bool take_ownership,
+                        struct pipe_sampler_view **views)
+ {
+    if (shader != PIPE_SHADER_FRAGMENT) {
+@@ -752,7 +751,8 @@ i915_set_sampler_views(struct pipe_context *pipe, enum pipe_shader_type shader,
+          pipe_sampler_view_reference(&i915->fragment_sampler_views[i], NULL);
+          i915->fragment_sampler_views[i] = views[i];
+       } else {
+-         pipe_sampler_view_reference(&i915->fragment_sampler_views[i], views[i]);
++         pipe_sampler_view_reference(&i915->fragment_sampler_views[i],
++                                     views[i]);
+       }
+    }
+ 
+@@ -824,7 +824,7 @@ i915_set_framebuffer_state(struct pipe_context *pipe,
+                 sizeof(surf->color_swizzle));
+          i915->dirty |= I915_NEW_COLOR_SWIZZLE;
+       }
+-   } 
++   }
+    if (fb->zsbuf)
+       draw_set_zs_format(i915->draw, fb->zsbuf->format);
+ 
+@@ -956,21 +956,19 @@ i915_delete_rasterizer_state(struct pipe_context *pipe, void *raster)
+ }
+ 
+ static void
+-i915_set_vertex_buffers(struct pipe_context *pipe,
+-                        unsigned count, unsigned unbind_num_trailing_slots,
+-                        bool take_ownership,
++i915_set_vertex_buffers(struct pipe_context *pipe, unsigned count,
++                        unsigned unbind_num_trailing_slots, bool take_ownership,
+                         const struct pipe_vertex_buffer *buffers)
+ {
+    struct i915_context *i915 = i915_context(pipe);
+    struct draw_context *draw = i915->draw;
+ 
+    util_set_vertex_buffers_count(i915->vertex_buffers, &i915->nr_vertex_buffers,
+-                                 buffers, count,
+-                                 unbind_num_trailing_slots, take_ownership);
++                                 buffers, count, unbind_num_trailing_slots,
++                                 take_ownership);
+ 
+    /* pass-through to draw module */
+-   draw_set_vertex_buffers(draw, count, unbind_num_trailing_slots,
+-                           buffers);
++   draw_set_vertex_buffers(draw, count, unbind_num_trailing_slots, buffers);
+ }
+ 
+ static void *
+diff --git a/src/gallium/drivers/i915/i915_state_derived.c b/src/gallium/drivers/i915/i915_state_derived.c
+index 512f86c87a5..966c5a5a766 100644
+--- a/src/gallium/drivers/i915/i915_state_derived.c
++++ b/src/gallium/drivers/i915/i915_state_derived.c
+@@ -36,7 +36,6 @@
+ #include "i915_reg.h"
+ #include "i915_state.h"
+ 
+-
+ /***********************************************************************
+  * Determine the hardware vertex layout.
+  * Depends on vertex/fragment shader state.
+diff --git a/src/gallium/drivers/i915/i915_state_inlines.h b/src/gallium/drivers/i915/i915_state_inlines.h
+index 9c1415e1e8d..c5749d444db 100644
+--- a/src/gallium/drivers/i915/i915_state_inlines.h
++++ b/src/gallium/drivers/i915/i915_state_inlines.h
+@@ -28,8 +28,8 @@
+ #ifndef I915_STATE_INLINES_H
+ #define I915_STATE_INLINES_H
+ 
+-#include "util/compiler.h"
+ #include "pipe/p_defines.h"
++#include "util/compiler.h"
+ #include "util/u_debug.h"
+ #include "i915_reg.h"
+ 
+-- 
+2.42.0
+

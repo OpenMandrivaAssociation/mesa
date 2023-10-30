@@ -1,0 +1,32 @@
+From 5df194e2ae729e5443a736f1fa87faf0c8fceefe Mon Sep 17 00:00:00 2001
+From: Yiwei Zhang <zzyiwei@chromium.org>
+Date: Sat, 14 Oct 2023 15:41:59 -0700
+Subject: [PATCH 424/834] zink: sync queue access for vkQueueWaitIdle
+
+Ensure VkQueue external sync between flush_queue and TC.
+
+Cc: mesa-stable
+Signed-off-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25733>
+---
+ src/gallium/drivers/zink/zink_kopper.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/zink_kopper.c b/src/gallium/drivers/zink/zink_kopper.c
+index 66166dfa7b4..ca3c389d513 100644
+--- a/src/gallium/drivers/zink/zink_kopper.c
++++ b/src/gallium/drivers/zink/zink_kopper.c
+@@ -887,7 +887,10 @@ zink_kopper_present_readback(struct zink_context *ctx, struct zink_resource *res
+       return false;
+ 
+    zink_kopper_present_queue(screen, res);
++   simple_mtx_lock(&screen->queue_lock);
+    error = VKSCR(QueueWaitIdle)(screen->queue);
++   simple_mtx_unlock(&screen->queue_lock);
++
+    simple_mtx_lock(&screen->semaphores_lock);
+    util_dynarray_append(&screen->semaphores, VkSemaphore, acquire);
+    simple_mtx_unlock(&screen->semaphores_lock);
+-- 
+2.42.0
+

@@ -1,0 +1,82 @@
+From 0b9c926dd225b5141c45663eaed03aba3edcd288 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Sat, 14 Oct 2023 00:29:08 +0200
+Subject: [PATCH 439/834] rusticl: add a safe abstraction to execute a
+ ProgramCB
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/program.rs | 10 ++++------
+ src/gallium/frontends/rusticl/api/types.rs   | 10 ++++++++++
+ 2 files changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/program.rs b/src/gallium/frontends/rusticl/api/program.rs
+index 1cef4581612..fc1040f0b6e 100644
+--- a/src/gallium/frontends/rusticl/api/program.rs
++++ b/src/gallium/frontends/rusticl/api/program.rs
+@@ -289,7 +289,7 @@ fn build_program(
+     }
+ 
+     if let Some(cb) = cb_opt {
+-        unsafe { (cb.func)(program, cb.data) };
++        cb.call(p);
+     }
+ 
+     //• CL_INVALID_BINARY if program is created with clCreateProgramWithBinary and devices listed in device_list do not have a valid program binary loaded.
+@@ -375,7 +375,7 @@ fn compile_program(
+     }
+ 
+     if let Some(cb) = cb_opt {
+-        unsafe { (cb.func)(program, cb.data) };
++        cb.call(p);
+     }
+ 
+     // • CL_INVALID_COMPILER_OPTIONS if the compiler options specified by options are invalid.
+@@ -447,13 +447,11 @@ pub fn link_program(
+         CL_LINK_PROGRAM_FAILURE
+     };
+ 
+-    let res = cl_program::from_arc(res);
+-
+     if let Some(cb) = cb_opt {
+-        unsafe { (cb.func)(res, cb.data) };
++        cb.call(&res);
+     }
+ 
+-    Ok((res, code))
++    Ok((cl_program::from_arc(res), code))
+ 
+     //• CL_INVALID_LINKER_OPTIONS if the linker options specified by options are invalid.
+     //• CL_INVALID_OPERATION if the rules for devices containing compiled binaries or libraries as described in input_programs argument above are not followed.
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index cdca8f30078..39a9a0242ff 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -3,6 +3,7 @@ use crate::api::icd::ReferenceCountedAPIPointer;
+ use crate::core::context::Context;
+ use crate::core::event::Event;
+ use crate::core::memory::Mem;
++use crate::core::program::Program;
+ use crate::core::queue::Queue;
+ 
+ use rusticl_opencl_gen::*;
+@@ -178,6 +179,15 @@ cl_callback!(
+     }
+ );
+ 
++impl ProgramCB {
++    pub fn call(self, program: &Program) {
++        let cl = cl_program::from_ptr(program);
++        // SAFETY: `cl` must have pointed to an OpenCL program, which is where we just got it from.
++        // All other requirements are covered by this callback's type invariants.
++        unsafe { (self.func)(cl, self.data) };
++    }
++}
++
+ cl_callback!(
+     SVMFreeCb(FuncSVMFreeCb) {
+         queue: cl_command_queue,
+-- 
+2.42.0
+

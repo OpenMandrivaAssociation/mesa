@@ -1,0 +1,113 @@
+From 8188842fdc242f1b37b72109aa62c4061ed44db7 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 26 Sep 2023 15:01:03 -0500
+Subject: [PATCH 750/834] nir: Add a range to most I/O intrinsics
+
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir.h             |  2 +-
+ src/compiler/nir/nir_intrinsics.py | 14 +++++++-------
+ src/compiler/nir/nir_lower_io.c    | 17 +++++++++++++----
+ 3 files changed, 21 insertions(+), 12 deletions(-)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 436f0bd9061..13a935ddedb 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -1804,7 +1804,7 @@ typedef struct {
+ 
+ #include "nir_intrinsics.h"
+ 
+-#define NIR_INTRINSIC_MAX_CONST_INDEX 7
++#define NIR_INTRINSIC_MAX_CONST_INDEX 8
+ 
+ /** Represents an intrinsic
+  *
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index eee5ffcccb1..a3b570f6cde 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1082,11 +1082,11 @@ load("ubo", [-1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET, RANGE_BASE, RANGE], flags
+ # src[] = { buffer_index, offset in vec4 units }.  base is also in vec4 units.
+ load("ubo_vec4", [-1, 1], [ACCESS, BASE, COMPONENT], flags=[CAN_ELIMINATE, CAN_REORDER])
+ # src[] = { offset }.
+-load("input", [1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
++load("input", [1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+ # src[] = { vertex_id, offset }.
+ load("input_vertex", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+ # src[] = { vertex, offset }.
+-load("per_vertex_input", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
++load("per_vertex_input", [1, 1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+ # src[] = { barycoord, offset }.
+ load("interpolated_input", [2, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
+ 
+@@ -1095,9 +1095,9 @@ load("ssbo", [-1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
+ # src[] = { buffer_index }
+ load("ssbo_address", [1], [], [CAN_ELIMINATE, CAN_REORDER])
+ # src[] = { offset }.
+-load("output", [1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], flags=[CAN_ELIMINATE])
++load("output", [1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], flags=[CAN_ELIMINATE])
+ # src[] = { vertex, offset }.
+-load("per_vertex_output", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE])
++load("per_vertex_output", [1, 1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE])
+ # src[] = { primitive, offset }.
+ load("per_primitive_output", [1, 1], [BASE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE])
+ # src[] = { offset }.
+@@ -1136,11 +1136,11 @@ def store(name, srcs, indices=[], flags=[]):
+     intrinsic("store_" + name, [0] + srcs, indices=indices, flags=flags)
+ 
+ # src[] = { value, offset }.
+-store("output", [1], [BASE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS, IO_XFB, IO_XFB2])
++store("output", [1], [BASE, RANGE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS, IO_XFB, IO_XFB2])
+ # src[] = { value, vertex, offset }.
+-store("per_vertex_output", [1, 1], [BASE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS])
++store("per_vertex_output", [1, 1], [BASE, RANGE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS])
+ # src[] = { value, primitive, offset }.
+-store("per_primitive_output", [1, 1], [BASE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS])
++store("per_primitive_output", [1, 1], [BASE, RANGE, WRITE_MASK, COMPONENT, SRC_TYPE, IO_SEMANTICS])
+ # src[] = { value, block_index, offset }
+ store("ssbo", [-1, 1], [WRITE_MASK, ACCESS, ALIGN_MUL, ALIGN_OFFSET])
+ # src[] = { value, offset }.
+diff --git a/src/compiler/nir/nir_lower_io.c b/src/compiler/nir/nir_lower_io.c
+index a08b1246cd4..d2bca8ad7d3 100644
+--- a/src/compiler/nir/nir_lower_io.c
++++ b/src/compiler/nir/nir_lower_io.c
+@@ -315,13 +315,17 @@ emit_load(struct lower_io_state *state,
+    load->num_components = num_components;
+ 
+    nir_intrinsic_set_base(load, var->data.driver_location);
++   if (nir_intrinsic_has_range(load)) {
++      const struct glsl_type *type = var->type;
++      if (array_index)
++         type = glsl_get_array_element(type);
++      unsigned var_size = state->type_size(type, var->data.bindless);
++      nir_intrinsic_set_range(load, var_size);
++   }
++
+    if (mode == nir_var_shader_in || mode == nir_var_shader_out)
+       nir_intrinsic_set_component(load, component);
+ 
+-   if (load->intrinsic == nir_intrinsic_load_uniform)
+-      nir_intrinsic_set_range(load,
+-                              state->type_size(var->type, var->data.bindless));
+-
+    if (nir_intrinsic_has_access(load))
+       nir_intrinsic_set_access(load, var->data.access);
+ 
+@@ -441,7 +445,12 @@ emit_store(struct lower_io_state *state, nir_def *data,
+ 
+    store->src[0] = nir_src_for_ssa(data);
+ 
++   const struct glsl_type *type = var->type;
++   if (array_index)
++      type = glsl_get_array_element(type);
++   unsigned var_size = state->type_size(type, var->data.bindless);
+    nir_intrinsic_set_base(store, var->data.driver_location);
++   nir_intrinsic_set_range(store, var_size);
+    nir_intrinsic_set_component(store, component);
+    nir_intrinsic_set_src_type(store, src_type);
+ 
+-- 
+2.42.0
+

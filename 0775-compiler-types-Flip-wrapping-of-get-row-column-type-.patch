@@ -1,0 +1,133 @@
+From a5e6e5b6d3ff7a99070e1885c27080ce0b3fec71 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 2 Sep 2023 18:00:42 -0700
+Subject: [PATCH 775/834] compiler/types: Flip wrapping of get row/column type
+ helpers
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 35 ++++++++++++++++++++++++++++++++
+ src/compiler/glsl_types_impl.h | 37 ++--------------------------------
+ src/compiler/nir_types.cpp     |  6 ------
+ 3 files changed, 37 insertions(+), 41 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 48f46a62251..4b21c00f4db 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -3559,4 +3559,39 @@ glsl_get_internal_ifc_packing(const struct glsl_type *t,
+    }
+ }
+ 
++const struct glsl_type *
++glsl_get_row_type(const struct glsl_type *t)
++{
++   if (!glsl_type_is_matrix(t))
++      return &glsl_type_builtin_error;
++
++   if (t->explicit_stride && !t->interface_row_major)
++      return glsl_type::get_instance(t->base_type, t->matrix_columns, 1, t->explicit_stride);
++   else
++      return glsl_type::get_instance(t->base_type, t->matrix_columns, 1);
++}
++
++const struct glsl_type *
++glsl_get_column_type(const struct glsl_type *t)
++{
++   if (!t->is_matrix())
++      return glsl_type::error_type;
++
++   if (t->interface_row_major) {
++      /* If we're row-major, the vector element stride is the same as the
++       * matrix stride and we have no alignment (i.e. component-aligned).
++       */
++      return glsl_type::get_instance(t->base_type, t->vector_elements, 1,
++                                     t->explicit_stride, false, 0);
++   } else {
++      /* Otherwise, the vector is tightly packed (stride=0).  For
++       * alignment, we treat a matrix as an array of columns make the same
++       * assumption that the alignment of the column is the same as the
++       * alignment of the whole matrix.
++       */
++      return glsl_type::get_instance(t->base_type, t->vector_elements, 1,
++                                     0, false, t->explicit_alignment);
++   }
++}
++
+ }
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index d2ea5554714..ca0679dea81 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -73,6 +73,8 @@ inline unsigned glsl_type::std430_base_alignment(bool row_major) const { return
+ inline unsigned glsl_type::std430_size(bool row_major) const { return glsl_get_std430_size(this, row_major); }
+ inline unsigned glsl_type::explicit_size(bool align_to_stride) const { return glsl_get_explicit_size(this, align_to_stride); }
+ 
++inline const glsl_type *glsl_type::row_type() const { return glsl_get_row_type(this); }
++inline const glsl_type *glsl_type::column_type() const { return glsl_get_column_type(this); }
+ inline const glsl_type *glsl_type::get_bare_type() const { return glsl_get_bare_type(this); }
+ 
+ inline const glsl_type *glsl_type::vec(unsigned components) { return glsl_vec_type(components); }
+@@ -265,41 +267,6 @@ glsl_type::atomic_size() const
+       return 0;
+ }
+ 
+-inline const glsl_type *
+-glsl_type::row_type() const
+-{
+-   if (!is_matrix())
+-      return error_type;
+-
+-   if (explicit_stride && !interface_row_major)
+-      return get_instance(base_type, matrix_columns, 1, explicit_stride);
+-   else
+-      return get_instance(base_type, matrix_columns, 1);
+-}
+-
+-inline const glsl_type *
+-glsl_type::column_type() const
+-{
+-   if (!is_matrix())
+-      return error_type;
+-
+-   if (interface_row_major) {
+-      /* If we're row-major, the vector element stride is the same as the
+-       * matrix stride and we have no alignment (i.e. component-aligned).
+-       */
+-      return get_instance(base_type, vector_elements, 1,
+-                          explicit_stride, false, 0);
+-   } else {
+-      /* Otherwise, the vector is tightly packed (stride=0).  For
+-       * alignment, we treat a matrix as an array of columns make the same
+-       * assumption that the alignment of the column is the same as the
+-       * alignment of the whole matrix.
+-       */
+-      return get_instance(base_type, vector_elements, 1,
+-                          0, false, explicit_alignment);
+-   }
+-}
+-
+ inline bool glsl_type::is_unsized_array() const { return glsl_type_is_unsized_array(this); }
+ 
+ inline bool
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index cdc9fd1aad2..a285a35d094 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -58,12 +58,6 @@ glsl_sampler_type_to_texture(const struct glsl_type *type)
+                             (enum glsl_base_type)type->sampled_type);
+ }
+ 
+-const struct glsl_type *
+-glsl_get_column_type(const struct glsl_type *type)
+-{
+-   return type->column_type();
+-}
+-
+ GLenum
+ glsl_get_gl_type(const struct glsl_type *type)
+ {
+-- 
+2.42.0
+

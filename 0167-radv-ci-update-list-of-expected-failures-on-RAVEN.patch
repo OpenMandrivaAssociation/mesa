@@ -1,0 +1,24 @@
+From ede0502b4ab1335e84e370e4c273518d2d060cfc Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Wed, 11 Oct 2023 12:46:26 +0200
+Subject: [PATCH 167/834] radv/ci: update list of expected failures on RAVEN
+
+These have been fixed a while ago but I think only a subset of CTS
+is used on RAVEN.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25656>
+---
+ src/amd/ci/radv-raven-fails.txt | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/amd/ci/radv-raven-fails.txt b/src/amd/ci/radv-raven-fails.txt
+index 9175d75c089..e69de29bb2d 100644
+--- a/src/amd/ci/radv-raven-fails.txt
++++ b/src/amd/ci/radv-raven-fails.txt
+@@ -1,2 +0,0 @@
+-dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed49_tessellation,Fail
+-dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed59_geometry,Fail
+-- 
+2.42.0
+

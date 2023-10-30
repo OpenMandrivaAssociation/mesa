@@ -1,0 +1,265 @@
+From 9ec9849c85e8202cb894736d0411f9b2409ab6e8 Mon Sep 17 00:00:00 2001
+From: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Date: Mon, 16 Oct 2023 12:42:11 -0300
+Subject: [PATCH 508/834] kmsro: try to use only compatible render-capable
+ devices
+
+Since commit "pipe-loader: add
+pipe_loader_get_compatible_render_capable_device_fd()", we have a
+function to query a render-only driver that is available and is
+compatible with the KMS-only device.
+
+So start to use it, instead of selecting whatever render-only driver is
+available to use.
+
+Signed-off-by: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Reviewed-by: Simon Ser <contact@emersion.fr>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24825>
+---
+ src/gallium/targets/pipe-loader/meson.build   |   2 +-
+ .../winsys/kmsro/drm/kmsro_drm_public.h       |   2 +-
+ .../winsys/kmsro/drm/kmsro_drm_winsys.c       | 113 +++++++-----------
+ src/gallium/winsys/kmsro/drm/meson.build      |   3 +-
+ src/loader/loader.c                           |   3 +-
+ src/loader/loader.h                           |   3 +
+ 6 files changed, 52 insertions(+), 74 deletions(-)
+
+diff --git a/src/gallium/targets/pipe-loader/meson.build b/src/gallium/targets/pipe-loader/meson.build
+index aff9f932055..5e6238fe822 100644
+--- a/src/gallium/targets/pipe-loader/meson.build
++++ b/src/gallium/targets/pipe-loader/meson.build
+@@ -64,7 +64,7 @@ pipe_loaders = [
+   [with_gallium_r600, 'r600', driver_r600, []],
+   [with_gallium_radeonsi, 'radeonsi', [driver_radeonsi, idep_xmlconfig], []],
+   [with_gallium_freedreno, 'msm', driver_freedreno, []],
+-  [with_gallium_kmsro, 'kmsro', _kmsro_targets, []],
++  [with_gallium_kmsro, 'kmsro', _kmsro_targets, [libpipe_loader_dynamic]],
+   [with_gallium_svga, 'vmwgfx', driver_svga, []],
+   [with_gallium_softpipe, 'swrast', driver_swrast, [libwsw, libws_null, libswdri, libswkmsdri]],
+ ]
+diff --git a/src/gallium/winsys/kmsro/drm/kmsro_drm_public.h b/src/gallium/winsys/kmsro/drm/kmsro_drm_public.h
+index 9d81ea3ee39..37461dacf36 100644
+--- a/src/gallium/winsys/kmsro/drm/kmsro_drm_public.h
++++ b/src/gallium/winsys/kmsro/drm/kmsro_drm_public.h
+@@ -30,7 +30,7 @@
+ struct pipe_screen;
+ struct pipe_screen_config;
+ 
+-struct pipe_screen *kmsro_drm_screen_create(int fd,
++struct pipe_screen *kmsro_drm_screen_create(int kms_fd,
+                                             const struct pipe_screen_config *config);
+ 
+ #endif /* __KMSRO_DRM_PUBLIC_H__ */
+diff --git a/src/gallium/winsys/kmsro/drm/kmsro_drm_winsys.c b/src/gallium/winsys/kmsro/drm/kmsro_drm_winsys.c
+index 57032548d3a..3d14bce1ce7 100644
+--- a/src/gallium/winsys/kmsro/drm/kmsro_drm_winsys.c
++++ b/src/gallium/winsys/kmsro/drm/kmsro_drm_winsys.c
+@@ -36,9 +36,12 @@
+ #include "xf86drm.h"
+ 
+ #include "pipe/p_screen.h"
++#include "pipe-loader/pipe_loader.h"
+ #include "renderonly/renderonly.h"
+ #include "util/u_memory.h"
+ 
++#include "loader.h"
++
+ static void kmsro_ro_destroy(struct renderonly *ro)
+ {
+    if (ro->gpu_fd >= 0)
+@@ -49,107 +52,77 @@ static void kmsro_ro_destroy(struct renderonly *ro)
+    FREE(ro);
+ }
+ 
+-struct pipe_screen *kmsro_drm_screen_create(int fd,
++struct pipe_screen *kmsro_drm_screen_create(int kms_fd,
+                                             const struct pipe_screen_config *config)
+ {
+    struct pipe_screen *screen = NULL;
+    struct renderonly *ro = CALLOC_STRUCT(renderonly);
++   char *render_dev_name = NULL;
+ 
+    if (!ro)
+       return NULL;
+ 
+-   ro->kms_fd = fd;
+-   ro->gpu_fd = -1;
++   ro->kms_fd = kms_fd;
++   ro->gpu_fd = pipe_loader_get_compatible_render_capable_device_fd(kms_fd);
++   if (ro->gpu_fd < 0) {
++      FREE(ro);
++      return NULL;
++   }
++
++   render_dev_name = loader_get_kernel_driver_name(ro->gpu_fd);
++   if (!render_dev_name) {
++      close(ro->gpu_fd);
++      FREE(ro);
++      return NULL;
++   }
++
+    ro->destroy = kmsro_ro_destroy;
+    util_sparse_array_init(&ro->bo_map, sizeof(struct renderonly_scanout), 64);
+    simple_mtx_init(&ro->bo_map_lock, mtx_plain);
+ 
+-   const struct {
+-      const char *name;
+-      struct pipe_screen *(*create_screen)(int, struct renderonly *,
+-                                           const struct pipe_screen_config *);
+-      struct renderonly_scanout *(*create_for_resource)(struct pipe_resource *,
+-                                                        struct renderonly *,
+-                                                        struct winsys_handle *);
+-   } renderonly_drivers[] = {
++   if (strcmp(render_dev_name, "asahi") == 0) {
+ #if defined(GALLIUM_ASAHI)
+-      {
+-         .name = "asahi",
+-         .create_screen = asahi_drm_screen_create_renderonly,
+-         .create_for_resource = renderonly_create_gpu_import_for_resource,
+-      },
++      ro->create_for_resource = renderonly_create_gpu_import_for_resource;
++      screen = asahi_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-
++   }
++   else if (strcmp(render_dev_name, "etnaviv") == 0) {
+ #if defined(GALLIUM_ETNAVIV)
+-      {
+-         .name = "etnaviv",
+-         .create_screen = etna_drm_screen_create_renderonly,
+-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+-      },
++      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
++      screen = etna_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-
++   } else if (strcmp(render_dev_name, "msm") == 0) {
+ #if defined(GALLIUM_FREEDRENO)
+-      {
+-         .name = "msm",
+-         .create_screen = fd_drm_screen_create_renderonly,
+-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+-      },
++      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
++      screen = fd_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-
++   } else if (strcmp(render_dev_name, "lima") == 0) {
+ #if defined(GALLIUM_LIMA)
+-      {
+-         .name = "lima",
+-         .create_screen = lima_drm_screen_create_renderonly,
+-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+-      },
++      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
++      screen = lima_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-
++   } else if (strcmp(render_dev_name, "panfrost") == 0) {
+ #if defined(GALLIUM_PANFROST)
+-      {
+-         .name = "panfrost",
+-         .create_screen = panfrost_drm_screen_create_renderonly,
+-         .create_for_resource = panfrost_create_kms_dumb_buffer_for_resource,
+-      },
++      ro->create_for_resource = panfrost_create_kms_dumb_buffer_for_resource;
++      screen = panfrost_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-
++   } else if (strcmp(render_dev_name, "v3d") == 0) {
+ #if defined(GALLIUM_V3D)
+-      {
+-         .name = "v3d",
+-         .create_screen = v3d_drm_screen_create_renderonly,
+-         .create_for_resource = renderonly_create_kms_dumb_buffer_for_resource,
+-      },
++      ro->create_for_resource = renderonly_create_kms_dumb_buffer_for_resource;
++      screen = v3d_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-
++   } else if (strcmp(render_dev_name, "vc4") == 0) {
+ #if defined(GALLIUM_VC4)
+       /* Passes the vc4-allocated BO through to the KMS-only DRM device using
+        * PRIME buffer sharing.  The VC4 BO must be linear, which the SCANOUT
+        * flag on allocation will have ensured.
+        */
+-      {
+-         .name = "vc4",
+-         .create_screen = vc4_drm_screen_create_renderonly,
+-         .create_for_resource = renderonly_create_gpu_import_for_resource,
+-      },
++      ro->create_for_resource = renderonly_create_gpu_import_for_resource;
++      screen = vc4_drm_screen_create_renderonly(ro->gpu_fd, ro, config);
+ #endif
+-   };
+-
+-   for (int i = 0; i < ARRAY_SIZE(renderonly_drivers); i++) {
+-      ro->gpu_fd = drmOpenWithType(renderonly_drivers[i].name, NULL, DRM_NODE_RENDER);
+-      if (ro->gpu_fd >= 0) {
+-         ro->create_for_resource = renderonly_drivers[i].create_for_resource;
+-         screen = renderonly_drivers[i].create_screen(ro->gpu_fd, ro, config);
+-         if (!screen)
+-            goto out_free;
+-         return screen;
+-      }
+    }
+ 
+-   return screen;
++   free(render_dev_name);
+ 
+-out_free:
+-   if (ro->gpu_fd >= 0)
+-      close(ro->gpu_fd);
+-   FREE(ro);
+-
+-   return NULL;
++   return screen;
+ }
+diff --git a/src/gallium/winsys/kmsro/drm/meson.build b/src/gallium/winsys/kmsro/drm/meson.build
+index 3203dd53ee1..2d41eb10d7c 100644
+--- a/src/gallium/winsys/kmsro/drm/meson.build
++++ b/src/gallium/winsys/kmsro/drm/meson.build
+@@ -22,9 +22,10 @@ libkmsrowinsys = static_library(
+   'kmsrowinsys',
+   files('kmsro_drm_winsys.c'),
+   include_directories : [
+-    inc_src, inc_include,
++    inc_src, inc_include, inc_loader,
+     inc_gallium, inc_gallium_aux, inc_gallium_winsys,
+   ],
++  link_with : libloader,
+   c_args : [renderonly_drivers_c_args],
+   gnu_symbol_visibility : 'hidden',
+   dependencies: [dep_libdrm, idep_mesautil],
+diff --git a/src/loader/loader.c b/src/loader/loader.c
+index a8295215ebf..4abb5649fa1 100644
+--- a/src/loader/loader.c
++++ b/src/loader/loader.c
+@@ -103,7 +103,8 @@ loader_open_device(const char *device_name)
+    return fd;
+ }
+ 
+-static char *loader_get_kernel_driver_name(int fd)
++char *
++loader_get_kernel_driver_name(int fd)
+ {
+    char *driver;
+    drmVersionPtr version = drmGetVersion(fd);
+diff --git a/src/loader/loader.h b/src/loader/loader.h
+index 52da5756018..9c50c91d2a7 100644
+--- a/src/loader/loader.h
++++ b/src/loader/loader.h
+@@ -43,6 +43,9 @@ struct __DRIextensionRec;
+ int
+ loader_open_device(const char *);
+ 
++char *
++loader_get_kernel_driver_name(int fd);
++
+ int
+ loader_open_render_node_platform_device(const char * const drivers[],
+                                         unsigned int n_drivers);
+-- 
+2.42.0
+

@@ -1,0 +1,45 @@
+From e0bf698d460e53fa6f02a936ba7ab6a0bc0a5da4 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 385/834] rusticl/mesa/screen,device: add driver_name
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/frontends/rusticl/mesa/pipe/device.rs | 4 ++++
+ src/gallium/frontends/rusticl/mesa/pipe/screen.rs | 4 ++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/mesa/pipe/device.rs b/src/gallium/frontends/rusticl/mesa/pipe/device.rs
+index a54ff2f1d99..bcde91c1794 100644
+--- a/src/gallium/frontends/rusticl/mesa/pipe/device.rs
++++ b/src/gallium/frontends/rusticl/mesa/pipe/device.rs
+@@ -24,6 +24,10 @@ impl PipeLoaderDevice {
+         let s = unsafe { pipe_loader_create_screen(self.ldev) };
+         PipeScreen::new(self, s)
+     }
++
++    pub fn driver_name(&self) -> String {
++        c_string_to_string(unsafe { *self.ldev }.driver_name)
++    }
+ }
+ 
+ impl Drop for PipeLoaderDevice {
+diff --git a/src/gallium/frontends/rusticl/mesa/pipe/screen.rs b/src/gallium/frontends/rusticl/mesa/pipe/screen.rs
+index be6ec21e0f6..9428bc0b98d 100644
+--- a/src/gallium/frontends/rusticl/mesa/pipe/screen.rs
++++ b/src/gallium/frontends/rusticl/mesa/pipe/screen.rs
+@@ -240,6 +240,10 @@ impl PipeScreen {
+         }
+     }
+ 
++    pub fn driver_name(&self) -> String {
++        self.ldev.driver_name()
++    }
++
+     pub fn name(&self) -> String {
+         unsafe {
+             let s = *self.screen;
+-- 
+2.42.0
+

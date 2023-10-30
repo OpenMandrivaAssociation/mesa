@@ -1,0 +1,45 @@
+From 8cd44b8843877a2f7d559d123eb3694841f16fdc Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Mon, 9 Oct 2023 15:02:13 -0400
+Subject: [PATCH 600/834] egl: add automatic zink fallback loading between hw
+ and sw drivers
+
+if loading the default hardware driver fails, implicitly loading zink
+should now be preferable to hitting the software fallback now that zink
+has all the same capabilities
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25640>
+---
+ src/egl/main/eglapi.c | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/src/egl/main/eglapi.c b/src/egl/main/eglapi.c
+index b1a48668b76..b9f179c2ce3 100644
+--- a/src/egl/main/eglapi.c
++++ b/src/egl/main/eglapi.c
+@@ -695,10 +695,17 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
+          if (disp->Options.ForceSoftware)
+             RETURN_EGL_ERROR(disp, EGL_NOT_INITIALIZED, EGL_FALSE);
+          else {
+-            disp->Options.Zink = EGL_FALSE;
+-            disp->Options.ForceSoftware = EGL_TRUE;
+-            if (!_eglDriver.Initialize(disp))
+-               RETURN_EGL_ERROR(disp, EGL_NOT_INITIALIZED, EGL_FALSE);
++            bool success = disp->Options.Zink;
++            if (!disp->Options.Zink && !getenv("GALLIUM_DRIVER")) {
++               disp->Options.Zink = EGL_TRUE;
++               success = _eglDriver.Initialize(disp);
++            }
++            if (!success) {
++               disp->Options.Zink = EGL_FALSE;
++               disp->Options.ForceSoftware = EGL_TRUE;
++               if (!_eglDriver.Initialize(disp))
++                  RETURN_EGL_ERROR(disp, EGL_NOT_INITIALIZED, EGL_FALSE);
++            }
+          }
+       }
+ 
+-- 
+2.42.0
+

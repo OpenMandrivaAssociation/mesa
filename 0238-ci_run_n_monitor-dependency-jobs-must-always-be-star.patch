@@ -1,0 +1,28 @@
+From d3e96aa02ebe2fd0fe8d79110b850af565510b4c Mon Sep 17 00:00:00 2001
+From: Eric Engestrom <eric@igalia.com>
+Date: Fri, 13 Oct 2023 15:55:42 +0100
+Subject: [PATCH 238/834] ci_run_n_monitor: dependency jobs must always be
+ started
+
+Fixes: 6b49b477aca7ba572b06 ("ci/ci_run_n_monitor: simplify enable/cancel logic in monitor_pipeline()")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25715>
+---
+ bin/ci/ci_run_n_monitor.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index 32b5a506c99..1dfcd654d13 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -117,7 +117,7 @@ def monitor_pipeline(
+ 
+             # run dependencies and cancel the rest
+             if job.name in dependencies:
+-                enable_job(project, job, "dep", force_manual)
++                enable_job(project, job, "dep", True)
+             else:
+                 to_cancel.append(job)
+ 
+-- 
+2.42.0
+

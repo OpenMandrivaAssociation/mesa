@@ -1,0 +1,186 @@
+From b3da29ae584cdc516c7433c3eb1ab5fc5bbc75a1 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Tue, 18 Jul 2023 16:35:49 -0400
+Subject: [PATCH 110/834] nir/opt_preamble: Respect ACCESS_CAN_SPECULATE
+
+In general, it is unsafe to speculatively hoist conditionally executed loads
+into the preamble. For example, if the shader does:
+
+   if (ptr is valid) {
+      foo(*ptr)
+   }
+
+we cannot dereference ptr in the preamble without knowing that the pointer is
+valid (which may not be determinable, since it might not be uniform).
+nir_opt_preamble needs to stop speculating in this case, or otherwise using
+preambles can cause faults on legal shaders.
+
+However, some platforms may be able to speculate loads safely. For example,
+Apple hardware is able to suppress MMU faults, making speculation safe.  This is
+controlled global register to control this behaviour, set at boot-time by the
+kernel.  (macOS suppresses these faults unconditionally, this feature may be
+used in their implementation of sparse textures. Currently Linux does not
+suppress any faults but this may change later.)
+
+Since nir_opt_preamble should work soundly and optimally on a variety of
+platforms, we need to respect the ACCESS flag.
+
+Thanks to the if-else hoisting implemented earlier in the series, this isn't too
+terrible of a band-aid on Asahi:
+
+    total instructions in shared programs: 1499674 -> 1507699 (0.54%)
+    instructions in affected programs: 78865 -> 86890 (10.18%)
+    helped: 0
+    HURT: 337
+    Instructions are HURT.
+
+    total bytes in shared programs: 10238284 -> 10279308 (0.40%)
+    bytes in affected programs: 554504 -> 595528 (7.40%)
+    helped: 3
+    HURT: 334
+    Bytes are HURT.
+
+    total halfregs in shared programs: 452049 -> 454015 (0.43%)
+    halfregs in affected programs: 7569 -> 9535 (25.97%)
+    helped: 7
+    HURT: 150
+    Halfregs are HURT.
+
+There are no shader-db changes on ir3 as expected, since ir3 can safely
+speculate all instructions in my shader-db.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Connor Abbott <cwabbott0@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/compiler/nir/nir_opt_preamble.c | 93 +++++++++++++++++++++++++++++
+ 1 file changed, 93 insertions(+)
+
+diff --git a/src/compiler/nir/nir_opt_preamble.c b/src/compiler/nir/nir_opt_preamble.c
+index e4f323e3c2c..562dc8a9cd6 100644
+--- a/src/compiler/nir/nir_opt_preamble.c
++++ b/src/compiler/nir/nir_opt_preamble.c
+@@ -98,6 +98,23 @@ typedef struct {
+    const nir_opt_preamble_options *options;
+ } opt_preamble_ctx;
+ 
++static bool
++instr_can_speculate(nir_instr *instr)
++{
++   /* Intrinsics with an ACCESS index can only be speculated if they are
++    * explicitly CAN_SPECULATE.
++    */
++   if (instr->type == nir_instr_type_intrinsic) {
++      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
++
++      if (nir_intrinsic_has_access(intr))
++         return nir_intrinsic_access(intr) & ACCESS_CAN_SPECULATE;
++   }
++
++   /* For now, everything else can be speculated. TODO: Bindless textures. */
++   return true;
++}
++
+ static float
+ get_instr_cost(nir_instr *instr, const nir_opt_preamble_options *options)
+ {
+@@ -235,6 +252,13 @@ can_move_intrinsic(nir_intrinsic_instr *instr, opt_preamble_ctx *ctx)
+ static bool
+ can_move_instr(nir_instr *instr, opt_preamble_ctx *ctx)
+ {
++   /* If we are only contained within uniform control flow, no speculation is
++    * needed since the control flow will be reconstructed in the preamble. But
++    * if we are not, we must be able to speculate instructions to move them.
++    */
++   if (ctx->nonuniform_cf_nesting > 0 && !instr_can_speculate(instr))
++      return false;
++
+    switch (instr->type) {
+    case nir_instr_type_tex: {
+       nir_tex_instr *tex = nir_instr_as_tex(instr);
+@@ -582,6 +606,69 @@ replace_for_cf_list(nir_builder *b, opt_preamble_ctx *ctx,
+    }
+ }
+ 
++/*
++ * If an if-statement contains an instruction that cannot be speculated, the
++ * if-statement must be reconstructed so we avoid the speculation. This applies
++ * even for nested if-statements. Determine which if-statements must be
++ * reconstructed for this reason by walking the program forward and looking
++ * inside uniform if's.
++ *
++ * Returns whether the CF list contains a reconstructed instruction that would
++ * otherwise be speculated, updating the reconstructed_ifs set. This depends on
++ * reconstructed_defs being correctly set by analyze_reconstructed.
++ */
++static bool
++analyze_speculation_for_cf_list(opt_preamble_ctx *ctx, struct exec_list *list)
++{
++   bool reconstruct_cf_list = false;
++
++   foreach_list_typed(nir_cf_node, node, node, list) {
++      switch (node->type) {
++      case nir_cf_node_block: {
++         nir_foreach_instr(instr, nir_cf_node_as_block(node)) {
++            nir_def *def = nir_instr_def(instr);
++            if (!def)
++               continue;
++
++            if (!BITSET_TEST(ctx->reconstructed_defs, def->index))
++               continue;
++
++            if (!instr_can_speculate(instr)) {
++               reconstruct_cf_list = true;
++               break;
++            }
++         }
++
++         break;
++      }
++
++      case nir_cf_node_if: {
++         nir_if *nif = nir_cf_node_as_if(node);
++
++         /* If we can move the if, we might need to reconstruct */
++         if (can_move_src(&nif->condition, ctx)) {
++            bool any = false;
++            any |= analyze_speculation_for_cf_list(ctx, &nif->then_list);
++            any |= analyze_speculation_for_cf_list(ctx, &nif->else_list);
++
++            if (any)
++               _mesa_set_add(ctx->reconstructed_ifs, nif);
++
++            reconstruct_cf_list |= any;
++         }
++
++         break;
++      }
++
++      /* We don't reconstruct loops */
++      default:
++         break;
++      }
++   }
++
++   return reconstruct_cf_list;
++}
++
+ static bool
+ mark_reconstructed(nir_src *src, void *state)
+ {
+@@ -831,6 +918,12 @@ nir_opt_preamble(nir_shader *shader, const nir_opt_preamble_options *options,
+                                    sizeof(BITSET_WORD));
+    analyze_reconstructed(&ctx, impl);
+ 
++   /* If we make progress analyzing speculation, we need to re-analyze
++    * reconstructed defs to get the if-conditions in there.
++    */
++   if (analyze_speculation_for_cf_list(&ctx, &impl->body))
++      analyze_reconstructed(&ctx, impl);
++
+    /* Step 5: Actually do the replacement. */
+    struct hash_table *remap_table =
+       _mesa_pointer_hash_table_create(NULL);
+-- 
+2.42.0
+

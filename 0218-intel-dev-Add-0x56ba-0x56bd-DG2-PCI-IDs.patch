@@ -1,0 +1,33 @@
+From c74a578c54e1672634c4d8e4ff094812190dd1b9 Mon Sep 17 00:00:00 2001
+From: Jordan Justen <jordan.l.justen@intel.com>
+Date: Thu, 12 Oct 2023 01:30:49 -0700
+Subject: [PATCH 218/834] intel/dev: Add 0x56ba-0x56bd DG2 PCI IDs
+
+Cc: mesa-stable
+Ref: https://lists.freedesktop.org/archives/intel-gfx/2023-October/337287.html
+Ref: BSpec 44477
+Signed-off-by: Jordan Justen <jordan.l.justen@intel.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25673>
+---
+ include/pci_ids/iris_pci_ids.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/include/pci_ids/iris_pci_ids.h b/include/pci_ids/iris_pci_ids.h
+index 72e4d44df0d..f42dc504d55 100644
+--- a/include/pci_ids/iris_pci_ids.h
++++ b/include/pci_ids/iris_pci_ids.h
+@@ -245,6 +245,10 @@ CHIPSET(0x56b0, dg2_g11, "DG2", "Intel(R) Arc(tm) Pro A30M Graphics")
+ CHIPSET(0x56b1, dg2_g11, "DG2", "Intel(R) Arc(tm) Pro A40/A50 Graphics")
+ CHIPSET(0x56b2, dg2_g12, "DG2", "Intel(R) Graphics")
+ CHIPSET(0x56b3, dg2_g12, "DG2", "Intel(R) Graphics")
++CHIPSET(0x56ba, dg2_g11, "DG2", "Intel(R) Graphics")
++CHIPSET(0x56bb, dg2_g11, "DG2", "Intel(R) Graphics")
++CHIPSET(0x56bc, dg2_g11, "DG2", "Intel(R) Graphics")
++CHIPSET(0x56bd, dg2_g11, "DG2", "Intel(R) Graphics")
+ CHIPSET(0x56c0, atsm_g10, "ATS-M", "Intel(R) Data Center GPU Flex Series 170 Graphics")
+ CHIPSET(0x56c1, atsm_g11, "ATS-M", "Intel(R) Data Center GPU Flex Series 140 Graphics")
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,28 @@
+From 9aec5996780dd807771cc863d0eb3487bd5300aa Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Mon, 9 Oct 2023 16:44:08 -0700
+Subject: [PATCH 038/834] ci/crocus: Generalize the drawarrays-vertex-count
+ flakes.
+
+We just got it for triangle fan as well.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25626>
+---
+ src/gallium/drivers/crocus/ci/crocus-hsw-flakes.txt | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/crocus/ci/crocus-hsw-flakes.txt b/src/gallium/drivers/crocus/ci/crocus-hsw-flakes.txt
+index cc5dd81961b..97d78cbd6d6 100644
+--- a/src/gallium/drivers/crocus/ci/crocus-hsw-flakes.txt
++++ b/src/gallium/drivers/crocus/ci/crocus-hsw-flakes.txt
+@@ -10,6 +10,4 @@ spec@amd_performance_monitor@measure
+ spec@amd_performance_monitor@measure@change counters while active
+ spec@amd_performance_monitor@measure@counters in range
+ 
+-spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 varray gl_line_loop
+-spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 varray gl_lines
+-spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 varray gl_points,Fail
++spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 varray .*
+-- 
+2.42.0
+

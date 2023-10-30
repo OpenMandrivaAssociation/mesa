@@ -1,0 +1,111 @@
+From ae277edc3ad4dfe1d8963ad95beca9871cc44fb9 Mon Sep 17 00:00:00 2001
+From: Frank Binns <frank.binns@imgtec.com>
+Date: Fri, 29 Sep 2023 09:43:04 +0100
+Subject: [PATCH 120/834] pvr: change a few places to use PVR_DW_TO_BYTES()
+
+Signed-off-by: Frank Binns <frank.binns@imgtec.com>
+Reviewed-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25489>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c    | 12 ++++++------
+ src/imagination/vulkan/pvr_query_compute.c | 19 ++++++++++---------
+ src/imagination/vulkan/pvr_spm.c           |  2 +-
+ 3 files changed, 17 insertions(+), 16 deletions(-)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index a5f27c241e4..dfe6489958f 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -1745,7 +1745,7 @@ pvr_compute_flat_slot_size(const struct pvr_physical_device *pdevice,
+    uint32_t max_avail_coeff_regs =
+       dev_runtime_info->cdm_max_local_mem_size_regs;
+    uint32_t localstore_chunks_count =
+-      DIV_ROUND_UP(coeff_regs_count << 2,
++      DIV_ROUND_UP(PVR_DW_TO_BYTES(coeff_regs_count),
+                    PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE));
+ 
+    /* Ensure that we cannot have more workgroups in a slot than the available
+@@ -1947,9 +1947,9 @@ pvr_compute_generate_idfwdf(struct pvr_cmd_buffer *cmd_buffer,
+    struct pvr_compute_kernel_info info = {
+       .indirect_buffer_addr = PVR_DEV_ADDR_INVALID,
+       .global_offsets_present = false,
+-      .usc_common_size =
+-         DIV_ROUND_UP(cmd_buffer->device->idfwdf_state.usc_shareds << 2,
+-                      PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE)),
++      .usc_common_size = DIV_ROUND_UP(
++         PVR_DW_TO_BYTES(cmd_buffer->device->idfwdf_state.usc_shareds),
++         PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE)),
+       .usc_unified_size = 0U,
+       .pds_temp_size = 0U,
+       .pds_data_size =
+@@ -4456,7 +4456,7 @@ void pvr_compute_update_kernel_private(
+    }
+ 
+    info.usc_common_size =
+-      DIV_ROUND_UP(coeff_regs << 2U,
++      DIV_ROUND_UP(PVR_DW_TO_BYTES(coeff_regs),
+                    PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE));
+ 
+    /* Use a whole slot per workgroup. */
+@@ -4539,7 +4539,7 @@ static void pvr_compute_update_kernel(
+    }
+ 
+    info.usc_common_size =
+-      DIV_ROUND_UP(coeff_regs << 2U,
++      DIV_ROUND_UP(PVR_DW_TO_BYTES(coeff_regs),
+                    PVRX(CDMCTRL_KERNEL0_USC_COMMON_SIZE_UNIT_SIZE));
+ 
+    /* Use a whole slot per workgroup. */
+diff --git a/src/imagination/vulkan/pvr_query_compute.c b/src/imagination/vulkan/pvr_query_compute.c
+index 619c1279ce4..d013e6c7ee5 100644
+--- a/src/imagination/vulkan/pvr_query_compute.c
++++ b/src/imagination/vulkan/pvr_query_compute.c
+@@ -556,10 +556,11 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
+    pipeline.unified_store_regs_count = shader_factory_info->input_regs;
+    pipeline.const_shared_regs_count = shader_factory_info->const_shared_regs;
+ 
+-   const_buffer = vk_alloc(&cmd_buffer->vk.pool->alloc,
+-                           shader_factory_info->const_shared_regs << 2,
+-                           8,
+-                           VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
++   const_buffer =
++      vk_alloc(&cmd_buffer->vk.pool->alloc,
++               PVR_DW_TO_BYTES(shader_factory_info->const_shared_regs),
++               8,
++               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+    if (!const_buffer) {
+       return vk_command_buffer_set_error(&cmd_buffer->vk,
+                                          VK_ERROR_OUT_OF_HOST_MEMORY);
+@@ -814,11 +815,11 @@ VkResult pvr_add_query_program(struct pvr_cmd_buffer *cmd_buffer,
+       const_buffer[load->dst_idx] = load->value;
+    }
+ 
+-   result =
+-      pvr_cmd_buffer_upload_general(cmd_buffer,
+-                                    const_buffer,
+-                                    shader_factory_info->const_shared_regs << 2,
+-                                    &pvr_bo);
++   result = pvr_cmd_buffer_upload_general(
++      cmd_buffer,
++      const_buffer,
++      PVR_DW_TO_BYTES(shader_factory_info->const_shared_regs),
++      &pvr_bo);
+    if (result != VK_SUCCESS) {
+       vk_free(&cmd_buffer->vk.pool->alloc, const_buffer);
+ 
+diff --git a/src/imagination/vulkan/pvr_spm.c b/src/imagination/vulkan/pvr_spm.c
+index 73c09fa12c8..9e605eb89fc 100644
+--- a/src/imagination/vulkan/pvr_spm.c
++++ b/src/imagination/vulkan/pvr_spm.c
+@@ -922,7 +922,7 @@ pvr_spm_init_bgobj_state(struct pvr_device *device,
+    assert(spm_load_program_idx < ARRAY_SIZE(spm_load_collection));
+    info = spm_load_collection[spm_load_program_idx].info;
+ 
+-   consts_buffer_size = info->const_shared_regs * sizeof(uint32_t);
++   consts_buffer_size = PVR_DW_TO_BYTES(info->const_shared_regs);
+ 
+    /* TODO: Remove this check, along with the pvr_finishme(), once the zeroed
+     * shaders are replaced by the real shaders.
+-- 
+2.42.0
+

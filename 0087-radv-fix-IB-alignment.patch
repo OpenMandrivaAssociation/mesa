@@ -1,0 +1,74 @@
+From e1622dcca1a1ea27a803c8185c5e1fca253e0290 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Fri, 6 Oct 2023 12:04:50 +0200
+Subject: [PATCH 087/834] radv: fix IB alignment
+
+This re-introduces "radv: fix alignment of DGC command buffers" and
+"radv/amdgpu: fix alignment of command buffers" which were valid
+changes.
+
+IBs need to be aligned to the IB size requirement, not the number of
+padded NOPs.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25588>
+---
+ src/amd/vulkan/radv_device_generated_commands.c |  5 ++---
+ src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c   | 11 +++++------
+ 2 files changed, 7 insertions(+), 9 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_device_generated_commands.c b/src/amd/vulkan/radv_device_generated_commands.c
+index 18c0c6ab574..a711f0339e1 100644
+--- a/src/amd/vulkan/radv_device_generated_commands.c
++++ b/src/amd/vulkan/radv_device_generated_commands.c
+@@ -142,10 +142,9 @@ radv_get_sequence_size(const struct radv_indirect_command_layout *layout, struct
+ static uint32_t
+ radv_align_cmdbuf_size(const struct radv_device *device, uint32_t size)
+ {
+-   const uint32_t ib_pad_dw_mask = MAX2(device->physical_device->rad_info.ib_pad_dw_mask[AMD_IP_GFX],
+-                                        device->physical_device->rad_info.ib_pad_dw_mask[AMD_IP_COMPUTE]);
++   const uint32_t ib_alignment = device->physical_device->rad_info.ib_alignment;
+ 
+-   return align(size, ib_pad_dw_mask + 1);
++   return align(size, ib_alignment);
+ }
+ 
+ static unsigned
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+index a98b538a39d..a637ff15067 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+@@ -287,9 +287,9 @@ radv_amdgpu_cs_get_new_ib(struct radeon_cmdbuf *_cs, uint32_t ib_size)
+ static unsigned
+ radv_amdgpu_cs_get_initial_size(struct radv_amdgpu_winsys *ws, enum amd_ip_type ip_type)
+ {
+-   uint32_t ib_pad_dw_mask = MAX2(3, ws->info.ib_pad_dw_mask[ip_type]);
+-   assert(util_is_power_of_two_nonzero(ib_pad_dw_mask + 1));
+-   return align(20 * 1024 * 4, ib_pad_dw_mask + 1);
++   const uint32_t ib_alignment = ws->info.ib_alignment;
++   assert(util_is_power_of_two_nonzero(ib_alignment));
++   return align(20 * 1024 * 4, ib_alignment);
+ }
+ 
+ static struct radeon_cmdbuf *
+@@ -377,15 +377,14 @@ radv_amdgpu_cs_grow(struct radeon_cmdbuf *_cs, size_t min_size)
+       return;
+    }
+ 
+-   enum amd_ip_type ip_type = cs->hw_ip;
+-   uint32_t ib_pad_dw_mask = MAX2(3, cs->ws->info.ib_pad_dw_mask[ip_type]);
++   const uint32_t ib_alignment = cs->ws->info.ib_alignment;
+ 
+    cs->ws->base.cs_finalize(_cs);
+ 
+    uint64_t ib_size = MAX2(min_size * 4 + 16, cs->base.max_dw * 4 * 2);
+ 
+    /* max that fits in the chain size field. */
+-   ib_size = align(MIN2(ib_size, 0xfffff), ib_pad_dw_mask + 1);
++   ib_size = align(MIN2(ib_size, 0xfffff), ib_alignment);
+ 
+    VkResult result = radv_amdgpu_cs_bo_create(cs, ib_size);
+ 
+-- 
+2.42.0
+

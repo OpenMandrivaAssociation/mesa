@@ -1,0 +1,108 @@
+From 0b31cda6783d9dbfa48e29fd91845a97109a5a30 Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david.heidelberg@collabora.com>
+Date: Fri, 16 Dec 2022 00:22:46 +0100
+Subject: [PATCH 414/834] ci: ci_marge_queue.py
+
+Show currently assigned jobs to Marge and return 0 when it's free.
+
+Useful for combination with ci_run_n_monitor.py .
+
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/20347>
+---
+ bin/ci/marge_queue.py | 65 +++++++++++++++++++++++++++++++++++++++++++
+ bin/ci/marge_queue.sh | 10 +++++++
+ 2 files changed, 75 insertions(+)
+ create mode 100755 bin/ci/marge_queue.py
+ create mode 100755 bin/ci/marge_queue.sh
+
+diff --git a/bin/ci/marge_queue.py b/bin/ci/marge_queue.py
+new file mode 100755
+index 00000000000..ef9edec9668
+--- /dev/null
++++ b/bin/ci/marge_queue.py
+@@ -0,0 +1,65 @@
++#!/usr/bin/env python3
++# Copyright © 2020 - 2023 Collabora Ltd.
++# Authors:
++#   David Heidelberg <david.heidelberg@collabora.com>
++#
++# SPDX-License-Identifier: MIT
++
++"""
++Monitors Marge-bot and return number of assigned MRs.
++"""
++
++import argparse
++import time
++import sys
++from datetime import datetime, timezone
++from dateutil import parser
++
++import gitlab
++from gitlab_common import read_token
++
++REFRESH_WAIT = 30
++MARGE_BOT_USER_ID = 9716
++
++
++def parse_args() -> None:
++    """Parse args"""
++    parse = argparse.ArgumentParser(
++        description="Tool to show merge requests assigned to the marge-bot",
++    )
++    parse.add_argument(
++        "--wait", action="store_true", help="wait until CI is free",
++    )
++    parse.add_argument(
++        "--token",
++        metavar="token",
++        help="force GitLab token, otherwise it's read from ~/.config/gitlab-token",
++    )
++    return parse.parse_args()
++
++
++if __name__ == "__main__":
++    args = parse_args()
++    token = read_token(args.token)
++    gl = gitlab.Gitlab(url="https://gitlab.freedesktop.org", private_token=token)
++
++    project = gl.projects.get("mesa/mesa")
++
++    while True:
++        mrs = project.mergerequests.list(assignee_id=MARGE_BOT_USER_ID, scope="all", state="opened", get_all=True)
++
++        jobs_num = len(mrs)
++        for mr in mrs:
++            updated = parser.parse(mr.updated_at)
++            now = datetime.now(timezone.utc)
++            diff = str(now - updated).split('.', maxsplit=1)[0]
++            print(f"{diff} | \u001b]8;;{mr.web_url}\u001b\\{mr.title}\u001b]8;;\u001b\\")
++
++        print("Job waiting: " + str(jobs_num))
++
++        if jobs_num == 0:
++            sys.exit(0)
++        if not args.wait:
++            sys.exit(min(jobs_num, 127))
++
++        time.sleep(REFRESH_WAIT)
+diff --git a/bin/ci/marge_queue.sh b/bin/ci/marge_queue.sh
+new file mode 100755
+index 00000000000..80f46677172
+--- /dev/null
++++ b/bin/ci/marge_queue.sh
+@@ -0,0 +1,10 @@
++#!/usr/bin/env bash
++set -eu
++
++this_dir=$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")
++readonly this_dir
++
++exec \
++  "$this_dir/../python-venv.sh" \
++  "$this_dir/requirements.txt" \
++  "$this_dir/marge_queue.py" "$@"
+-- 
+2.42.0
+

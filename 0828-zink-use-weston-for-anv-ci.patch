@@ -1,0 +1,28 @@
+From ff093f522a3e06ff2a269ea0e21e4575e81d5e41 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Mon, 23 Oct 2023 09:41:43 -0400
+Subject: [PATCH 828/834] zink: use weston for anv ci
+
+gotta get those juicy modifiers
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25299>
+---
+ src/gallium/drivers/zink/ci/gitlab-ci.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/ci/gitlab-ci.yml b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+index a2c3ac83cb9..4bdaa23c7a2 100644
+--- a/src/gallium/drivers/zink/ci/gitlab-ci.yml
++++ b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+@@ -24,7 +24,7 @@ zink-anv-tgl:
+   variables:
+     DEQP_SUITE: zink-anv-tgl
+     PIGLIT_NO_WINDOW: 1
+-    HWCI_START_XORG: 1
++    HWCI_START_WESTON: 1
+     # We use gbm because X can die:
+     # MESA: error: ZINK: vkQueueSubmit failed (VK_ERROR_DEVICE_LOST)
+     # Xorg: ../src/gallium/drivers/zink/zink_batch.c:599: zink_end_batch: Assertion `!ctx->batch_states' failed.
+-- 
+2.42.0
+

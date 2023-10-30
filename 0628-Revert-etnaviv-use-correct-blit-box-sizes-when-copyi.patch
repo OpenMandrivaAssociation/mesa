@@ -1,0 +1,36 @@
+From 6fc76eb280ff354f5080564c10311b00479621ca Mon Sep 17 00:00:00 2001
+From: Lucas Stach <l.stach@pengutronix.de>
+Date: Fri, 20 Oct 2023 13:16:37 +0200
+Subject: [PATCH 628/834] Revert "etnaviv: use correct blit box sizes when
+ copying resource"
+
+Revert commit b4c24d5978a5, as it causes a regression in
+dEQP-GLES2.functional.texture.specification.basic_copytexsubimage2d.2d_rgb
+and some other testcases. Needs further investigation.
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10007
+Signed-off-by: Lucas Stach <l.stach@pengutronix.de>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25825>
+---
+ src/gallium/drivers/etnaviv/etnaviv_clear_blit.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_clear_blit.c b/src/gallium/drivers/etnaviv/etnaviv_clear_blit.c
+index 810c368881d..adba89af620 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_clear_blit.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_clear_blit.c
+@@ -228,9 +228,9 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
+ 
+       blit.src.level = blit.dst.level = level;
+       blit.src.box.width = blit.dst.box.width =
+-         MIN2(src_priv->levels[level].width, dst_priv->levels[level].width);
++         MIN2(src_priv->levels[level].padded_width, dst_priv->levels[level].padded_width);
+       blit.src.box.height = blit.dst.box.height =
+-         MIN2(src_priv->levels[level].height, dst_priv->levels[level].height);
++         MIN2(src_priv->levels[level].padded_height, dst_priv->levels[level].padded_height);
+       unsigned depth = MIN2(src_priv->levels[level].depth, dst_priv->levels[level].depth);
+       if (dst->array_size > 1) {
+          assert(depth == 1); /* no array of 3d texture */
+-- 
+2.42.0
+

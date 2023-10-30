@@ -1,0 +1,48 @@
+From db5fc29116bdc9b7ae94b6a78ce77195f5ac89e8 Mon Sep 17 00:00:00 2001
+From: Saroj Kumar <saroj.kumar@amd.com>
+Date: Fri, 20 Oct 2023 15:38:11 +0530
+Subject: [PATCH 655/834] radeonsi: fixes compilaton error when perfetto is
+ disabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Saroj Kumar <saroj.kumar@amd.com>
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25827>
+---
+ src/gallium/drivers/radeonsi/meson.build | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/meson.build b/src/gallium/drivers/radeonsi/meson.build
+index 07596a67c5d..6232f29ce8e 100644
+--- a/src/gallium/drivers/radeonsi/meson.build
++++ b/src/gallium/drivers/radeonsi/meson.build
+@@ -32,6 +32,10 @@ si_tracepoints = custom_target(
+   depend_files: u_trace_py,
+ )
+ 
++idep_si_tracepoints = declare_dependency(
++  sources: si_tracepoints,
++)
++
+ files_libradeonsi = files(
+   'driinfo_radeonsi.h',
+   'gfx10_shader_ngg.c',
+@@ -117,11 +121,9 @@ files_libradeonsi = files(
+   'radeon_video.h',
+ )
+ 
+-files_libradeonsi += si_tracepoints
+-
+ radeonsi_include_dirs = [inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_amd_common,
+                          inc_amd_common_llvm, inc_gallium_drivers, inc_compiler]
+-radeonsi_deps = [dep_llvm, dep_clock, dep_libdrm_radeon, idep_nir_headers, idep_amdgfxregs_h, idep_mesautil, idep_aco, idep_u_tracepoints]
++radeonsi_deps = [dep_llvm, dep_clock, dep_libdrm_radeon, idep_nir_headers, idep_amdgfxregs_h, idep_mesautil, idep_aco, idep_u_tracepoints, idep_si_tracepoints]
+ 
+ if with_perfetto
+   radeonsi_deps += dep_perfetto
+-- 
+2.42.0
+

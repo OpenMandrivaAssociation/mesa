@@ -1,0 +1,48 @@
+From 8b6b405a0131e20b1b54cc4e2246dc07d0e0b6fb Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Sat, 14 Oct 2023 16:58:43 +0200
+Subject: [PATCH 444/834] rusticl/core: don't take a lock while dropping
+ `Context`
+
+We have exclusive access in Drop, so we can use `get_mut` instead of having to `lock`.
+
+Since that borrows `self` mutably but `call` also needs to borrow `self`, we `take` the Vec with
+callbacks out of `self` so the mutable borrow can end before running `call`.
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/core/context.rs | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/context.rs b/src/gallium/frontends/rusticl/core/context.rs
+index 42163d8f17d..937a41812b1 100644
+--- a/src/gallium/frontends/rusticl/core/context.rs
++++ b/src/gallium/frontends/rusticl/core/context.rs
+@@ -15,6 +15,7 @@ use std::alloc::Layout;
+ use std::collections::BTreeMap;
+ use std::collections::HashMap;
+ use std::convert::TryInto;
++use std::mem;
+ use std::os::raw::c_void;
+ use std::sync::Arc;
+ use std::sync::Mutex;
+@@ -203,11 +204,9 @@ impl Context {
+ 
+ impl Drop for Context {
+     fn drop(&mut self) {
+-        self.dtors
+-            .lock()
+-            .unwrap()
+-            .drain(..)
+-            .rev()
+-            .for_each(|cb| cb.call(self));
++        let cbs = mem::take(self.dtors.get_mut().unwrap());
++        for cb in cbs.into_iter().rev() {
++            cb.call(self);
++        }
+     }
+ }
+-- 
+2.42.0
+

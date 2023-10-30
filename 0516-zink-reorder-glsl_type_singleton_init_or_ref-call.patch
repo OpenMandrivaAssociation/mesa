@@ -1,0 +1,37 @@
+From 9bb404317eecc294cb3f794604b8e2a760a59aa5 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 11 Oct 2023 12:16:14 -0400
+Subject: [PATCH 516/834] zink: reorder glsl_type_singleton_init_or_ref call
+
+this enables the screen destructor to be used on failure cases
+
+cc: mesa-stable
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25663>
+---
+ src/gallium/drivers/zink/zink_screen.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 54127045dd9..be887ded1c2 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -3105,6 +3105,7 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
+       return NULL;
+    }
+ 
++   glsl_type_singleton_init_or_ref();
+    zink_debug = debug_get_option_zink_debug();
+    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_AUTO)
+       zink_descriptor_mode = debug_get_option_zink_descriptor_mode();
+@@ -3479,7 +3480,6 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
+                                 zink_create_vertex_state, zink_vertex_state_destroy);
+    screen->base.create_vertex_state = zink_cache_create_vertex_state;
+    screen->base.vertex_state_destroy = zink_cache_vertex_state_destroy;
+-   glsl_type_singleton_init_or_ref();
+ 
+    zink_synchronization_init(screen);
+ 
+-- 
+2.42.0
+

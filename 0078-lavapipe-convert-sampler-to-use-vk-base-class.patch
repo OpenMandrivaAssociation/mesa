@@ -1,0 +1,127 @@
+From b52261cb9cf8983c889c7d5364f05fe1c27069f2 Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Fri, 6 Oct 2023 18:21:33 +1000
+Subject: [PATCH 078/834] lavapipe: convert sampler to use vk base class.
+
+This just makes things a bit cleaner, and reuses the common code.
+
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/frontends/lavapipe/lvp_device.c   | 24 ++++---------------
+ src/gallium/frontends/lavapipe/lvp_pipeline.c |  2 +-
+ src/gallium/frontends/lavapipe/lvp_private.h  |  7 +++---
+ 3 files changed, 8 insertions(+), 25 deletions(-)
+
+diff --git a/src/gallium/frontends/lavapipe/lvp_device.c b/src/gallium/frontends/lavapipe/lvp_device.c
+index 4de84f8e7a2..83e32556a6e 100644
+--- a/src/gallium/frontends/lavapipe/lvp_device.c
++++ b/src/gallium/frontends/lavapipe/lvp_device.c
+@@ -2183,22 +2183,12 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateSampler(
+ {
+    LVP_FROM_HANDLE(lvp_device, device, _device);
+    struct lvp_sampler *sampler;
+-   const VkSamplerReductionModeCreateInfo *reduction_mode_create_info =
+-      vk_find_struct_const(pCreateInfo->pNext,
+-                           SAMPLER_REDUCTION_MODE_CREATE_INFO);
+-   const struct VkSamplerYcbcrConversionInfo *ycbcr_conversion =
+-      vk_find_struct_const(pCreateInfo->pNext, SAMPLER_YCBCR_CONVERSION_INFO);
+ 
+-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
+-
+-   sampler = vk_zalloc2(&device->vk.alloc, pAllocator, sizeof(*sampler), 8,
+-                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
++   sampler = vk_sampler_create(&device->vk, pCreateInfo,
++                               pAllocator, sizeof(*sampler));
+    if (!sampler)
+       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+ 
+-   vk_object_base_init(&device->vk, &sampler->base,
+-                       VK_OBJECT_TYPE_SAMPLER);
+-
+    struct pipe_sampler_state state = {0};
+    VkClearColorValue border_color =
+       vk_sampler_border_color_value(pCreateInfo, NULL);
+@@ -2224,10 +2214,7 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateSampler(
+    STATIC_ASSERT((unsigned)VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE == (unsigned)PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE);
+    STATIC_ASSERT((unsigned)VK_SAMPLER_REDUCTION_MODE_MIN == (unsigned)PIPE_TEX_REDUCTION_MIN);
+    STATIC_ASSERT((unsigned)VK_SAMPLER_REDUCTION_MODE_MAX == (unsigned)PIPE_TEX_REDUCTION_MAX);
+-   if (reduction_mode_create_info)
+-      state.reduction_mode = (enum pipe_tex_reduction_mode)reduction_mode_create_info->reductionMode;
+-   else
+-      state.reduction_mode = PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE;
++   state.reduction_mode = (enum pipe_tex_reduction_mode)sampler->vk.reduction_mode;
+    memcpy(&state.border_color, &border_color, sizeof(border_color));
+ 
+    simple_mtx_lock(&device->queue.lock);
+@@ -2237,8 +2224,6 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateSampler(
+    lp_jit_sampler_from_pipe(&sampler->desc.sampler, &state);
+    sampler->desc.sampler_index = sampler->texture_handle->sampler_index;
+ 
+-   sampler->ycbcr_conversion = ycbcr_conversion ? vk_ycbcr_conversion_from_handle(ycbcr_conversion->conversion) : NULL;
+-
+    *pSampler = lvp_sampler_to_handle(sampler);
+ 
+    return VK_SUCCESS;
+@@ -2259,8 +2244,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroySampler(
+    device->queue.ctx->delete_texture_handle(device->queue.ctx, (uint64_t)(uintptr_t)sampler->texture_handle);
+    simple_mtx_unlock(&device->queue.lock);
+ 
+-   vk_object_base_finish(&sampler->base);
+-   vk_free2(&device->vk.alloc, pAllocator, sampler);
++   vk_sampler_destroy(&device->vk, pAllocator, &sampler->vk);
+ }
+ 
+ /* vk_icd.h does not declare this function, so we declare it here to
+diff --git a/src/gallium/frontends/lavapipe/lvp_pipeline.c b/src/gallium/frontends/lavapipe/lvp_pipeline.c
+index de466eb6e0c..0f9b000e2f3 100644
+--- a/src/gallium/frontends/lavapipe/lvp_pipeline.c
++++ b/src/gallium/frontends/lavapipe/lvp_pipeline.c
+@@ -380,7 +380,7 @@ lvp_ycbcr_conversion_lookup(const void *data, uint32_t set, uint32_t binding, ui
+    if (!binding_layout->immutable_samplers)
+       return NULL;
+ 
+-   struct vk_ycbcr_conversion *ycbcr_conversion = binding_layout->immutable_samplers[array_index]->ycbcr_conversion;
++   struct vk_ycbcr_conversion *ycbcr_conversion = binding_layout->immutable_samplers[array_index]->vk.ycbcr_conversion;
+    return ycbcr_conversion ? &ycbcr_conversion->state : NULL;
+ }
+ 
+diff --git a/src/gallium/frontends/lavapipe/lvp_private.h b/src/gallium/frontends/lavapipe/lvp_private.h
+index 089908fee31..6abb3bf0205 100644
+--- a/src/gallium/frontends/lavapipe/lvp_private.h
++++ b/src/gallium/frontends/lavapipe/lvp_private.h
+@@ -73,6 +73,7 @@ typedef uint32_t xcb_window_t;
+ #include "vk_graphics_state.h"
+ #include "vk_pipeline_layout.h"
+ #include "vk_queue.h"
++#include "vk_sampler.h"
+ #include "vk_sync.h"
+ #include "vk_sync_timeline.h"
+ #include "vk_ycbcr_conversion.h"
+@@ -276,12 +277,10 @@ struct lvp_image_view {
+ };
+ 
+ struct lvp_sampler {
+-   struct vk_object_base base;
++   struct vk_sampler vk;
+    struct lp_descriptor desc;
+ 
+    struct lp_texture_handle *texture_handle;
+-
+-   struct vk_ycbcr_conversion *ycbcr_conversion;
+ };
+ 
+ struct lvp_descriptor_set_binding_layout {
+@@ -637,7 +636,7 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_pipeline_layout, vk.base, VkPipelineLayout,
+                                VK_OBJECT_TYPE_PIPELINE_LAYOUT)
+ VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_query_pool, base, VkQueryPool,
+                                VK_OBJECT_TYPE_QUERY_POOL)
+-VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_sampler, base, VkSampler,
++VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_sampler, vk.base, VkSampler,
+                                VK_OBJECT_TYPE_SAMPLER)
+ VK_DEFINE_NONDISP_HANDLE_CASTS(lvp_indirect_command_layout, base, VkIndirectCommandsLayoutNV,
+                                VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV)
+-- 
+2.42.0
+

@@ -1,0 +1,30 @@
+From ad72772d93789d8ec4380de690637abefb418d7c Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 18 Oct 2023 12:20:37 -0400
+Subject: [PATCH 565/834] nir/lower_fragcolor: preserve location_frac
+
+this otherwise breaks component-based outputs
+
+cc: mesa-stable
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25794>
+---
+ src/compiler/nir/nir_lower_fragcolor.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/compiler/nir/nir_lower_fragcolor.c b/src/compiler/nir/nir_lower_fragcolor.c
+index c91f6f22dde..36bb787c004 100644
+--- a/src/compiler/nir/nir_lower_fragcolor.c
++++ b/src/compiler/nir/nir_lower_fragcolor.c
+@@ -81,6 +81,7 @@ lower_fragcolor_intrin(nir_builder *b, nir_intrinsic_instr *instr, void *data)
+       nir_variable *out_color = nir_variable_create(b->shader, nir_var_shader_out,
+                                                     out->type, name);
+       out_color->data.location = FRAG_RESULT_DATA0 + i;
++      out_color->data.location_frac = out->data.location_frac;
+       out_color->data.driver_location = b->shader->num_outputs++;
+       out_color->data.index = out->data.index;
+       nir_store_var(b, out_color, frag_color, writemask);
+-- 
+2.42.0
+

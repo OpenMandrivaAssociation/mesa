@@ -1,0 +1,45 @@
+From 42a1940a9f80cebbc2a6c6434b7aa69e9f885589 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Mon, 9 Oct 2023 16:16:44 +0200
+Subject: [PATCH 458/834] docs/ci: escape at-symbols
+
+These aren't email addresses, so let's not format them as if they were.
+
+Fixes: 93149507265 ("ci: Add docs for Linux Kernel uprevs")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25712>
+---
+ docs/ci/kernel.rst | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/docs/ci/kernel.rst b/docs/ci/kernel.rst
+index ae0489240fb..48cb856cb48 100644
+--- a/docs/ci/kernel.rst
++++ b/docs/ci/kernel.rst
+@@ -40,15 +40,15 @@ defconfig* made via ``merge_config.sh`` script located at Linux Kernel tree.
+ Kconfigs location
+ """""""""""""""""
+ 
+-+------------+-----------------------------------------------------+-------------------------------------+
+-| Platform   | Mesa CI Kconfig location                            | Linux tree defconfig                |
+-+============+=====================================================+=====================================+
+-| arm        | kernel/configs/mesa3d-ci_arm.config@gfx-ci/linux    | arch/arm/configs/multi_v7_defconfig |
+-+------------+-----------------------------------------------------+-------------------------------------+
+-| arm64      | kernel/configs/mesa3d-ci_arm64.config@gfx-ci/linux  | arch/arm64/configs/defconfig        |
+-+------------+-----------------------------------------------------+-------------------------------------+
+-| x86-64     | kernel/configs/mesa3d-ci_x86_64.config@gfx-ci/linux | arch/x86/configs/x86_64_defconfig   |
+-+------------+-----------------------------------------------------+-------------------------------------+
+++------------+------------------------------------------------------+-------------------------------------+
++| Platform   | Mesa CI Kconfig location                             | Linux tree defconfig                |
+++============+======================================================+=====================================+
++| arm        | kernel/configs/mesa3d-ci_arm.config\@gfx-ci/linux    | arch/arm/configs/multi_v7_defconfig |
+++------------+------------------------------------------------------+-------------------------------------+
++| arm64      | kernel/configs/mesa3d-ci_arm64.config\@gfx-ci/linux  | arch/arm64/configs/defconfig        |
+++------------+------------------------------------------------------+-------------------------------------+
++| x86-64     | kernel/configs/mesa3d-ci_x86_64.config\@gfx-ci/linux | arch/x86/configs/x86_64_defconfig   |
+++------------+------------------------------------------------------+-------------------------------------+
+ 
+ Updating image tags
+ -------------------
+-- 
+2.42.0
+

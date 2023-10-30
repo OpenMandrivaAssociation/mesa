@@ -1,0 +1,46 @@
+From 6576add3dc64586d3dd9dec1b6d86b4cdecf2d43 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Tue, 18 Jul 2023 16:19:03 -0400
+Subject: [PATCH 105/834] ir3: Model cost of phi nodes for opt_preamble
+
+It can be beneficial to move phi nodes, even though they can often be coalesced.
+Model this cost so nir_opt_preamble can make good decisions about hoisting phi
+nodes (and by extension, if-statements) into the preamble.
+
+At this point in the series, this has no effect, but it will avoid certain
+shader-db regressions associated with the nir_opt_preamble changes later in the
+series.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Connor Abbott <cwabbott0@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/freedreno/ir3/ir3_nir_opt_preamble.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/freedreno/ir3/ir3_nir_opt_preamble.c b/src/freedreno/ir3/ir3_nir_opt_preamble.c
+index d6463dc6dd6..86e81c2526a 100644
+--- a/src/freedreno/ir3/ir3_nir_opt_preamble.c
++++ b/src/freedreno/ir3/ir3_nir_opt_preamble.c
+@@ -209,6 +209,18 @@ instr_cost(nir_instr *instr, const void *data)
+       }
+    }
+ 
++   case nir_instr_type_phi:
++      /* Although we can often coalesce phis, the cost of a phi is a proxy for
++       * the cost of the if-else statement... If all phis are moved, then the
++       * branches move too. So this needs to have a nonzero cost, even if we're
++       * optimistic about coalescing.
++       *
++       * Value chosen empirically. On Rob's shader-db, cost of 2 performs better
++       * across the board than a cost of 1. Values greater than 2 do not seem to
++       * have any change, so sticking with 2.
++       */
++      return 2;
++
+    default:
+       return 0;
+    }
+-- 
+2.42.0
+

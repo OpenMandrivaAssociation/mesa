@@ -1,0 +1,33 @@
+From 734bbe33cf9ef3309a097401710e2161b24dc7fe Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Thu, 12 Oct 2023 11:27:44 +0200
+Subject: [PATCH 224/834] freedreno/rddecompiler: Decompile repeated IBs
+
+Otherwise we don't reconstruct the whole cmdstream.
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25677>
+---
+ src/freedreno/decode/rddecompiler.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/freedreno/decode/rddecompiler.c b/src/freedreno/decode/rddecompiler.c
+index 8b9eb1bc23a..db508591648 100644
+--- a/src/freedreno/decode/rddecompiler.c
++++ b/src/freedreno/decode/rddecompiler.c
+@@ -395,10 +395,8 @@ decompile_commands(uint32_t *dwords, uint32_t sizedwords, int level)
+             printlvl(level, "{\n");
+             printlvl(level + 1, "begin_ib();\n");
+ 
+-            if (!has_dumped(ibaddr, 0x7)) {
+-               uint32_t *ptr = hostptr(ibaddr);
+-               decompile_commands(ptr, ibsize, level + 1);
+-            }
++            uint32_t *ptr = hostptr(ibaddr);
++            decompile_commands(ptr, ibsize, level + 1);
+ 
+             printlvl(level + 1, "end_ib();\n");
+             printlvl(level, "}\n");
+-- 
+2.42.0
+

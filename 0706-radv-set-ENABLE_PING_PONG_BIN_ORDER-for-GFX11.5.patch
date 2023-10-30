@@ -1,0 +1,30 @@
+From 50845f6fa4c75467fac78e7b0cac8d851c5bd3fe Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Wed, 20 Sep 2023 12:50:14 +0200
+Subject: [PATCH 706/834] radv: set ENABLE_PING_PONG_BIN_ORDER for GFX11.5
+
+Ported from RadeonSI.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25304>
+---
+ src/amd/vulkan/si_cmd_buffer.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/amd/vulkan/si_cmd_buffer.c b/src/amd/vulkan/si_cmd_buffer.c
+index d74328e3a42..058f97abbc0 100644
+--- a/src/amd/vulkan/si_cmd_buffer.c
++++ b/src/amd/vulkan/si_cmd_buffer.c
+@@ -588,7 +588,8 @@ si_emit_graphics(struct radv_device *device, struct radeon_cmdbuf *cs)
+    }
+ 
+    if (physical_device->rad_info.gfx_level >= GFX11) {
+-      radeon_set_context_reg(cs, R_028C54_PA_SC_BINNER_CNTL_2, 0);
++      radeon_set_context_reg(cs, R_028C54_PA_SC_BINNER_CNTL_2,
++                             S_028C54_ENABLE_PING_PONG_BIN_ORDER(physical_device->rad_info.gfx_level >= GFX11_5));
+ 
+       uint64_t rb_mask = BITFIELD64_MASK(physical_device->rad_info.max_render_backends);
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,70 @@
+From 01f0cce00385f52311928da17982050fb587599a Mon Sep 17 00:00:00 2001
+From: Rob Clark <robdclark@chromium.org>
+Date: Tue, 3 Oct 2023 13:34:09 -0700
+Subject: [PATCH 421/834] iris: Add PIPE_CAP_HAS_CONST_BW support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Reviewed-by: Tapani Pälli <tapani.palli@intel.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25464>
+---
+ src/gallium/drivers/iris/iris_resource.c | 8 ++++++--
+ src/gallium/drivers/iris/iris_screen.c   | 1 +
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/iris/iris_resource.c b/src/gallium/drivers/iris/iris_resource.c
+index c8d20823d4f..f14b2e5b944 100644
+--- a/src/gallium/drivers/iris/iris_resource.c
++++ b/src/gallium/drivers/iris/iris_resource.c
+@@ -131,12 +131,14 @@ modifier_is_supported(const struct intel_device_info *devinfo,
+       return false;
+    }
+ 
++   bool no_ccs = INTEL_DEBUG(DEBUG_NO_CCS) || (bind & PIPE_BIND_CONST_BW);
++
+    /* Check remaining requirements. */
+    switch (modifier) {
+    case I915_FORMAT_MOD_4_TILED_MTL_MC_CCS:
+    case I915_FORMAT_MOD_4_TILED_DG2_MC_CCS:
+    case I915_FORMAT_MOD_Y_TILED_GEN12_MC_CCS:
+-      if (INTEL_DEBUG(DEBUG_NO_CCS))
++      if (no_ccs)
+          return false;
+ 
+       if (pfmt != PIPE_FORMAT_BGRA8888_UNORM &&
+@@ -159,7 +161,7 @@ modifier_is_supported(const struct intel_device_info *devinfo,
+    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS_CC:
+    case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
+    case I915_FORMAT_MOD_Y_TILED_CCS: {
+-      if (INTEL_DEBUG(DEBUG_NO_CCS))
++      if (no_ccs)
+          return false;
+ 
+       enum isl_format rt_format =
+@@ -739,6 +741,8 @@ iris_resource_configure_main(const struct iris_screen *screen,
+ 
+    if (res->mod_info && !isl_drm_modifier_has_aux(modifier))
+       usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
++   else if (templ->bind & PIPE_BIND_CONST_BW)
++      usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+ 
+    if (templ->usage == PIPE_USAGE_STAGING)
+       usage |= ISL_SURF_USAGE_STAGING_BIT;
+diff --git a/src/gallium/drivers/iris/iris_screen.c b/src/gallium/drivers/iris/iris_screen.c
+index 42298daddc8..5c5364d9eca 100644
+--- a/src/gallium/drivers/iris/iris_screen.c
++++ b/src/gallium/drivers/iris/iris_screen.c
+@@ -301,6 +301,7 @@ iris_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
+    case PIPE_CAP_LEGACY_MATH_RULES:
+    case PIPE_CAP_ALPHA_TO_COVERAGE_DITHER_CONTROL:
+    case PIPE_CAP_MAP_UNSYNCHRONIZED_THREAD_SAFE:
++   case PIPE_CAP_HAS_CONST_BW:
+       return true;
+    case PIPE_CAP_UMA:
+       return iris_bufmgr_vram_size(screen->bufmgr) == 0;
+-- 
+2.42.0
+

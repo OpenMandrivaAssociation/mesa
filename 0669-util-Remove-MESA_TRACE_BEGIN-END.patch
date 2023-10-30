@@ -1,0 +1,85 @@
+From 2ef0e6be17200487e9a2797917454a85761249eb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Wed, 20 Sep 2023 17:50:20 +0200
+Subject: [PATCH 669/834] util: Remove MESA_TRACE_BEGIN/END
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There are no user of these macros anymore, simplify the cpu_trace header.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/util/perf/cpu_trace.h     | 21 ++++-----------------
+ src/virtio/vulkan/vn_common.h |  2 --
+ 2 files changed, 4 insertions(+), 19 deletions(-)
+
+diff --git a/src/util/perf/cpu_trace.h b/src/util/perf/cpu_trace.h
+index cfa75849e38..6cebb51bafd 100644
+--- a/src/util/perf/cpu_trace.h
++++ b/src/util/perf/cpu_trace.h
+@@ -60,19 +60,6 @@
+ 
+ #endif /* HAVE_GPUVIS */
+ 
+-
+-#define _MESA_COMBINED_TRACE_BEGIN(name)                                     \
+-   do {                                                                      \
+-      _MESA_TRACE_BEGIN(name);                                               \
+-      _MESA_GPUVIS_TRACE_BEGIN(name);                                        \
+-   } while (0)
+-
+-#define _MESA_COMBINED_TRACE_END()                                           \
+-   do {                                                                      \
+-      _MESA_GPUVIS_TRACE_END();                                              \
+-      _MESA_TRACE_END();                                                     \
+-   } while (0)
+-
+ #if __has_attribute(cleanup) && __has_attribute(unused)
+ 
+ #define _MESA_TRACE_SCOPE_VAR_CONCAT(name, suffix) name##suffix
+@@ -94,14 +81,16 @@
+ static inline int
+ _mesa_trace_scope_begin(const char *name)
+ {
+-   _MESA_COMBINED_TRACE_BEGIN(name);
++   _MESA_TRACE_BEGIN(name);
++   _MESA_GPUVIS_TRACE_BEGIN(name);
+    return 0;
+ }
+ 
+ static inline void
+ _mesa_trace_scope_end(UNUSED int *scope)
+ {
+-   _MESA_COMBINED_TRACE_END();
++   _MESA_GPUVIS_TRACE_END();
++   _MESA_TRACE_END();
+ }
+ 
+ #else
+@@ -110,8 +99,6 @@ _mesa_trace_scope_end(UNUSED int *scope)
+ 
+ #endif /* __has_attribute(cleanup) && __has_attribute(unused) */
+ 
+-#define MESA_TRACE_BEGIN(name) _MESA_COMBINED_TRACE_BEGIN(name)
+-#define MESA_TRACE_END() _MESA_COMBINED_TRACE_END()
+ #define MESA_TRACE_SCOPE(name) _MESA_TRACE_SCOPE(name)
+ #define MESA_TRACE_FUNC() _MESA_TRACE_SCOPE(__func__)
+ 
+diff --git a/src/virtio/vulkan/vn_common.h b/src/virtio/vulkan/vn_common.h
+index 7deff7c4ded..da9a8ae8c18 100644
+--- a/src/virtio/vulkan/vn_common.h
++++ b/src/virtio/vulkan/vn_common.h
+@@ -55,8 +55,6 @@
+ #define vn_result(instance, result)                                          \
+    ((result) >= VK_SUCCESS ? (result) : vn_error((instance), (result)))
+ 
+-#define VN_TRACE_BEGIN(name) MESA_TRACE_BEGIN(name)
+-#define VN_TRACE_END() MESA_TRACE_END()
+ #define VN_TRACE_SCOPE(name) MESA_TRACE_SCOPE(name)
+ #define VN_TRACE_FUNC() MESA_TRACE_SCOPE(__func__)
+ 
+-- 
+2.42.0
+

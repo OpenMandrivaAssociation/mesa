@@ -1,0 +1,79 @@
+From bfb3eacad3358afef2e982d19742bdd55a0d9a6b Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Fri, 30 Jun 2023 09:46:45 -0400
+Subject: [PATCH 104/834] ir3: Set CAN_SPECULATE before opt_preamble
+
+Speculating these loads is safe, but nir_opt_preamble doesn't know that. Set the
+ACCESS bits appropriately to let it know.
+
+This will avoid any code gen regression from the nir_opt_preamble change.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Connor Abbott <cwabbott0@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/freedreno/ir3/ir3_nir_opt_preamble.c | 34 +++++++++++++++++++++++-
+ 1 file changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/src/freedreno/ir3/ir3_nir_opt_preamble.c b/src/freedreno/ir3/ir3_nir_opt_preamble.c
+index 6ada9325cac..d6463dc6dd6 100644
+--- a/src/freedreno/ir3/ir3_nir_opt_preamble.c
++++ b/src/freedreno/ir3/ir3_nir_opt_preamble.c
+@@ -255,6 +255,34 @@ avoid_instr(const nir_instr *instr, const void *data)
+    return intrin->intrinsic == nir_intrinsic_bindless_resource_ir3;
+ }
+ 
++static bool
++set_speculate(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *_)
++{
++   switch (intr->intrinsic) {
++   /* These instructions go through bounds-checked hardware descriptors so
++    * should be safe to speculate.
++    *
++    * TODO: This isn't necessarily true in Vulkan, where descriptors don't need
++    * to be filled out and bindless descriptor offsets aren't bounds checked.
++    * We may need to plumb this information through from turnip for correctness
++    * to avoid regressing freedreno codegen.
++    */
++   case nir_intrinsic_load_ubo:
++   case nir_intrinsic_load_ubo_vec4:
++   case nir_intrinsic_image_load:
++   case nir_intrinsic_image_samples_identical:
++   case nir_intrinsic_bindless_image_load:
++   case nir_intrinsic_load_ssbo:
++   case nir_intrinsic_load_ssbo_ir3:
++      nir_intrinsic_set_access(intr, nir_intrinsic_access(intr) |
++                                     ACCESS_CAN_SPECULATE);
++      return true;
++
++   default:
++      return false;
++   }
++}
++
+ bool
+ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
+ {
+@@ -272,6 +300,10 @@ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
+    if (max_size == 0)
+       return false;
+ 
++   bool progress = nir_shader_intrinsics_pass(nir, set_speculate,
++                                              nir_metadata_block_index |
++                                              nir_metadata_dominance, NULL);
++
+    nir_opt_preamble_options options = {
+       .drawid_uniform = true,
+       .subgroup_size_uniform = true,
+@@ -283,7 +315,7 @@ ir3_nir_opt_preamble(nir_shader *nir, struct ir3_shader_variant *v)
+    };
+ 
+    unsigned size = 0;
+-   bool progress = nir_opt_preamble(nir, &options, &size);
++   progress |= nir_opt_preamble(nir, &options, &size);
+ 
+    if (!v->binning_pass)
+       const_state->preamble_size = DIV_ROUND_UP(size, 4);
+-- 
+2.42.0
+

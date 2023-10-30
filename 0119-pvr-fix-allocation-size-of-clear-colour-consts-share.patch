@@ -1,0 +1,43 @@
+From 6417a65f280312436a78be188d3bc1bf2e452ad0 Mon Sep 17 00:00:00 2001
+From: Frank Binns <frank.binns@imgtec.com>
+Date: Thu, 28 Sep 2023 22:24:31 +0100
+Subject: [PATCH 119/834] pvr: fix allocation size of clear colour consts
+ shared regs buffer
+
+The number of const shared registers was being used for the allocation size
+rather than the number of bytes. In practice this doesn't make a difference as
+the max allocation size is 24 bytes, which then gets rounded up to 64 bytes by
+the buffer allocation function. However, we might as well make the allocation
+size correct to avoid any future confusion. Noticed through code inspection.
+
+Fixes: 7509e259f85 ("pvr: Implement color/depth/depth+stencil attachment clear.")
+Signed-off-by: Frank Binns <frank.binns@imgtec.com>
+Reviewed-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25489>
+---
+ src/imagination/vulkan/pvr_blit.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/imagination/vulkan/pvr_blit.c b/src/imagination/vulkan/pvr_blit.c
+index adf41f6a454..e391f975221 100644
+--- a/src/imagination/vulkan/pvr_blit.c
++++ b/src/imagination/vulkan/pvr_blit.c
+@@ -1513,10 +1513,11 @@ static VkResult pvr_clear_color_attachment_static_create_consts_buffer(
+    /* TODO: This doesn't need to be aligned to slc size. Alignment to 4 is fine.
+     * Change pvr_cmd_buffer_alloc_mem() to take in an alignment?
+     */
+-   result = pvr_cmd_buffer_alloc_mem(cmd_buffer,
+-                                     device->heaps.general_heap,
+-                                     shader_info->const_shared_regs,
+-                                     &const_shareds_buffer);
++   result =
++      pvr_cmd_buffer_alloc_mem(cmd_buffer,
++                               device->heaps.general_heap,
++                               PVR_DW_TO_BYTES(shader_info->const_shared_regs),
++                               &const_shareds_buffer);
+    if (result != VK_SUCCESS)
+       return result;
+ 
+-- 
+2.42.0
+

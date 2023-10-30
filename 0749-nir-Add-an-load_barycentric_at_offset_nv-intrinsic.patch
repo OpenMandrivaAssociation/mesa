@@ -1,0 +1,42 @@
+From a2b799c53ca6b6070c80046b5f2b06236c0a0fbb Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Fri, 15 Sep 2023 17:22:52 -0500
+Subject: [PATCH 749/834] nir: Add an load_barycentric_at_offset_nv intrinsic
+
+NVIDIA hardware takes the offset as two 4.12 fixed-point values packed
+into a single 32-bit value.
+
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir_divergence_analysis.c | 1 +
+ src/compiler/nir/nir_intrinsics.py         | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/src/compiler/nir/nir_divergence_analysis.c b/src/compiler/nir/nir_divergence_analysis.c
+index 14079efb161..c6f24bb02b7 100644
+--- a/src/compiler/nir/nir_divergence_analysis.c
++++ b/src/compiler/nir/nir_divergence_analysis.c
+@@ -495,6 +495,7 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
+    case nir_intrinsic_load_barycentric_model:
+    case nir_intrinsic_load_barycentric_at_sample:
+    case nir_intrinsic_load_barycentric_at_offset:
++   case nir_intrinsic_load_barycentric_at_offset_nv:
+    case nir_intrinsic_load_barycentric_coord_pixel:
+    case nir_intrinsic_load_barycentric_coord_centroid:
+    case nir_intrinsic_load_barycentric_coord_sample:
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index 526413f1917..eee5ffcccb1 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1014,6 +1014,7 @@ barycentric("at_sample", 2, [1])
+ barycentric("coord_at_sample", 3, [1])
+ # src[] = { offset.xy }.
+ barycentric("at_offset", 2, [2])
++barycentric("at_offset_nv", 2, [1])
+ barycentric("coord_at_offset", 3, [2])
+ 
+ # Load sample position:
+-- 
+2.42.0
+

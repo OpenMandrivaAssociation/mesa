@@ -1,0 +1,288 @@
+From 67210f90ad8ced44df3726fee6b9b59333730dc4 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 2 Sep 2023 10:53:02 -0700
+Subject: [PATCH 764/834] compiler/types: Flip wrapping of array related
+ functions
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 64 +++++++++++++++++++++++++++-------
+ src/compiler/glsl_types.h      | 15 ++++++--
+ src/compiler/glsl_types_impl.h | 22 +++---------
+ src/compiler/nir_types.cpp     | 52 ---------------------------
+ 4 files changed, 70 insertions(+), 83 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 44eee5fa23e..fde4a82d33a 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -358,9 +358,10 @@ const struct glsl_type *glsl_type::get_scalar_type() const
+ }
+ 
+ 
+-const struct glsl_type *glsl_type::get_bare_type() const
++extern "C" const struct glsl_type *
++glsl_get_bare_type(const struct glsl_type *t)
+ {
+-   switch (this->base_type) {
++   switch (t->base_type) {
+    case GLSL_TYPE_UINT8:
+    case GLSL_TYPE_INT8:
+    case GLSL_TYPE_UINT16:
+@@ -373,26 +374,26 @@ const struct glsl_type *glsl_type::get_bare_type() const
+    case GLSL_TYPE_DOUBLE:
+    case GLSL_TYPE_UINT64:
+    case GLSL_TYPE_INT64:
+-      return get_instance(this->base_type, this->vector_elements,
+-                          this->matrix_columns);
++      return glsl_type::get_instance(t->base_type, t->vector_elements,
++                                     t->matrix_columns);
+ 
+    case GLSL_TYPE_STRUCT:
+    case GLSL_TYPE_INTERFACE: {
+       struct glsl_struct_field *bare_fields = (struct glsl_struct_field *)
+-         calloc(this->length, sizeof(struct glsl_struct_field));
+-      for (unsigned i = 0; i < this->length; i++) {
+-         bare_fields[i].type = this->fields.structure[i].type->get_bare_type();
+-         bare_fields[i].name = this->fields.structure[i].name;
++         calloc(t->length, sizeof(struct glsl_struct_field));
++      for (unsigned i = 0; i < t->length; i++) {
++         bare_fields[i].type = t->fields.structure[i].type->get_bare_type();
++         bare_fields[i].name = t->fields.structure[i].name;
+       }
+       const struct glsl_type *bare_type =
+-         get_struct_instance(bare_fields, this->length, glsl_get_type_name(this));
++         glsl_type::get_struct_instance(bare_fields, t->length, glsl_get_type_name(t));
+       free(bare_fields);
+       return bare_type;
+    }
+ 
+    case GLSL_TYPE_ARRAY:
+-      return get_array_instance(this->fields.array->get_bare_type(),
+-                                this->length);
++      return glsl_type::get_array_instance(t->fields.array->get_bare_type(),
++                                           t->length);
+ 
+    case GLSL_TYPE_COOPERATIVE_MATRIX:
+    case GLSL_TYPE_SAMPLER:
+@@ -402,7 +403,7 @@ const struct glsl_type *glsl_type::get_bare_type() const
+    case GLSL_TYPE_VOID:
+    case GLSL_TYPE_SUBROUTINE:
+    case GLSL_TYPE_ERROR:
+-      return this;
++      return t;
+    }
+ 
+    unreachable("Invalid base type");
+@@ -3441,4 +3442,43 @@ glsl_contains_atomic(const struct glsl_type *t)
+    return t->atomic_size() > 0;
+ }
+ 
++const struct glsl_type *
++glsl_without_array(const struct glsl_type *t)
++{
++   while (t->is_array())
++      t = t->fields.array;
++   return t;
++}
++
++const struct glsl_type *
++glsl_without_array_or_matrix(const struct glsl_type *t)
++{
++   t = t->without_array();
++   if (t->is_matrix())
++      t = t->column_type();
++   return t;
++}
++
++const struct glsl_type *
++glsl_type_wrap_in_arrays(const struct glsl_type *t,
++                         const struct glsl_type *arrays)
++{
++   if (!glsl_type_is_array(arrays))
++      return t;
++
++   const struct glsl_type *elem_type =
++      glsl_type_wrap_in_arrays(t, glsl_get_array_element(arrays));
++   return glsl_type::get_array_instance(elem_type, glsl_get_length(arrays),
++                                        glsl_get_explicit_stride(arrays));
++}
++
++unsigned
++glsl_get_length(const struct glsl_type *t)
++{
++   return t->is_matrix() ? t->matrix_columns : t->length;
++}
++
++
++
++
+ }
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index ec35048df38..486e5d56306 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1283,7 +1283,12 @@ unsigned glsl_get_vector_elements(const struct glsl_type *t);
+ unsigned glsl_get_components(const struct glsl_type *t);
+ unsigned glsl_get_matrix_columns(const struct glsl_type *t);
+ 
+-int glsl_array_size(const struct glsl_type *t);
++static inline int
++glsl_array_size(const struct glsl_type *t)
++{
++   return glsl_type_is_array(t) ? t->length : -1;
++}
++
+ unsigned glsl_get_aoa_size(const struct glsl_type *t);
+ const struct glsl_type *glsl_get_array_element(const struct glsl_type *t);
+ const struct glsl_type *glsl_without_array(const struct glsl_type *t);
+@@ -1461,7 +1466,13 @@ unsigned glsl_get_std140_size(const struct glsl_type *t, bool row_major);
+ unsigned glsl_get_std430_base_alignment(const struct glsl_type *t, bool row_major);
+ unsigned glsl_get_std430_size(const struct glsl_type *t, bool row_major);
+ unsigned glsl_get_explicit_size(const struct glsl_type *t, bool align_to_stride);
+-unsigned glsl_get_explicit_stride(const struct glsl_type *t);
++
++static inline unsigned
++glsl_get_explicit_stride(const struct glsl_type *t)
++{
++   return t->explicit_stride;
++}
++
+ unsigned glsl_get_explicit_alignment(const struct glsl_type *t);
+ 
+ void glsl_get_natural_size_align_bytes(const struct glsl_type *t, unsigned *size, unsigned *align);
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index d7358bb526f..bd196de350c 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -51,6 +51,11 @@ glsl_type::components() const
+    return vector_elements * matrix_columns;
+ }
+ 
++inline int glsl_type::array_size() const { return glsl_array_size(this); }
++inline const glsl_type *glsl_type::without_array() const { return glsl_without_array(this); }
++
++inline const glsl_type *glsl_type::get_bare_type() const { return glsl_get_bare_type(this); }
++
+ inline unsigned
+ glsl_type::count_attribute_slots(bool is_gl_vertex_input) const
+ {
+@@ -166,17 +171,6 @@ glsl_type::is_anonymous() const
+    return !strncmp(glsl_get_type_name(this), "#anon", 5);
+ }
+ 
+-inline const glsl_type *
+-glsl_type::without_array() const
+-{
+-   const glsl_type *t = this;
+-
+-   while (t->is_array())
+-      t = t->fields.array;
+-
+-   return t;
+-}
+-
+ inline unsigned
+ glsl_type::arrays_of_arrays_size() const
+ {
+@@ -245,12 +239,6 @@ glsl_type::column_type() const
+    }
+ }
+ 
+-inline int
+-glsl_type::array_size() const
+-{
+-   return is_array() ? length : -1;
+-}
+-
+ inline bool glsl_type::is_unsized_array() const { return glsl_type_is_unsized_array(this); }
+ 
+ inline enum glsl_interface_packing
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index 01f2ac7a326..9fd8191f77a 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -40,33 +40,6 @@ glsl_get_type_name(const struct glsl_type *type)
+    }
+ }
+ 
+-int
+-glsl_array_size(const struct glsl_type *type)
+-{
+-   return type->array_size();
+-}
+-
+-const struct glsl_type *
+-glsl_without_array(const struct glsl_type *type)
+-{
+-   return type->without_array();
+-}
+-
+-const struct glsl_type *
+-glsl_without_array_or_matrix(const struct glsl_type *type)
+-{
+-   type = type->without_array();
+-   if (type->is_matrix())
+-      type = type->column_type();
+-   return type;
+-}
+-
+-const struct glsl_type *
+-glsl_get_bare_type(const struct glsl_type *type)
+-{
+-   return type->get_bare_type();
+-}
+-
+ const struct glsl_type *
+ glsl_get_struct_field(const struct glsl_type *type, unsigned index)
+ {
+@@ -90,12 +63,6 @@ glsl_get_struct_field_data(const struct glsl_type *type, unsigned index)
+    return &type->fields.structure[index];
+ }
+ 
+-unsigned
+-glsl_get_explicit_stride(const struct glsl_type *type)
+-{
+-   return type->explicit_stride;
+-}
+-
+ const struct glsl_type *
+ glsl_texture_type_to_sampler(const struct glsl_type *type, bool is_shadow)
+ {
+@@ -150,12 +117,6 @@ glsl_get_matrix_columns(const struct glsl_type *type)
+    return type->matrix_columns;
+ }
+ 
+-unsigned
+-glsl_get_length(const struct glsl_type *type)
+-{
+-   return type->is_matrix() ? type->matrix_columns : type->length;
+-}
+-
+ unsigned
+ glsl_get_aoa_size(const struct glsl_type *type)
+ {
+@@ -702,19 +663,6 @@ glsl_get_explicit_type_for_size_align(const struct glsl_type *type,
+    return type->get_explicit_type_for_size_align(type_info, size, align);
+ }
+ 
+-const struct glsl_type *
+-glsl_type_wrap_in_arrays(const struct glsl_type *type,
+-                         const struct glsl_type *arrays)
+-{
+-   if (!glsl_type_is_array(arrays))
+-      return type;
+-
+-   const struct glsl_type *elem_type =
+-      glsl_type_wrap_in_arrays(type, glsl_get_array_element(arrays));
+-   return glsl_array_type(elem_type, glsl_get_length(arrays),
+-                          glsl_get_explicit_stride(arrays));
+-}
+-
+ const struct glsl_type *
+ glsl_type_replace_vec3_with_vec4(const struct glsl_type *type)
+ {
+-- 
+2.42.0
+

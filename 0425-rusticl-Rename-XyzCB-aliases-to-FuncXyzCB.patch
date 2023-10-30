@@ -1,0 +1,263 @@
+From 157c743a27837033b0ec35e3b8353817e58d75c2 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Wed, 11 Oct 2023 17:25:04 +0200
+Subject: [PATCH 425/834] rusticl: Rename XyzCB aliases to FuncXyzCB
+
+This happens so the XyzCB names can be used for structs containing both the function pointer and
+the provided user data. Since these aliases represent raw unsafe function pointers the `Func`
+prefix was chosen over `Fn`, which is generally used for safe functions.
+
+Unfortunately it is not possible to concatinate identifiers to create new ones without a proc macro.
+Thus, specify the new alias manually instead of generating them from the existing XyzCB names.
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/context.rs |  6 +++---
+ src/gallium/frontends/rusticl/api/event.rs   |  2 +-
+ src/gallium/frontends/rusticl/api/icd.rs     |  2 +-
+ src/gallium/frontends/rusticl/api/memory.rs  |  8 ++++----
+ src/gallium/frontends/rusticl/api/program.rs | 10 +++++-----
+ src/gallium/frontends/rusticl/api/types.rs   | 16 ++++++++--------
+ src/gallium/frontends/rusticl/core/event.rs  |  4 ++--
+ 7 files changed, 24 insertions(+), 24 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/context.rs b/src/gallium/frontends/rusticl/api/context.rs
+index 1aff561a565..776cf0f7dde 100644
+--- a/src/gallium/frontends/rusticl/api/context.rs
++++ b/src/gallium/frontends/rusticl/api/context.rs
+@@ -41,7 +41,7 @@ fn create_context(
+     properties: *const cl_context_properties,
+     num_devices: cl_uint,
+     devices: *const cl_device_id,
+-    pfn_notify: Option<CreateContextCB>,
++    pfn_notify: Option<FuncCreateContextCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<cl_context> {
+     check_cb(&pfn_notify, user_data)?;
+@@ -84,7 +84,7 @@ fn create_context(
+ fn create_context_from_type(
+     properties: *const cl_context_properties,
+     device_type: cl_device_type,
+-    pfn_notify: Option<CreateContextCB>,
++    pfn_notify: Option<FuncCreateContextCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<cl_context> {
+     // CL_INVALID_DEVICE_TYPE if device_type is not a valid value.
+@@ -124,7 +124,7 @@ fn release_context(context: cl_context) -> CLResult<()> {
+ #[cl_entrypoint]
+ fn set_context_destructor_callback(
+     context: cl_context,
+-    pfn_notify: ::std::option::Option<DeleteContextCB>,
++    pfn_notify: ::std::option::Option<FuncDeleteContextCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<()> {
+     let c = context.get_ref()?;
+diff --git a/src/gallium/frontends/rusticl/api/event.rs b/src/gallium/frontends/rusticl/api/event.rs
+index 629c9ce1233..0b1b2cdb914 100644
+--- a/src/gallium/frontends/rusticl/api/event.rs
++++ b/src/gallium/frontends/rusticl/api/event.rs
+@@ -115,7 +115,7 @@ fn wait_for_events(num_events: cl_uint, event_list: *const cl_event) -> CLResult
+ fn set_event_callback(
+     event: cl_event,
+     command_exec_callback_type: cl_int,
+-    pfn_event_notify: Option<EventCB>,
++    pfn_event_notify: Option<FuncEventCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<()> {
+     let e = event.get_ref()?;
+diff --git a/src/gallium/frontends/rusticl/api/icd.rs b/src/gallium/frontends/rusticl/api/icd.rs
+index a0ede4cb640..ea7e3f7c2b8 100644
+--- a/src/gallium/frontends/rusticl/api/icd.rs
++++ b/src/gallium/frontends/rusticl/api/icd.rs
+@@ -434,7 +434,7 @@ extern "C" fn cl_link_program(
+     options: *const ::std::os::raw::c_char,
+     num_input_programs: cl_uint,
+     input_programs: *const cl_program,
+-    pfn_notify: Option<ProgramCB>,
++    pfn_notify: Option<FuncProgramCB>,
+     user_data: *mut ::std::os::raw::c_void,
+     errcode_ret: *mut cl_int,
+ ) -> cl_program {
+diff --git a/src/gallium/frontends/rusticl/api/memory.rs b/src/gallium/frontends/rusticl/api/memory.rs
+index fe16ede5cba..fa53d305638 100644
+--- a/src/gallium/frontends/rusticl/api/memory.rs
++++ b/src/gallium/frontends/rusticl/api/memory.rs
+@@ -350,7 +350,7 @@ fn create_sub_buffer(
+ #[cl_entrypoint]
+ fn set_mem_object_destructor_callback(
+     memobj: cl_mem,
+-    pfn_notify: Option<MemCB>,
++    pfn_notify: Option<FuncMemCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<()> {
+     let m = memobj.get_ref()?;
+@@ -2348,7 +2348,7 @@ fn enqueue_svm_free_impl(
+     command_queue: cl_command_queue,
+     num_svm_pointers: cl_uint,
+     svm_pointers: *mut *mut c_void,
+-    pfn_free_func: Option<SVMFreeCb>,
++    pfn_free_func: Option<FuncSVMFreeCb>,
+     user_data: *mut c_void,
+     num_events_in_wait_list: cl_uint,
+     event_wait_list: *const cl_event,
+@@ -2407,7 +2407,7 @@ fn enqueue_svm_free(
+     command_queue: cl_command_queue,
+     num_svm_pointers: cl_uint,
+     svm_pointers: *mut *mut c_void,
+-    pfn_free_func: Option<SVMFreeCb>,
++    pfn_free_func: Option<FuncSVMFreeCb>,
+     user_data: *mut c_void,
+     num_events_in_wait_list: cl_uint,
+     event_wait_list: *const cl_event,
+@@ -2431,7 +2431,7 @@ fn enqueue_svm_free_arm(
+     command_queue: cl_command_queue,
+     num_svm_pointers: cl_uint,
+     svm_pointers: *mut *mut c_void,
+-    pfn_free_func: Option<SVMFreeCb>,
++    pfn_free_func: Option<FuncSVMFreeCb>,
+     user_data: *mut c_void,
+     num_events_in_wait_list: cl_uint,
+     event_wait_list: *const cl_event,
+diff --git a/src/gallium/frontends/rusticl/api/program.rs b/src/gallium/frontends/rusticl/api/program.rs
+index 78ba1ed744e..9c4a8a5683f 100644
+--- a/src/gallium/frontends/rusticl/api/program.rs
++++ b/src/gallium/frontends/rusticl/api/program.rs
+@@ -93,7 +93,7 @@ fn validate_devices<'a>(
+ }
+ 
+ fn call_cb(
+-    pfn_notify: Option<ProgramCB>,
++    pfn_notify: Option<FuncProgramCB>,
+     program: cl_program,
+     user_data: *mut ::std::os::raw::c_void,
+ ) {
+@@ -276,7 +276,7 @@ fn build_program(
+     num_devices: cl_uint,
+     device_list: *const cl_device_id,
+     options: *const c_char,
+-    pfn_notify: Option<ProgramCB>,
++    pfn_notify: Option<FuncProgramCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<()> {
+     let mut res = true;
+@@ -324,7 +324,7 @@ fn compile_program(
+     num_input_headers: cl_uint,
+     input_headers: *const cl_program,
+     header_include_names: *mut *const c_char,
+-    pfn_notify: Option<ProgramCB>,
++    pfn_notify: Option<FuncProgramCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<()> {
+     let mut res = true;
+@@ -402,7 +402,7 @@ pub fn link_program(
+     options: *const ::std::os::raw::c_char,
+     num_input_programs: cl_uint,
+     input_programs: *const cl_program,
+-    pfn_notify: Option<ProgramCB>,
++    pfn_notify: Option<FuncProgramCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<(cl_program, cl_int)> {
+     let c = context.get_arc()?;
+@@ -494,7 +494,7 @@ fn set_program_specialization_constant(
+ #[cl_entrypoint]
+ fn set_program_release_callback(
+     _program: cl_program,
+-    _pfn_notify: ::std::option::Option<ProgramCB>,
++    _pfn_notify: ::std::option::Option<FuncProgramCB>,
+     _user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<()> {
+     Err(CL_INVALID_OPERATION)
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index eac1bfb90f9..b4a4c1ac7aa 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -15,18 +15,18 @@ macro_rules! cl_closure {
+ }
+ 
+ macro_rules! cl_callback {
+-    ($cb:ident {
++    ($cb:ident($fn_alias:ident) {
+         $($p:ident : $ty:ty,)*
+     }) => {
+         #[allow(dead_code)]
+-        pub type $cb = unsafe extern "C" fn(
++        pub type $fn_alias = unsafe extern "C" fn(
+             $($p: $ty,)*
+         );
+     }
+ }
+ 
+ cl_callback!(
+-    CreateContextCB {
++    CreateContextCB(FuncCreateContextCB) {
+         errinfo: *const ::std::os::raw::c_char,
+         private_info: *const ::std::ffi::c_void,
+         cb: usize,
+@@ -35,14 +35,14 @@ cl_callback!(
+ );
+ 
+ cl_callback!(
+-    DeleteContextCB {
++    DeleteContextCB(FuncDeleteContextCB) {
+         context: cl_context,
+         user_data: *mut ::std::os::raw::c_void,
+     }
+ );
+ 
+ cl_callback!(
+-    EventCB {
++    EventCB(FuncEventCB) {
+         event: cl_event,
+         event_command_status: cl_int,
+         user_data: *mut ::std::os::raw::c_void,
+@@ -50,21 +50,21 @@ cl_callback!(
+ );
+ 
+ cl_callback!(
+-    MemCB {
++    MemCB(FuncMemCB) {
+         memobj: cl_mem,
+         user_data: *mut ::std::os::raw::c_void,
+     }
+ );
+ 
+ cl_callback!(
+-    ProgramCB {
++    ProgramCB(FuncProgramCB) {
+         program: cl_program,
+         user_data: *mut ::std::os::raw::c_void,
+     }
+ );
+ 
+ cl_callback!(
+-    SVMFreeCb {
++    SVMFreeCb(FuncSVMFreeCb) {
+         queue: cl_command_queue,
+         num_svm_pointers: cl_uint,
+         svm_pointers: *mut *mut ::std::os::raw::c_void,
+diff --git a/src/gallium/frontends/rusticl/core/event.rs b/src/gallium/frontends/rusticl/core/event.rs
+index a2296938e70..e51464710e6 100644
+--- a/src/gallium/frontends/rusticl/core/event.rs
++++ b/src/gallium/frontends/rusticl/core/event.rs
+@@ -37,7 +37,7 @@ pub enum EventTimes {
+ #[derive(Default)]
+ struct EventMutState {
+     status: cl_int,
+-    cbs: [Vec<(EventCB, *mut c_void)>; 3],
++    cbs: [Vec<(FuncEventCB, *mut c_void)>; 3],
+     work: Option<EventSig>,
+     time_queued: cl_ulong,
+     time_submit: cl_ulong,
+@@ -161,7 +161,7 @@ impl Event {
+         }
+     }
+ 
+-    pub fn add_cb(&self, state: cl_int, cb: EventCB, data: *mut c_void) {
++    pub fn add_cb(&self, state: cl_int, cb: FuncEventCB, data: *mut c_void) {
+         let mut lock = self.state();
+         let status = lock.status;
+ 
+-- 
+2.42.0
+

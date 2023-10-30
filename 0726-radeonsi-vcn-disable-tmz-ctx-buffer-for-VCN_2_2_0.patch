@@ -1,0 +1,36 @@
+From 2179cd129f7c13d6bd4e79aaf2b5e7fc4c724915 Mon Sep 17 00:00:00 2001
+From: Boyuan Zhang <boyuan.zhang@amd.com>
+Date: Mon, 23 Oct 2023 16:22:42 -0400
+Subject: [PATCH 726/834] radeonsi/vcn: disable tmz ctx buffer for VCN_2_2_0
+
+VCN_2_2_0 should not use tmz context buffer.
+
+Fixes: ffbbf23e
+A minor fix for above commit to use the original comparison logic "<"
+instead of "<="
+
+Cc: mesa-stable
+
+Signed-off-by: Boyuan Zhang <boyuan.zhang@amd.com>
+Reviewed-by: Leo Liu <leo.liu@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25856>
+---
+ src/gallium/drivers/radeonsi/radeon_vcn_dec.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/radeonsi/radeon_vcn_dec.c b/src/gallium/drivers/radeonsi/radeon_vcn_dec.c
+index f2bce110aff..9f044005ee0 100644
+--- a/src/gallium/drivers/radeonsi/radeon_vcn_dec.c
++++ b/src/gallium/drivers/radeonsi/radeon_vcn_dec.c
+@@ -3329,7 +3329,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
+       list_inithead(&dec->dpb_unref_list);
+    }
+ 
+-   dec->tmz_ctx = sctx->vcn_ip_ver <= VCN_2_2_0 && sctx->vcn_ip_ver != VCN_UNKNOWN;
++   dec->tmz_ctx = sctx->vcn_ip_ver < VCN_2_2_0 && sctx->vcn_ip_ver != VCN_UNKNOWN;
+ 
+    return &dec->base;
+ 
+-- 
+2.42.0
+

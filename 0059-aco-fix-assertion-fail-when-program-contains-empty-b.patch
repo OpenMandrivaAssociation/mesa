@@ -1,0 +1,43 @@
+From bf25a7f59bf330652be53f3ec59093a09787071d Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Mon, 21 Aug 2023 10:44:45 +0800
+Subject: [PATCH 059/834] aco: fix assertion fail when program contains empty
+ block
+
+radeonsi may generate empty main shader or an empty exit block
+for p_end_with_regs to jump to.
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/compiler/aco_print_asm.cpp | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/amd/compiler/aco_print_asm.cpp b/src/amd/compiler/aco_print_asm.cpp
+index 3c6fac96cfc..3f7823e3d49 100644
+--- a/src/amd/compiler/aco_print_asm.cpp
++++ b/src/amd/compiler/aco_print_asm.cpp
+@@ -345,7 +345,7 @@ print_asm_llvm(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
+    unsigned prev_size = 0;
+    unsigned prev_pos = 0;
+    unsigned repeat_count = 0;
+-   while (pos < exec_size) {
++   while (pos <= exec_size) {
+       bool new_block =
+          next_block < program->blocks.size() && pos == program->blocks[next_block].offset;
+       if (pos + prev_size <= exec_size && prev_pos != pos && !new_block &&
+@@ -361,6 +361,10 @@ print_asm_llvm(Program* program, std::vector<uint32_t>& binary, unsigned exec_si
+ 
+       print_block_markers(output, program, referenced_blocks, &next_block, pos);
+ 
++      /* For empty last block, only print block marker. */
++      if (pos == exec_size)
++         break;
++
+       char outline[1024];
+       std::pair<bool, size_t> res = disasm_instr(program->gfx_level, disasm, binary.data(),
+                                                  exec_size, pos, outline, sizeof(outline));
+-- 
+2.42.0
+

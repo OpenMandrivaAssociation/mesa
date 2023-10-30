@@ -1,0 +1,55 @@
+From 663ad191ca2f1bc02a176fecb8f596ff32b66b47 Mon Sep 17 00:00:00 2001
+From: Helen Koike <helen.koike@collabora.com>
+Date: Tue, 3 Oct 2023 11:28:26 -0300
+Subject: [PATCH 712/834] ci/ci_run_n_monitor: print job duration time
+
+If the job is running, it prints the elapsed time so far, if it finished
+already, it prints the time it took.
+
+Signed-off-by: Helen Koike <helen.koike@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25822>
+---
+ bin/ci/ci_run_n_monitor.py | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index b635d174f4d..5779e4a11d4 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -25,7 +25,12 @@ from typing import Literal, Optional
+ 
+ import gitlab
+ from colorama import Fore, Style
+-from gitlab_common import get_gitlab_project, read_token, wait_for_pipeline
++from gitlab_common import (
++    get_gitlab_project,
++    read_token,
++    wait_for_pipeline,
++    pretty_duration,
++)
+ from gitlab_gql import GitlabGQL, create_job_needs_dag, filter_dag, print_dag
+ 
+ GITLAB_URL = "https://gitlab.freedesktop.org"
+@@ -55,6 +60,11 @@ def print_job_status(job, new_status=False) -> None:
+     if job.status == "canceled":
+         return
+ 
++    if job.duration:
++        duration = job.duration
++    elif job.started_at:
++        duration = time.perf_counter() - time.mktime(job.started_at.timetuple())
++
+     print(
+         STATUS_COLORS[job.status]
+         + "🞋 job "
+@@ -62,6 +72,7 @@ def print_job_status(job, new_status=False) -> None:
+         + f"{job.web_url}\a{job.name}"
+         + URL_END
+         + (f" has new status: {job.status}" if new_status else f" :: {job.status}")
++        + (f" ({pretty_duration(duration)})" if job.started_at else "")
+         + Style.RESET_ALL
+     )
+ 
+-- 
+2.42.0
+

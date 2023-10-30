@@ -1,0 +1,133 @@
+From 25d348d040d834405d62c8835744a212dae10168 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 27 Sep 2023 09:16:01 -0400
+Subject: [PATCH 384/834] zink: eliminate samplers from no-sampler CL texops
+
+samplers aren't guaranteed to be provided by no-sampler ops in CL,
+so flagging them as extant may read from a null sampler and explode
+
+instead just pass the image through directly in the spirv
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ .../drivers/zink/nir_to_spirv/nir_to_spirv.c  | 16 ++++---
+ src/gallium/drivers/zink/zink_compiler.c      | 46 ++-----------------
+ 2 files changed, 14 insertions(+), 48 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index 258672b8999..6f2f5c98be2 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -3686,8 +3686,12 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
+    SpvId load;
+    if (ctx->stage == MESA_SHADER_KERNEL) {
+       SpvId image_load = spirv_builder_emit_load(&ctx->builder, image_type, sampler_id);
+-      SpvId sampler_load = spirv_builder_emit_load(&ctx->builder, spirv_builder_type_sampler(&ctx->builder), ctx->cl_samplers[tex->sampler_index]);
+-      load = spirv_builder_emit_sampled_image(&ctx->builder, sampled_type, image_load, sampler_load);
++      if (nir_tex_instr_need_sampler(tex)) {
++         SpvId sampler_load = spirv_builder_emit_load(&ctx->builder, spirv_builder_type_sampler(&ctx->builder), ctx->cl_samplers[tex->sampler_index]);
++         load = spirv_builder_emit_sampled_image(&ctx->builder, sampled_type, image_load, sampler_load);
++      } else {
++         load = image_load;
++      }
+    } else {
+       load = spirv_builder_emit_load(&ctx->builder, sampled_type, sampler_id);
+    }
+@@ -3705,7 +3709,7 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
+             tex->op == nir_texop_tex && ctx->explicit_lod && !lod)
+       lod = emit_float_const(ctx, 32, 0.0);
+    if (tex->op == nir_texop_txs) {
+-      SpvId image = is_buffer ?
++      SpvId image = is_buffer || ctx->stage == MESA_SHADER_KERNEL ?
+                     load :
+                     spirv_builder_emit_image(&ctx->builder, image_type, load);
+       /* Its Dim operand must be one of 1D, 2D, 3D, or Cube
+@@ -3726,7 +3730,7 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
+       return;
+    }
+    if (tex->op == nir_texop_query_levels) {
+-      SpvId image = is_buffer ?
++      SpvId image = is_buffer || ctx->stage == MESA_SHADER_KERNEL ?
+                     load :
+                     spirv_builder_emit_image(&ctx->builder, image_type, load);
+       SpvId result = spirv_builder_emit_image_query_levels(&ctx->builder,
+@@ -3735,7 +3739,7 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
+       return;
+    }
+    if (tex->op == nir_texop_texture_samples) {
+-      SpvId image = is_buffer ?
++      SpvId image = is_buffer || ctx->stage == MESA_SHADER_KERNEL ?
+                     load :
+                     spirv_builder_emit_image(&ctx->builder, image_type, load);
+       SpvId result = spirv_builder_emit_unop(&ctx->builder, SpvOpImageQuerySamples,
+@@ -3800,7 +3804,7 @@ emit_tex(struct ntv_context *ctx, nir_tex_instr *tex)
+    if (tex->op == nir_texop_txf ||
+        tex->op == nir_texop_txf_ms ||
+        tex->op == nir_texop_tg4) {
+-      SpvId image = is_buffer ?
++      SpvId image = is_buffer || ctx->stage == MESA_SHADER_KERNEL ?
+                     load :
+                     spirv_builder_emit_image(&ctx->builder, image_type, load);
+ 
+diff --git a/src/gallium/drivers/zink/zink_compiler.c b/src/gallium/drivers/zink/zink_compiler.c
+index 7dd83c63d05..9193a938825 100644
+--- a/src/gallium/drivers/zink/zink_compiler.c
++++ b/src/gallium/drivers/zink/zink_compiler.c
+@@ -4831,50 +4831,12 @@ type_sampler_vars(nir_shader *nir, unsigned *sampler_mask)
+             if (instr->type != nir_instr_type_tex)
+                continue;
+             nir_tex_instr *tex = nir_instr_as_tex(instr);
+-            switch (tex->op) {
+-            case nir_texop_lod:
+-            case nir_texop_txs:
+-            case nir_texop_query_levels:
+-            case nir_texop_texture_samples:
+-            case nir_texop_samples_identical:
+-               continue;
+-            default:
+-               break;
+-            }
+-            *sampler_mask |= BITFIELD_BIT(tex->sampler_index);
+-            nir_variable *var = nir_find_sampler_variable_with_tex_index(nir, tex->texture_index);
+-            assert(var);
+-            if (glsl_get_sampler_result_type(glsl_without_array(var->type)) != GLSL_TYPE_VOID)
+-               continue;
+-            const struct glsl_type *img_type = glsl_sampler_type(glsl_get_sampler_dim(glsl_without_array(var->type)), tex->is_shadow, tex->is_array, nir_get_glsl_base_type_for_nir_type(tex->dest_type));
+-            unsigned size = glsl_type_is_array(var->type) ? glsl_array_size(var->type) : 1;
+-            if (size > 1)
+-               img_type = glsl_array_type(img_type, size, 0);
+-            var->type = img_type;
+-            progress = true;
+-         }
+-      }
+-   }
+-   nir_foreach_function_impl(impl, nir) {
+-      nir_foreach_block(block, impl) {
+-         nir_foreach_instr(instr, block) {
+-            if (instr->type != nir_instr_type_tex)
+-               continue;
+-            nir_tex_instr *tex = nir_instr_as_tex(instr);
+-            switch (tex->op) {
+-            case nir_texop_lod:
+-            case nir_texop_txs:
+-            case nir_texop_query_levels:
+-            case nir_texop_texture_samples:
+-            case nir_texop_samples_identical:
+-               break;
+-            default:
+-               continue;
+-            }
+-            *sampler_mask |= BITFIELD_BIT(tex->sampler_index);
++            if (nir_tex_instr_need_sampler(tex))
++               *sampler_mask |= BITFIELD_BIT(tex->sampler_index);
+             nir_variable *var = nir_find_sampler_variable_with_tex_index(nir, tex->texture_index);
+             assert(var);
+-            if (glsl_get_sampler_result_type(glsl_without_array(var->type)) != GLSL_TYPE_VOID)
++            if (glsl_get_sampler_result_type(glsl_without_array(var->type)) != GLSL_TYPE_VOID &&
++                nir_tex_instr_is_query(tex))
+                continue;
+             const struct glsl_type *img_type = glsl_sampler_type(glsl_get_sampler_dim(glsl_without_array(var->type)), tex->is_shadow, tex->is_array, nir_get_glsl_base_type_for_nir_type(tex->dest_type));
+             unsigned size = glsl_type_is_array(var->type) ? glsl_array_size(var->type) : 1;
+-- 
+2.42.0
+

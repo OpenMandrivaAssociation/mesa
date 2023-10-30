@@ -1,0 +1,55 @@
+From 11f31f137c43d98a1bf62ad838755d0d807351ad Mon Sep 17 00:00:00 2001
+From: Lina Versace <linyaa@google.com>
+Date: Fri, 4 Aug 2023 09:35:58 -0700
+Subject: [PATCH 555/834] venus: Erase pViewports and pScissors in fewer cases
+
+We should avoid erasing VkGraphicsPipelineCreateInfo when possible
+because the erasure add cpu overhead. Do not erase pViewports if
+viewportCount is 0. Do not erase pScissors if scissorCount is 0.
+
+Signed-off-by: Lina Versace <linyaa@google.com>
+Reviewed-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/22419>
+---
+ src/virtio/vulkan/vn_pipeline.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_pipeline.c b/src/virtio/vulkan/vn_pipeline.c
+index 7ac9404c57f..2da42c890ad 100644
+--- a/src/virtio/vulkan/vn_pipeline.c
++++ b/src/virtio/vulkan/vn_pipeline.c
+@@ -557,11 +557,12 @@ vn_fix_graphics_pipeline_create_info(
+       /* Ignore pViewports?
+        *    VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-04130
+        *
+-       * Even if pViewportState is non-null, we must not dereference it if it
+-       * is ignored.
++       * If viewportCount is 0, then venus encoder will ignore pViewports and
++       * we do not need to erase it.
+        */
+       if (!fix.ignore_viewport_state && info->pViewportState &&
+-          info->pViewportState->pViewports) {
++          info->pViewportState->pViewports &&
++          info->pViewportState->viewportCount) {
+          const bool has_dynamic_viewport =
+             has_pre_raster_state && (has_dynamic_state.viewport ||
+                                      has_dynamic_state.viewport_with_count);
+@@ -575,11 +576,12 @@ vn_fix_graphics_pipeline_create_info(
+       /* Ignore pScissors?
+        *    VUID-VkGraphicsPipelineCreateInfo-pDynamicStates-04131
+        *
+-       * Even if pViewportState is non-null, we must not dereference it if it
+-       * is ignored.
++       * If scissorCount is 0, then venus encoder will ignore pScissors and we
++       * do not need to erase it.
+        */
+       if (!fix.ignore_viewport_state && info->pViewportState &&
+-          info->pViewportState->pScissors) {
++          info->pViewportState->pScissors &&
++          info->pViewportState->scissorCount) {
+          const bool has_dynamic_scissor =
+             has_pre_raster_state && (has_dynamic_state.scissor ||
+                                      has_dynamic_state.scissor_with_count);
+-- 
+2.42.0
+

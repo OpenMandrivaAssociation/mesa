@@ -1,0 +1,40 @@
+From 5f16f52dfa761f6cff64d61f21671b3da33c1254 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Mon, 16 Oct 2023 13:23:24 -0400
+Subject: [PATCH 518/834] zink: fix readback_present locking
+
+queue needs to always be locked and presentation fence should be waited on
+
+cc: mesa-stable
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25754>
+---
+ src/gallium/drivers/zink/zink_kopper.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/zink_kopper.c b/src/gallium/drivers/zink/zink_kopper.c
+index ca3c389d513..115737463c6 100644
+--- a/src/gallium/drivers/zink/zink_kopper.c
++++ b/src/gallium/drivers/zink/zink_kopper.c
+@@ -882,11 +882,18 @@ zink_kopper_present_readback(struct zink_context *ctx, struct zink_resource *res
+    si.waitSemaphoreCount = !!acquire;
+    si.pWaitSemaphores = &acquire;
+    si.pSignalSemaphores = &present;
++   simple_mtx_lock(&screen->queue_lock);
+    VkResult error = VKSCR(QueueSubmit)(screen->queue, 1, &si, VK_NULL_HANDLE);
++   simple_mtx_unlock(&screen->queue_lock);
+    if (!zink_screen_handle_vkresult(screen, error))
+       return false;
+ 
+    zink_kopper_present_queue(screen, res);
++   if (util_queue_is_initialized(&screen->flush_queue)) {
++      struct kopper_displaytarget *cdt = res->obj->dt;
++      util_queue_fence_wait(&cdt->swapchain->present_fence);
++   }
++
+    simple_mtx_lock(&screen->queue_lock);
+    error = VKSCR(QueueWaitIdle)(screen->queue);
+    simple_mtx_unlock(&screen->queue_lock);
+-- 
+2.42.0
+

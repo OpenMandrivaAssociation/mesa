@@ -1,0 +1,87 @@
+From 1febb6f7626747f64e8c2b6c059df78163a979a8 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Tue, 10 Oct 2023 10:44:00 +0200
+Subject: [PATCH 822/834] radv: report the last GPUVM fault when a device lost
+ is detected
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/23238>
+---
+ src/amd/vulkan/radv_debug.c  |  2 +-
+ src/amd/vulkan/radv_debug.h  |  2 ++
+ src/amd/vulkan/radv_device.c | 22 +++++++++++++++++++---
+ 3 files changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_debug.c b/src/amd/vulkan/radv_debug.c
+index cda92da182a..e27235d919d 100644
+--- a/src/amd/vulkan/radv_debug.c
++++ b/src/amd/vulkan/radv_debug.c
+@@ -694,7 +694,7 @@ radv_gpu_hang_occurred(struct radv_queue *queue, enum amd_ip_type ring)
+    return false;
+ }
+ 
+-static bool
++bool
+ radv_vm_fault_occurred(struct radv_device *device, struct radv_winsys_gpuvm_fault_info *fault_info)
+ {
+    if (!device->physical_device->rad_info.has_gpuvm_fault_query)
+diff --git a/src/amd/vulkan/radv_debug.h b/src/amd/vulkan/radv_debug.h
+index caa22e6e7e1..fb18bf0c8cb 100644
+--- a/src/amd/vulkan/radv_debug.h
++++ b/src/amd/vulkan/radv_debug.h
+@@ -103,4 +103,6 @@ bool radv_trap_handler_init(struct radv_device *device);
+ void radv_trap_handler_finish(struct radv_device *device);
+ void radv_check_trap_handler(struct radv_queue *queue);
+ 
++bool radv_vm_fault_occurred(struct radv_device *device, struct radv_winsys_gpuvm_fault_info *fault_info);
++
+ #endif
+diff --git a/src/amd/vulkan/radv_device.c b/src/amd/vulkan/radv_device.c
+index d13035bf4b5..4aa4b930c82 100644
+--- a/src/amd/vulkan/radv_device.c
++++ b/src/amd/vulkan/radv_device.c
+@@ -598,6 +598,17 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *ph
+    add_entrypoints(&b, &vk_common_device_entrypoints, RADV_DISPATCH_TABLE_COUNT);
+ }
+ 
++static void
++radv_report_gpuvm_fault(struct radv_device *device)
++{
++   struct radv_winsys_gpuvm_fault_info fault_info = {0};
++
++   if (!radv_vm_fault_occurred(device, &fault_info))
++      return;
++
++   fprintf(stderr, "radv: GPUVM fault detected at address 0x%08" PRIx64 ".\n", fault_info.addr);
++}
++
+ static VkResult
+ radv_check_status(struct vk_device *vk_device)
+ {
+@@ -612,15 +623,20 @@ radv_check_status(struct vk_device *vk_device)
+       if (device->hw_ctx[i]) {
+          status = device->ws->ctx_query_reset_status(device->hw_ctx[i]);
+ 
+-         if (status == RADV_GUILTY_CONTEXT_RESET)
++         if (status == RADV_GUILTY_CONTEXT_RESET) {
++            radv_report_gpuvm_fault(device);
+             return vk_device_set_lost(&device->vk, "GPU hung detected in this process");
+-         else if (status == RADV_INNOCENT_CONTEXT_RESET)
++         } else if (status == RADV_INNOCENT_CONTEXT_RESET) {
+             context_reset = true;
++         }
+       }
+    }
+ 
+-   if (context_reset)
++   if (context_reset) {
++      radv_report_gpuvm_fault(device);
+       return vk_device_set_lost(&device->vk, "GPU hung triggered by other process");
++   }
++
+    return VK_SUCCESS;
+ }
+ 
+-- 
+2.42.0
+

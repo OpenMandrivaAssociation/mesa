@@ -1,0 +1,278 @@
+From 454870dd5f1574adc2cc0edc637c8974ebb63602 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sun, 24 Sep 2023 10:45:31 +0300
+Subject: [PATCH 639/834] anv: merge gfx9/11 indirect draw generation shaders
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/anv_internal_kernels.c       | 18 ++--
+ .../vulkan/genX_cmd_draw_generated_indirect.h |  3 +-
+ ...erated_draws.glsl => generated_draws.glsl} | 57 +++++++++++-
+ .../vulkan/shaders/gfx11_generated_draws.glsl | 89 -------------------
+ src/intel/vulkan/shaders/interface.h          |  2 +-
+ src/intel/vulkan/shaders/meson.build          |  3 +-
+ 6 files changed, 65 insertions(+), 107 deletions(-)
+ rename src/intel/vulkan/shaders/{gfx9_generated_draws.glsl => generated_draws.glsl} (71%)
+ delete mode 100644 src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+
+diff --git a/src/intel/vulkan/anv_internal_kernels.c b/src/intel/vulkan/anv_internal_kernels.c
+index ade3795b90d..184d757fb36 100644
+--- a/src/intel/vulkan/anv_internal_kernels.c
++++ b/src/intel/vulkan/anv_internal_kernels.c
+@@ -33,8 +33,7 @@
+ 
+ #include "anv_internal_kernels.h"
+ 
+-#include "shaders/gfx9_generated_draws_spv.h"
+-#include "shaders/gfx11_generated_draws_spv.h"
++#include "shaders/generated_draws_spv.h"
+ #include "shaders/query_copy_compute_spv.h"
+ #include "shaders/query_copy_fragment_spv.h"
+ #include "shaders/memcpy_compute_spv.h"
+@@ -348,15 +347,12 @@ anv_device_init_internal_kernels(struct anv_device *device)
+             .name    = "anv-generated-indirect-draws",
+          },
+          .stage      = MESA_SHADER_FRAGMENT,
+-         .spirv_data = device->info->ver >= 11 ?
+-                       gfx11_generated_draws_spv_source :
+-                       gfx9_generated_draws_spv_source,
+-         .spirv_size = device->info->ver >= 11 ?
+-                       ARRAY_SIZE(gfx11_generated_draws_spv_source) :
+-                       ARRAY_SIZE(gfx9_generated_draws_spv_source),
+-         .send_count = device->info->ver >= 11 ?
+-                       14 /* 2 * (2 loads + 3 stores) + 1 load + 3 store */ :
+-                       20 /* 2 * (2 loads + 6 stores) + 1 load + 3 store */,
++         .spirv_data = generated_draws_spv_source,
++         .spirv_size = ARRAY_SIZE(generated_draws_spv_source),
++         .send_count = /* 2 * (2 loads + 3 stores) +  ** gfx11 **
++                        * 2 * (2 loads + 6 stores) +  ** gfx9  **
++                        * 1 load + 3 store
++                        */ 29,
+          .bind_map   = {
+             .num_bindings = 5,
+             .bindings     = {
+diff --git a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+index 2928e674090..7eb19307d56 100644
+--- a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
++++ b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+@@ -92,7 +92,8 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+                                    (!anv_address_is_null(count_addr) ?
+                                     ANV_GENERATED_FLAG_COUNT : 0) |
+                                    (ring_count != 0 ? ANV_GENERATED_FLAG_RING_MODE : 0) |
+-                                   ((generated_cmd_stride / 4) << 16),
++                                   ((generated_cmd_stride / 4) << 16) |
++                                   device->info->ver << 24,
+          .draw_base              = item_base,
+          .max_draw_count         = max_count,
+          .ring_count             = ring_count,
+diff --git a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl b/src/intel/vulkan/shaders/generated_draws.glsl
+similarity index 71%
+rename from src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+rename to src/intel/vulkan/shaders/generated_draws.glsl
+index 9024f09cd13..148f286b52d 100644
+--- a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/generated_draws.glsl
+@@ -27,7 +27,53 @@
+ 
+ #include "common_generated_draws.glsl"
+ 
+-void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
++void gfx11_write_draw(uint item_idx, uint cmd_idx, uint draw_id)
++{
++   bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
++   bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
++   uint indirect_data_offset = draw_id * params.indirect_data_stride / 4;
++
++   if (is_indexed) {
++      /* Loading a VkDrawIndexedIndirectCommand */
++      uint index_count    = indirect_data[indirect_data_offset + 0];
++      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
++      uint first_index    = indirect_data[indirect_data_offset + 2];
++      uint vertex_offset  = indirect_data[indirect_data_offset + 3];
++      uint first_instance = indirect_data[indirect_data_offset + 4];
++
++      write_3DPRIMITIVE_EXTENDED(cmd_idx,
++                                 is_predicated,
++                                 is_indexed,
++                                 index_count,
++                                 first_index,
++                                 instance_count,
++                                 first_instance,
++                                 vertex_offset,
++                                 vertex_offset,
++                                 first_instance,
++                                 draw_id);
++   } else {
++      /* Loading a VkDrawIndirectCommand structure */
++      uint vertex_count   = indirect_data[indirect_data_offset + 0];
++      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
++      uint first_vertex   = indirect_data[indirect_data_offset + 2];
++      uint first_instance = indirect_data[indirect_data_offset + 3];
++
++      write_3DPRIMITIVE_EXTENDED(cmd_idx,
++                                 is_predicated,
++                                 is_indexed,
++                                 vertex_count,
++                                 first_vertex,
++                                 instance_count,
++                                 first_instance,
++                                 0 /* base_vertex_location */,
++                                 first_vertex,
++                                 first_instance,
++                                 draw_id);
++   }
++}
++
++void gfx9_write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ {
+    bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
+    bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
+@@ -135,13 +181,18 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ void main()
+ {
+    uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
++   uint gfx_ver = (params.flags >> 24) & 0xff;
+    uint item_idx = uint(gl_FragCoord.y) * 8192 + uint(gl_FragCoord.x);
+    uint cmd_idx = item_idx * _3dprim_dw_size;
+    uint draw_id = params.draw_base + item_idx;
+    uint draw_count = _draw_count;
+ 
+-   if (draw_id < min(draw_count, params.max_draw_count))
+-      write_draw(item_idx, cmd_idx, draw_id);
++   if (draw_id < min(draw_count, params.max_draw_count)) {
++      if (gfx_ver == 9)
++         gfx9_write_draw(item_idx, cmd_idx, draw_id);
++      else
++         gfx11_write_draw(item_idx, cmd_idx, draw_id);
++   }
+ 
+    end_generated_draws(item_idx, cmd_idx, draw_id, draw_count);
+ }
+diff --git a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+deleted file mode 100644
+index dca89fc9cec..00000000000
+--- a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
++++ /dev/null
+@@ -1,89 +0,0 @@
+-/*
+- * Copyright © 2022 Intel Corporation
+- *
+- * Permission is hereby granted, free of charge, to any person obtaining a
+- * copy of this software and associated documentation files (the "Software"),
+- * to deal in the Software without restriction, including without limitation
+- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+- * and/or sell copies of the Software, and to permit persons to whom the
+- * Software is furnished to do so, subject to the following conditions:
+- *
+- * The above copyright notice and this permission notice (including the next
+- * paragraph) shall be included in all copies or substantial portions of the
+- * Software.
+- *
+- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+- * IN THE SOFTWARE.
+- */
+-
+-#version 450
+-#extension GL_ARB_gpu_shader_int64 : enable
+-#extension GL_GOOGLE_include_directive : enable
+-
+-#include "common_generated_draws.glsl"
+-
+-void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+-{
+-   bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
+-   bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
+-   uint indirect_data_offset = draw_id * params.indirect_data_stride / 4;
+-
+-   if (is_indexed) {
+-      /* Loading a VkDrawIndexedIndirectCommand */
+-      uint index_count    = indirect_data[indirect_data_offset + 0];
+-      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
+-      uint first_index    = indirect_data[indirect_data_offset + 2];
+-      uint vertex_offset  = indirect_data[indirect_data_offset + 3];
+-      uint first_instance = indirect_data[indirect_data_offset + 4];
+-
+-      write_3DPRIMITIVE_EXTENDED(cmd_idx,
+-                                 is_predicated,
+-                                 is_indexed,
+-                                 index_count,
+-                                 first_index,
+-                                 instance_count,
+-                                 first_instance,
+-                                 vertex_offset,
+-                                 vertex_offset,
+-                                 first_instance,
+-                                 draw_id);
+-   } else {
+-      /* Loading a VkDrawIndirectCommand structure */
+-      uint vertex_count   = indirect_data[indirect_data_offset + 0];
+-      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
+-      uint first_vertex   = indirect_data[indirect_data_offset + 2];
+-      uint first_instance = indirect_data[indirect_data_offset + 3];
+-
+-      write_3DPRIMITIVE_EXTENDED(cmd_idx,
+-                                 is_predicated,
+-                                 is_indexed,
+-                                 vertex_count,
+-                                 first_vertex,
+-                                 instance_count,
+-                                 first_instance,
+-                                 0 /* base_vertex_location */,
+-                                 first_vertex,
+-                                 first_instance,
+-                                 draw_id);
+-   }
+-}
+-
+-
+-void main()
+-{
+-   uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
+-   uint item_idx = uint(gl_FragCoord.y) * 8192 + uint(gl_FragCoord.x);
+-   uint cmd_idx = item_idx * _3dprim_dw_size;
+-   uint draw_id = params.draw_base + item_idx;
+-   uint draw_count = _draw_count;
+-
+-   if (draw_id < min(draw_count, params.max_draw_count))
+-      write_draw(item_idx, cmd_idx, draw_id);
+-
+-   end_generated_draws(item_idx, cmd_idx, draw_id, draw_count);
+-}
+diff --git a/src/intel/vulkan/shaders/interface.h b/src/intel/vulkan/shaders/interface.h
+index 7acefe83cda..e735b75ae97 100644
+--- a/src/intel/vulkan/shaders/interface.h
++++ b/src/intel/vulkan/shaders/interface.h
+@@ -54,7 +54,7 @@ struct anv_generated_indirect_draw_params {
+    uint64_t indirect_data_addr;
+    /* Stride between each elements of the indirect data buffer */
+    uint32_t indirect_data_stride;
+-   uint32_t flags; /* 0-7: bits, 8-15: mocs, 16-23: cmd_dws */
++   uint32_t flags; /* 0-7: bits, 8-15: mocs, 16-23: cmd_dws, 24-31: gfx_ver */
+    /* Base number of the draw ID, it is added to the index computed from the
+     * gl_FragCoord
+     */
+diff --git a/src/intel/vulkan/shaders/meson.build b/src/intel/vulkan/shaders/meson.build
+index 2275ff3b6d6..7586babf5f2 100644
+--- a/src/intel/vulkan/shaders/meson.build
++++ b/src/intel/vulkan/shaders/meson.build
+@@ -33,8 +33,7 @@ float64_spv_h = custom_target(
+ )
+ 
+ anv_internal_shaders = [
+-  [ 'gfx9_generated_draws.glsl',  'frag' ],
+-  [ 'gfx11_generated_draws.glsl', 'frag' ],
++  [ 'generated_draws.glsl',       'frag' ],
+   [ 'query_copy_compute.glsl',    'comp' ],
+   [ 'query_copy_fragment.glsl',   'frag' ],
+   [ 'memcpy_compute.glsl',        'comp' ],
+-- 
+2.42.0
+

@@ -1,0 +1,55 @@
+From 3325b4778af74af218899c25413ad0c14e98cf5a Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Fri, 30 Jun 2023 09:10:56 -0400
+Subject: [PATCH 103/834] nir: Add ACCESS_CAN_SPECULATE
+
+Determining whether it is safe to hoist a load instruction out of control flow
+depends on complex hardware and driver details. Rather than encoding this as
+knobs in every NIR pass that wants to do so (notably nir_opt_preamble and
+nir_opt_peephole_select), add a per-load ACCESS flag for backends to set.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Connor Abbott <cwabbott0@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/compiler/nir/nir_print.c |  1 +
+ src/compiler/shader_enums.h  | 11 +++++++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/src/compiler/nir/nir_print.c b/src/compiler/nir/nir_print.c
+index 56d280cbb6d..6c7bc824798 100644
+--- a/src/compiler/nir/nir_print.c
++++ b/src/compiler/nir/nir_print.c
+@@ -802,6 +802,7 @@ print_access(enum gl_access_qualifier access, print_state *state, const char *se
+       { ACCESS_NON_WRITEABLE, "readonly" },
+       { ACCESS_NON_READABLE, "writeonly" },
+       { ACCESS_CAN_REORDER, "reorderable" },
++      { ACCESS_CAN_SPECULATE, "speculatable" },
+       { ACCESS_NON_TEMPORAL, "non-temporal" },
+       { ACCESS_INCLUDE_HELPERS, "include-helpers" },
+    };
+diff --git a/src/compiler/shader_enums.h b/src/compiler/shader_enums.h
+index 31e8ebb897c..a49f4be992a 100644
+--- a/src/compiler/shader_enums.h
++++ b/src/compiler/shader_enums.h
+@@ -1111,6 +1111,17 @@ enum gl_access_qualifier
+     * from fragment mask buffer.
+     */
+    ACCESS_FMASK_LOWERED_AMD = (1 << 11),
++
++   /**
++    * Whether it is safe to speculatively execute this load. This allows
++    * hoisting loads out of conditional control flow (including out of software
++    * bounds checks). Setting this optimally depends on knowledge of the
++    * hardware. Speculation is safe if out-of-bounds access does not trigger
++    * undefined behaviour (even though the returned value of the speculated load
++    * is bogus). This is the case if there is hardware-level bounds checking, or
++    * if MMU faults are suppressed for the load.
++    */
++   ACCESS_CAN_SPECULATE = (1 << 12),
+ };
+ 
+ /**
+-- 
+2.42.0
+

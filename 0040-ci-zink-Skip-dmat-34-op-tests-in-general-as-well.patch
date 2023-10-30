@@ -1,0 +1,33 @@
+From e25f5875bdd113502ec3ca8369acbe2270cdd047 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Mon, 9 Oct 2023 16:50:51 -0700
+Subject: [PATCH 040/834] ci/zink: Skip dmat[34] op tests in general, as well
+
+More "make full-run zink CI take less time".  You still get dmat2 to see
+if double matrices work at all.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25626>
+---
+ src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt b/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
+index 28eb2dbdfe0..f7a8ff6d322 100644
+--- a/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
++++ b/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
+@@ -18,11 +18,7 @@ KHR-GL46.direct_state_access.framebuffers_texture_layer_attachment
+ glx@glx-visuals-depth$
+ glx@glx-visuals-stencil$
+ 
+-.*built-in-functions@.*-inverse-dmat3
+-.*built-in-functions@.*-inverse-dmat4
+-.*built-in-functions@.*-op-mult-dmat4-dmat4
+-.*built-in-functions@.*-op-mult-dmat4x3-dmat4
+-.*built-in-functions@.*-op-mult-dmat3x4-dmat4x3
++.*built-in-functions@.*dmat[34].*
+ .*built-in-functions@.*-op-div-.*dmat.*
+ .*built-in-functions@fs-mod-dvec4-dvec4
+ .*fs-isnan-dvec
+-- 
+2.42.0
+

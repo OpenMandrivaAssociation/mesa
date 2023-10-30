@@ -1,0 +1,80 @@
+From 29352b304bf6362f4aa3f26bfb86fd12e09379bd Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Tue, 3 Oct 2023 19:39:07 +0300
+Subject: [PATCH 157/834] anv: add support for VK_EXT_nested_command_buffer
+
+Our implementation of secondary command buffers already jumps into
+them and edits the end of the secondary command buffer to jump back
+into the primary.
+
+That implementation can work just the same with any levels of
+secondary. The only possible issue would happen with a secondary
+calling itself, but that's not possible.
+
+We also cannot support simultaneous execution with self-modifying
+command buffers. That's actually not a problem at the moment because
+we don't have multiple queues of the same family but we choose to
+reflect that in the feature bits.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-By: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25600>
+---
+ src/intel/vulkan/anv_device.c      | 13 +++++++++++++
+ src/intel/vulkan/genX_cmd_buffer.c |  2 --
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index 99bb3cb1829..93092047f62 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -347,6 +347,7 @@ get_device_extensions(const struct anv_physical_device *device,
+                                                device->sys.available,
+       .EXT_mesh_shader                       = device->info.has_mesh_shading,
+       .EXT_mutable_descriptor_type           = true,
++      .EXT_nested_command_buffer             = true,
+       .EXT_non_seamless_cube_map             = true,
+       .EXT_pci_bus_info                      = true,
+       .EXT_physical_device_drm               = true,
+@@ -846,6 +847,11 @@ get_features(const struct anv_physical_device *pdevice,
+ 
+       /* VK_KHR_maintenance5 */
+       .maintenance5 = true,
++
++      /* VK_EXT_nested_command_buffer */
++      .nestedCommandBuffer = true,
++      .nestedCommandBufferRendering = true,
++      .nestedCommandBufferSimultaneousUse = false,
+    };
+ 
+    /* The new DOOM and Wolfenstein games require depthBounds without
+@@ -2454,6 +2460,13 @@ void anv_GetPhysicalDeviceProperties2(
+          break;
+       }
+ 
++      case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_NESTED_COMMAND_BUFFER_PROPERTIES_EXT: {
++         VkPhysicalDeviceNestedCommandBufferPropertiesEXT *properties =
++            (VkPhysicalDeviceNestedCommandBufferPropertiesEXT *)ext;
++         properties->maxCommandBufferNestingLevel = UINT32_MAX;
++         break;
++      }
++
+       case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_PROPERTIES_KHR: {
+          VkPhysicalDevicePerformanceQueryPropertiesKHR *properties =
+             (VkPhysicalDevicePerformanceQueryPropertiesKHR *)ext;
+diff --git a/src/intel/vulkan/genX_cmd_buffer.c b/src/intel/vulkan/genX_cmd_buffer.c
+index 5a7962f4cd9..027e146624e 100644
+--- a/src/intel/vulkan/genX_cmd_buffer.c
++++ b/src/intel/vulkan/genX_cmd_buffer.c
+@@ -3657,8 +3657,6 @@ genX(CmdExecuteCommands)(
+ {
+    ANV_FROM_HANDLE(anv_cmd_buffer, container, commandBuffer);
+ 
+-   assert(container->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+-
+    if (anv_batch_has_error(&container->batch))
+       return;
+ 
+-- 
+2.42.0
+

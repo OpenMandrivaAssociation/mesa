@@ -1,0 +1,88 @@
+From fb95f1d55c70e265dd0a3cf781d2840171983744 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Thu, 19 Oct 2023 12:03:34 +0200
+Subject: [PATCH 624/834] ci_run_n_monitor: Poll mesa/mesa and user/mesa for
+ pipelines at the same time.
+
+Now you don't fail if you're trying to test a mesa/mesa MR pipeline and
+gitlab takes more than 10s to create it.  And you don't have to wait 10
+seconds to get things started (aka see if your regex was right) if you're
+testing a user/mesa fork pipeline.
+
+Fixes: 941d92408ee5 ("bin/ci_run_n_monitor: automatically pick MR pipelines when they exist")
+Closes: #9894
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25810>
+---
+ bin/ci/ci_run_n_monitor.py       | 10 +++-------
+ bin/ci/gitlab_common.py          | 16 +++++++++-------
+ bin/ci/update_traces_checksum.py |  2 +-
+ 3 files changed, 13 insertions(+), 15 deletions(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index 1dfcd654d13..253d141c535 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -327,13 +327,9 @@ if __name__ == "__main__":
+         else:
+             if not REV:
+                 REV = check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
+-            # Look for an MR pipeline first
+-            cur_project = gl.projects.get("mesa/mesa")
+-            pipe = wait_for_pipeline(cur_project, REV, timeout=10)
+-            if not pipe:
+-                # Fallback to a pipeline in the user's fork
+-                cur_project = get_gitlab_project(gl, args.project)
+-                pipe = wait_for_pipeline(cur_project, REV)
++            mesa_project = gl.projects.get("mesa/mesa")
++            user_project = get_gitlab_project(gl, args.project)
++            (pipe, cur_project) = wait_for_pipeline([mesa_project, user_project], REV)
+ 
+         print(f"Revision: {REV}")
+         print(f"Pipeline: {pipe.web_url}")
+diff --git a/bin/ci/gitlab_common.py b/bin/ci/gitlab_common.py
+index 7d20cc9df5c..758f81b56a1 100644
+--- a/bin/ci/gitlab_common.py
++++ b/bin/ci/gitlab_common.py
+@@ -34,17 +34,19 @@ def read_token(token_arg: Optional[str]) -> str:
+     )
+ 
+ 
+-def wait_for_pipeline(project, sha: str, timeout=None):
++def wait_for_pipeline(projects, sha: str, timeout=None):
+     """await until pipeline appears in Gitlab"""
+-    print(f"⏲ for the pipeline to appear in {project.path_with_namespace}..", end="")
++    project_names = [project.path_with_namespace for project in projects]
++    print(f"⏲ for the pipeline to appear in {project_names}..", end="")
+     start_time = time.time()
+     while True:
+-        pipelines = project.pipelines.list(sha=sha)
+-        if pipelines:
+-            print("", flush=True)
+-            return pipelines[0]
++        for project in projects:
++            pipelines = project.pipelines.list(sha=sha)
++            if pipelines:
++                print("", flush=True)
++                return (pipelines[0], project)
+         print("", end=".", flush=True)
+         if timeout and time.time() - start_time > timeout:
+             print(" not found", flush=True)
+-            return None
++            return (None, None)
+         time.sleep(1)
+diff --git a/bin/ci/update_traces_checksum.py b/bin/ci/update_traces_checksum.py
+index c0da34fbb52..064573d556d 100755
+--- a/bin/ci/update_traces_checksum.py
++++ b/bin/ci/update_traces_checksum.py
+@@ -134,7 +134,7 @@ if __name__ == "__main__":
+         cur_project = get_gitlab_project(gl, "mesa")
+ 
+         print(f"Revision: {args.rev}")
+-        pipe = wait_for_pipeline(cur_project, args.rev)
++        (pipe, cur_project) = wait_for_pipeline([cur_project], args.rev)
+         print(f"Pipeline: {pipe.web_url}")
+         gather_results(cur_project, pipe)
+ 
+-- 
+2.42.0
+

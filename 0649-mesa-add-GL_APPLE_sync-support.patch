@@ -1,0 +1,131 @@
+From f8753a542be07247c0894db911b945211ced2200 Mon Sep 17 00:00:00 2001
+From: Lucas Stach <dev@lynxeye.de>
+Date: Wed, 18 Oct 2023 13:55:11 +0200
+Subject: [PATCH 649/834] mesa: add GL_APPLE_sync support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This extension is a backport of GL_ARB_sync to GLES 1.1 and 2.0
+and reuses token IDs and entry point prototypes from that extension,
+so adding support is pretty trivial.
+
+Signed-off-by: Lucas Stach <dev@lynxeye.de>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25789>
+---
+ src/mapi/glapi/gen/es_EXT.xml    | 84 ++++++++++++++++++++++++++++++++
+ src/mesa/main/extensions_table.h |  1 +
+ 2 files changed, 85 insertions(+)
+
+diff --git a/src/mapi/glapi/gen/es_EXT.xml b/src/mapi/glapi/gen/es_EXT.xml
+index 7127e66d68d..5565fd4f1bf 100644
+--- a/src/mapi/glapi/gen/es_EXT.xml
++++ b/src/mapi/glapi/gen/es_EXT.xml
+@@ -856,6 +856,90 @@
+     </function>
+ </category>
+ 
++<!-- 124. GL_APPLE_sync -->
++<category name="GL_APPLE_sync" number="124">
++    <type name="int64"   size="8"                  glx_name="CARD64"/>
++    <type name="uint64"  size="8"  unsigned="true" glx_name="CARD64"/>
++    <type name="sync"    size="8"  unsigned="true" glx_name="CARD64"/>
++
++    <enum name="MAX_SERVER_WAIT_TIMEOUT_APPLE" count="1"  value="0x9111">
++        <size name="Get" mode="get"/>
++    </enum>
++    <enum name="OBJECT_TYPE_APPLE"             count="1"  value="0x9112">
++        <size name="GetSyncivAPPLE" mode="get"/>
++    </enum>
++    <enum name="SYNC_CONDITION_APPLE"          count="1"  value="0x9113">
++        <size name="GetSyncivAPPLE" mode="get"/>
++    </enum>
++    <enum name="SYNC_STATUS_APPLE"             count="1"  value="0x9114">
++        <size name="GetSyncivAPPLE" mode="get"/>
++    </enum>
++    <enum name="SYNC_FLAGS_APPLE"              count="1"  value="0x9115">
++        <size name="GetSyncivAPPLE" mode="get"/>
++    </enum>
++
++    <enum name="SYNC_FENCE_APPLE"                         value="0x9116"/>
++    <enum name="SYNC_GPU_COMMANDS_COMPLETE_APPLE"         value="0x9117"/>
++    <enum name="UNSIGNALED_APPLE"                         value="0x9118"/>
++    <enum name="SIGNALED_APPLE"                           value="0x9119"/>
++    <enum name="ALREADY_SIGNALED_APPLE"                   value="0x911A"/>
++    <enum name="TIMEOUT_EXPIRED_APPLE"                    value="0x911B"/>
++    <enum name="CONDITION_SATISFIED_APPLE"                value="0x911C"/>
++    <enum name="WAIT_FAILED_APPLE"                        value="0x911D"/>
++
++    <enum name="SYNC_FLUSH_COMMANDS_BIT_APPLE"            value="0x00000001"/>
++
++    <!-- Not really an enum:
++    <enum name="TIMEOUT_IGNORED_APPLE"            value="0xFFFFFFFFFFFFFFFF"/>
++    -->
++
++    <function name="FenceSyncAPPLE" alias="FenceSync"
++              es1="1.1" es2="2.0" no_error="true">
++        <param name="condition" type="GLenum"/>
++        <param name="flags" type="GLbitfield"/>
++        <return type="GLsync"/>
++    </function>
++
++    <function name="IsSyncAPPLE" alias="IsSync" es1="1.1" es2="2.0">
++        <param name="sync" type="GLsync"/>
++	<return type="GLboolean"/>
++    </function>
++
++    <function name="DeleteSyncAPPLE" alias="DeleteSync"
++              es1="1.1" es2="2.0" no_error="true">
++        <param name="sync" type="GLsync"/>
++    </function>
++
++    <function name="ClientWaitSyncAPPLE" alias="ClientWaitSync"
++              es1="1.1" es2="2.0" no_error="true">
++        <param name="sync" type="GLsync"/>
++        <param name="flags" type="GLbitfield"/>
++	<param name="timeout" type="GLuint64"/>
++        <return type="GLenum"/>
++    </function>
++
++    <function name="WaitSyncAPPLE" alias="WaitSync"
++              es1="1.1" es2="2.0" no_error="true" exec="dlist">
++        <param name="sync" type="GLsync"/>
++        <param name="flags" type="GLbitfield"/>
++	<param name="timeout" type="GLuint64"/>
++    </function>
++
++    <function name="GetInteger64vAPPLE" alias="GetInteger64v"
++              es1="1.1" es2="2.0">
++        <param name="pname" type="GLenum"/>
++        <param name="params" type="GLint64 *" output="true" variable_param="pname"/>
++    </function>
++
++    <function name="GetSyncivAPPLE" alias="GetSynciv" es1="1.1" es2="2.0">
++        <param name="sync" type="GLsync"/>
++        <param name="pname" type="GLenum"/>
++        <param name="bufSize" type="GLsizei"/>
++        <param name="length" type="GLsizei *" output="true"/>
++        <param name="values" type="GLint *" output="true" variable_param="pname"/>
++    </function>
++</category>
++
+ <!-- 150. GL_EXT_disjoint_timer_query -->
+ <category name="GL_EXT_disjoint_timer_query" number="150">
+     <enum name="QUERY_COUNTER_BITS_EXT"     value="0x8864"/>
+diff --git a/src/mesa/main/extensions_table.h b/src/mesa/main/extensions_table.h
+index afde488af69..2c7e31a8514 100644
+--- a/src/mesa/main/extensions_table.h
++++ b/src/mesa/main/extensions_table.h
+@@ -32,6 +32,7 @@ EXT(ANGLE_texture_compression_dxt3          , ANGLE_texture_compression_dxt
+ EXT(ANGLE_texture_compression_dxt5          , ANGLE_texture_compression_dxt          , GLL, GLC, ES1, ES2, 2011)
+ 
+ EXT(APPLE_packed_pixels                     , dummy_true                             , GLL,  x ,  x ,  x , 2002)
++EXT(APPLE_sync                              , ARB_sync                               ,  x ,  x , ES1, ES2, 2012)
+ EXT(APPLE_texture_max_level                 , dummy_true                             ,  x ,  x , ES1, ES2, 2009)
+ 
+ EXT(ARB_ES2_compatibility                   , ARB_ES2_compatibility                  , GLL, GLC,  x ,  x , 2009)
+-- 
+2.42.0
+

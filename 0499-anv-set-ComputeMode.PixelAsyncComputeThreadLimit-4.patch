@@ -1,0 +1,45 @@
+From b561bcd78c300bbd27ece05beb98320233c351be Mon Sep 17 00:00:00 2001
+From: Felix DeGrood <felix.j.degrood@intel.com>
+Date: Wed, 13 Sep 2023 20:56:59 +0000
+Subject: [PATCH 499/834] anv: set ComputeMode.PixelAsyncComputeThreadLimit = 4
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Heuristic-based optimization throttling CCS work (async compute).
+Without throttling, background compute work consumes all threads,
+deminishing performance gains by running dispatch in parallel with
+3D work.
+
+Optimization is heuristics based, meaning a workload might slow
+down when using async compute.
+
+Best value: PixelAsyncComputeThreadLimit = 4. On DG2, this
+equates to a max CCS thread occupancy of 37.5%.
+
+Reviewed-by: Sagar Ghuge <sagar.ghuge@intel.com>
+Reviewed-by: José Roberto de Souza <jose.souza@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25508>
+---
+ src/intel/vulkan/genX_init_state.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/intel/vulkan/genX_init_state.c b/src/intel/vulkan/genX_init_state.c
+index ff534193e5a..deb900753b6 100644
+--- a/src/intel/vulkan/genX_init_state.c
++++ b/src/intel/vulkan/genX_init_state.c
+@@ -654,7 +654,10 @@ init_compute_queue_state(struct anv_queue *queue)
+           ANV_PIPE_HDC_PIPELINE_FLUSH_BIT);
+    }
+ 
+-   anv_batch_emit(&batch, GENX(STATE_COMPUTE_MODE), zero);
++   anv_batch_emit(&batch, GENX(STATE_COMPUTE_MODE), cm) {
++      cm.PixelAsyncComputeThreadLimit = 4;
++      cm.PixelAsyncComputeThreadLimitMask = 0x7;
++   }
+ #endif
+ 
+    init_common_queue_state(queue, &batch);
+-- 
+2.42.0
+

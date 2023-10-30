@@ -1,0 +1,127 @@
+From ada6183d6066bea60d2a45bd7bc94c352e94fc10 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Fri, 8 Sep 2023 08:42:31 -0700
+Subject: [PATCH 788/834] compiler/types: Add glsl_simple_explicit_type() and
+ simplify glsl_simple_type()
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    |  6 +++---
+ src/compiler/glsl_types.h      | 34 ++++++++++++++++++++--------------
+ src/compiler/glsl_types_impl.h |  4 ++--
+ 3 files changed, 25 insertions(+), 19 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index e07484de433..c23495adf35 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -598,9 +598,9 @@ get_explicit_matrix_instance(unsigned int base_type, unsigned int rows, unsigned
+                              unsigned int explicit_stride, bool row_major, unsigned int explicit_alignment);
+ 
+ extern "C" const struct glsl_type *
+-glsl_simple_type(unsigned base_type, unsigned rows, unsigned columns,
+-                 unsigned explicit_stride, bool row_major,
+-                 unsigned explicit_alignment)
++glsl_simple_explicit_type(unsigned base_type, unsigned rows, unsigned columns,
++                          unsigned explicit_stride, bool row_major,
++                          unsigned explicit_alignment)
+ {
+    if (base_type == GLSL_TYPE_VOID) {
+       assert(explicit_stride == 0 && explicit_alignment == 0 && !row_major);
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 6db66a672d4..800ff62cea0 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1437,11 +1437,18 @@ const struct glsl_type *glsl_u16vec_type(unsigned components);
+ const struct glsl_type *glsl_i8vec_type(unsigned components);
+ const struct glsl_type *glsl_u8vec_type(unsigned components);
+ 
+-const struct glsl_type *glsl_simple_type(unsigned base_type, unsigned rows,
+-                                         unsigned columns,
+-                                         unsigned explicit_stride,
+-                                         bool row_major,
+-                                         unsigned explicit_alignment);
++const struct glsl_type *glsl_simple_explicit_type(unsigned base_type, unsigned rows,
++                                                  unsigned columns,
++                                                  unsigned explicit_stride,
++                                                  bool row_major,
++                                                  unsigned explicit_alignment);
++
++static inline const struct glsl_type *
++glsl_simple_type(unsigned base_type, unsigned rows, unsigned columns)
++{
++   return glsl_simple_explicit_type(base_type, rows, columns, 0, false, 0);
++}
++
+ const struct glsl_type *glsl_sampler_type(enum glsl_sampler_dim dim,
+                                           bool shadow,
+                                           bool array,
+@@ -1492,13 +1499,13 @@ const struct glsl_type *glsl_type_to_16bit(const struct glsl_type *old_type);
+ static inline const struct glsl_type *
+ glsl_scalar_type(enum glsl_base_type base_type)
+ {
+-   return glsl_simple_type(base_type, 1, 1, 0, false, 0);
++   return glsl_simple_type(base_type, 1, 1);
+ }
+ 
+ static inline const struct glsl_type *
+ glsl_vector_type(enum glsl_base_type base_type, unsigned components)
+ {
+-   const struct glsl_type *t = glsl_simple_type(base_type, components, 1, 0, false, 0);
++   const struct glsl_type *t = glsl_simple_type(base_type, components, 1);
+    assert(t != &glsl_type_builtin_error);
+    return t;
+ }
+@@ -1507,7 +1514,7 @@ static inline const struct glsl_type *
+ glsl_matrix_type(enum glsl_base_type base_type,
+                  unsigned rows, unsigned columns)
+ {
+-   const struct glsl_type *t = glsl_simple_type(base_type, rows, columns, 0, false, 0);
++   const struct glsl_type *t = glsl_simple_type(base_type, rows, columns);
+    assert(t != &glsl_type_builtin_error);
+    return t;
+ }
+@@ -1516,10 +1523,10 @@ static inline const struct glsl_type *
+ glsl_explicit_matrix_type(const struct glsl_type *mat, unsigned stride,
+                           bool row_major) {
+    assert(stride > 0);
+-   const struct glsl_type *t = glsl_simple_type(mat->base_type,
+-                                                mat->vector_elements,
+-                                                mat->matrix_columns,
+-                                                stride, row_major, 0);
++   const struct glsl_type *t = glsl_simple_explicit_type(mat->base_type,
++                                                         mat->vector_elements,
++                                                         mat->matrix_columns,
++                                                         stride, row_major, 0);
+    assert(t != &glsl_type_builtin_error);
+    return t;
+ 
+@@ -1529,8 +1536,7 @@ static inline const struct glsl_type *
+ glsl_transposed_type(const struct glsl_type *t)
+ {
+    assert(glsl_type_is_matrix(t));
+-   return glsl_simple_type(t->base_type, t->matrix_columns,
+-                           t->vector_elements, 0, false, 0);
++   return glsl_simple_type(t->base_type, t->matrix_columns, t->vector_elements);
+ }
+ 
+ static inline const struct glsl_type *
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index 17615606851..66df1da0ee5 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -111,8 +111,8 @@ glsl_type::get_instance(unsigned base_type, unsigned rows, unsigned columns,
+                         unsigned explicit_stride, bool row_major,
+                         unsigned explicit_alignment)
+ {
+-   return glsl_simple_type(base_type, rows, columns, explicit_stride,
+-                           row_major, explicit_alignment);
++   return glsl_simple_explicit_type(base_type, rows, columns, explicit_stride,
++                                    row_major, explicit_alignment);
+ }
+ 
+ inline const glsl_type *
+-- 
+2.42.0
+

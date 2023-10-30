@@ -1,0 +1,27 @@
+From 47024f22fee2dcd91beb05386f1501c8dbb453f5 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Mon, 9 Oct 2023 16:57:24 -0700
+Subject: [PATCH 041/834] ci/crocus: Disable flaky unvanquished-ultra trace
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25626>
+---
+ src/gallium/drivers/crocus/ci/traces-crocus.yml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/gallium/drivers/crocus/ci/traces-crocus.yml b/src/gallium/drivers/crocus/ci/traces-crocus.yml
+index 6c668f4b250..4da4f03293d 100644
+--- a/src/gallium/drivers/crocus/ci/traces-crocus.yml
++++ b/src/gallium/drivers/crocus/ci/traces-crocus.yml
+@@ -182,7 +182,9 @@ traces:
+     crocus-g41:
+       label: [unsupported]
+     crocus-hsw:
++      label: [skip, flakes]
+       checksum: 99b3ec85e4b9335c3cffc49a63c0c62c
++      text: "Text glyphs render incorrectly sometimes."
+   warzone2100/warzone2100-default.trace:
+     crocus-g41:
+       label: [unsupported]
+-- 
+2.42.0
+

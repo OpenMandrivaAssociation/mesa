@@ -1,0 +1,32 @@
+From 8df8d1e2f284a9b0953851344925dc3e593e994c Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Sun, 1 Oct 2023 09:50:41 -0400
+Subject: [PATCH 211/834] nir/opt_algebraic: Reduce int64
+
+If we just want the bottom 32-bits we don't need a full 64-bit operation.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25625>
+---
+ src/compiler/nir/nir_opt_algebraic.py | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/compiler/nir/nir_opt_algebraic.py b/src/compiler/nir/nir_opt_algebraic.py
+index a30eae0e5c9..22a1859ef48 100644
+--- a/src/compiler/nir/nir_opt_algebraic.py
++++ b/src/compiler/nir/nir_opt_algebraic.py
+@@ -1750,6 +1750,10 @@ optimizations.extend([
+    (('extract_u8', ('pack_32_4x8_split', a, b, c, d), 1), ('u2u', b)),
+    (('extract_u8', ('pack_32_4x8_split', a, b, c, d), 2), ('u2u', c)),
+    (('extract_u8', ('pack_32_4x8_split', a, b, c, d), 3), ('u2u', d)),
++
++   # Reduce intermediate precision with int64.
++   (('u2u32', ('iadd(is_used_once)', 'a@64', b)),
++    ('iadd', ('u2u32', a), ('u2u32', b))),
+ ])
+ 
+ # After the ('extract_u8', a, 0) pattern, above, triggers, there will be
+-- 
+2.42.0
+

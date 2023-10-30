@@ -1,0 +1,36 @@
+From f9e7997ac8b05177238855f0c5ea92a043a82115 Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Fri, 6 Oct 2023 11:22:50 +1000
+Subject: [PATCH 074/834] lavapipe: support host image copying on compressed
+ texture formats
+
+dEQP-VK.image.host_image_copy.query.linear.bc5_snorm_block,Fail
+dEQP-VK.image.host_image_copy.query.linear.bc7_unorm_block,Fail
+dEQP-VK.image.host_image_copy.query.optimal.bc5_snorm_block,Fail
+dEQP-VK.image.host_image_copy.query.optimal.bc7_unorm_block,Fail
+
+Fixes: 9e9d90c6c381 ("lavapipe: VK_EXT_host_image_copy")
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/frontends/lavapipe/lvp_formats.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/lavapipe/lvp_formats.c b/src/gallium/frontends/lavapipe/lvp_formats.c
+index 071657ea600..14d05d0343a 100644
+--- a/src/gallium/frontends/lavapipe/lvp_formats.c
++++ b/src/gallium/frontends/lavapipe/lvp_formats.c
+@@ -101,7 +101,8 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
+                       VK_FORMAT_FEATURE_2_BLIT_SRC_BIT |
+                       VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
+                       VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT |
+-                      VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
++                      VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
++                      VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT);
+       }
+       out_properties->linearTilingFeatures = features;
+       out_properties->optimalTilingFeatures = features;
+-- 
+2.42.0
+

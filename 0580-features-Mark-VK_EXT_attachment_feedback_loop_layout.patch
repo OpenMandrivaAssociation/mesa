@@ -1,0 +1,28 @@
+From b80575a38acaea2c8e949d200d20600a7f51d1bd Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Thu, 19 Oct 2023 07:53:52 -0500
+Subject: [PATCH 580/834] features: Mark VK_EXT_attachment_feedback_loop_layout
+ done for NVK
+
+Fixes: c93b30daa373 ("nvk: Advertise VK_EXT_attachment_feedback_loop_layout")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25812>
+---
+ docs/features.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index 4e2e3409122..283a9a90357 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -542,7 +542,7 @@ Khronos extensions that are not part of any Vulkan version:
+   VK_KHR_xlib_surface                                   DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+   VK_EXT_acquire_xlib_display                           DONE (anv, lvp, radv, tu, v3dv)
+   VK_EXT_attachment_feedback_loop_dynamic_state         DONE (lvp, radv)
+-  VK_EXT_attachment_feedback_loop_layout                DONE (lvp, radv, tu, v3dv)
++  VK_EXT_attachment_feedback_loop_layout                DONE (lvp, nvk, radv, tu, v3dv)
+   VK_EXT_border_color_swizzle                           DONE (anv, hasvk, lvp, nvk, radv/gfx10+, tu, v3dv, vn)
+   VK_EXT_buffer_device_address                          DONE (anv/gen8+, hasvk, nvk, radv)
+   VK_EXT_calibrated_timestamps                          DONE (anv, hasvk, lvp, radv, vn)
+-- 
+2.42.0
+

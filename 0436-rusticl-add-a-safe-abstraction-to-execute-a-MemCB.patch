@@ -1,0 +1,73 @@
+From 8b1d73ff23fd7c7a50205a8ded1f2aac931119df Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Thu, 12 Oct 2023 20:15:47 +0200
+Subject: [PATCH 436/834] rusticl: add a safe abstraction to execute a MemCB
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/types.rs   | 10 ++++++++++
+ src/gallium/frontends/rusticl/core/memory.rs | 12 +++++-------
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 0b5177acc70..cad831cc264 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -2,6 +2,7 @@ use crate::api::icd::CLResult;
+ use crate::api::icd::ReferenceCountedAPIPointer;
+ use crate::core::context::Context;
+ use crate::core::event::Event;
++use crate::core::memory::Mem;
+ 
+ use rusticl_opencl_gen::*;
+ 
+@@ -146,6 +147,15 @@ cl_callback!(
+     }
+ );
+ 
++impl MemCB {
++    pub fn call(self, mem: &Mem) {
++        let cl = cl_mem::from_ptr(mem);
++        // SAFETY: `cl` must have pointed to an OpenCL context, which is where we just got it from.
++        // All other requirements are covered by this callback's type invariants.
++        unsafe { (self.func)(cl, self.data) };
++    }
++}
++
+ cl_callback!(
+     ProgramCB(FuncProgramCB) {
+         program: cl_program,
+diff --git a/src/gallium/frontends/rusticl/core/memory.rs b/src/gallium/frontends/rusticl/core/memory.rs
+index a6b4ddb4d4c..c7f3c3b888f 100644
+--- a/src/gallium/frontends/rusticl/core/memory.rs
++++ b/src/gallium/frontends/rusticl/core/memory.rs
+@@ -21,6 +21,7 @@ use std::cmp;
+ use std::collections::hash_map::Entry;
+ use std::collections::HashMap;
+ use std::convert::TryInto;
++use std::mem;
+ use std::mem::size_of;
+ use std::ops::AddAssign;
+ use std::os::raw::c_void;
+@@ -1234,13 +1235,10 @@ impl Mem {
+ 
+ impl Drop for Mem {
+     fn drop(&mut self) {
+-        let cl = cl_mem::from_ptr(self);
+-        self.cbs
+-            .get_mut()
+-            .unwrap()
+-            .iter()
+-            .rev()
+-            .for_each(|cb| unsafe { (cb.func)(cl, cb.data) });
++        let cbs = mem::take(self.cbs.get_mut().unwrap());
++        for cb in cbs.into_iter().rev() {
++            cb.call(self);
++        }
+ 
+         for (d, tx) in self.maps.get_mut().unwrap().tx.drain() {
+             d.helper_ctx().unmap(tx.tx);
+-- 
+2.42.0
+

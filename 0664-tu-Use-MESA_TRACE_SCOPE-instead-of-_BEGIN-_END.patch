@@ -1,0 +1,46 @@
+From 57c6e79db5fdad1f025e03dda12325779f07af94 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Wed, 20 Sep 2023 16:38:43 +0200
+Subject: [PATCH 664/834] tu: Use MESA_TRACE_SCOPE instead of _BEGIN/_END
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The MESA_TRACE_SCOPE macro is an exact replacement for this.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/freedreno/vulkan/tu_knl_drm_virtio.cc | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_knl_drm_virtio.cc b/src/freedreno/vulkan/tu_knl_drm_virtio.cc
+index df7b1fc5d42..8f43bf83a99 100644
+--- a/src/freedreno/vulkan/tu_knl_drm_virtio.cc
++++ b/src/freedreno/vulkan/tu_knl_drm_virtio.cc
+@@ -101,9 +101,8 @@ struct tu_virtio_device {
+ };
+ 
+ #define virtio_ioctl(fd, name, args) ({                              \
+-      MESA_TRACE_BEGIN(#name);                                       \
++      MESA_TRACE_SCOPE(#name);                                       \
+       int ret = drmIoctl((fd), DRM_IOCTL_ ## name, (args));          \
+-      MESA_TRACE_END();                                              \
+       ret;                                                           \
+    })
+ 
+@@ -236,10 +235,9 @@ out_unlock:
+       return ret;
+ 
+    if (sync) {
+-      MESA_TRACE_BEGIN("virtio_execbuf sync");
++      MESA_TRACE_SCOPE("virtio_execbuf sync");
+       sync_wait(fence_fd, -1);
+       close(fence_fd);
+-      MESA_TRACE_END();
+    }
+ 
+    return 0;
+-- 
+2.42.0
+

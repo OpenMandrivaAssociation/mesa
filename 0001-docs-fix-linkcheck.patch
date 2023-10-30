@@ -1,0 +1,39 @@
+From d5c2139ce4483cb1c224e068644ffb97772da48b Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 10:05:45 +0200
+Subject: [PATCH 001/834] docs: fix linkcheck
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When running with the linkcheck builder,
+app.builder.default_translator_class is None, making us throw an
+exception and give up.
+
+We don't need the bootstrap extension in this case, so just do nothing
+instead.
+
+Fixes: f72033bb707 ("docs: add bootstrap extension")
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/_exts/bootstrap.py | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/docs/_exts/bootstrap.py b/docs/_exts/bootstrap.py
+index e7239a6a45a..bb0e595c4d1 100644
+--- a/docs/_exts/bootstrap.py
++++ b/docs/_exts/bootstrap.py
+@@ -96,6 +96,9 @@ class BootstrapHTML5TranslatorMixin:
+         self.body.append(tag)
+ 
+ def setup_translators(app):
++    if app.builder.default_translator_class is None:
++        return
++
+     if not app.registry.translators.items():
+         translator = types.new_class(
+             "BootstrapHTML5Translator",
+-- 
+2.42.0
+

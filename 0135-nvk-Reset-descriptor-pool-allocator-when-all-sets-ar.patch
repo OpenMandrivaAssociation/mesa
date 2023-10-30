@@ -1,0 +1,28 @@
+From 1c4d5135a66e7ac5a2dc9efd9afbc336b3da4f6c Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 10 Oct 2023 11:03:17 -0500
+Subject: [PATCH 135/834] nvk: Reset descriptor pool allocator when all sets
+ are destroyed
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25653>
+---
+ src/nouveau/vulkan/nvk_descriptor_set.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/nouveau/vulkan/nvk_descriptor_set.c b/src/nouveau/vulkan/nvk_descriptor_set.c
+index 54526247421..e8e0387f37a 100644
+--- a/src/nouveau/vulkan/nvk_descriptor_set.c
++++ b/src/nouveau/vulkan/nvk_descriptor_set.c
+@@ -351,6 +351,9 @@ nvk_descriptor_set_destroy(struct nvk_device *dev,
+             break;
+          }
+       }
++
++      if (pool->entry_count == 0)
++         pool->current_offset = 0;
+    }
+ 
+    vk_descriptor_set_layout_unref(&dev->vk, &set->layout->vk);
+-- 
+2.42.0
+

@@ -1,0 +1,31 @@
+From cd08d331f34ac8bdc02d23aab7b11db60e771878 Mon Sep 17 00:00:00 2001
+From: Juston Li <justonli@google.com>
+Date: Wed, 18 Oct 2023 14:46:49 -0700
+Subject: [PATCH 606/834] venus: set lvp queries as saturate on overflow
+
+Test case 'dEQP-VK.pipeline.monolithic.timestamp.misc_tests.consistent_results'..
+  Fail (Results are inconsistent: B32=0xffffffff B64=0x10103ba2cdd4e G32=0xba2cdd4e G64=0x10103ba2cdd4e)
+
+Fixes: e6cffa1f0e4e ("venus: use feedback for vkGetQueryPoolResults")
+
+Signed-off-by: Juston Li <justonli@google.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25820>
+---
+ src/virtio/vulkan/vn_query_pool.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/virtio/vulkan/vn_query_pool.c b/src/virtio/vulkan/vn_query_pool.c
+index e8bca85a8bf..07943f4b542 100644
+--- a/src/virtio/vulkan/vn_query_pool.c
++++ b/src/virtio/vulkan/vn_query_pool.c
+@@ -114,6 +114,7 @@ vn_CreateQueryPool(VkDevice device,
+     */
+    switch (dev->physical_device->renderer_driver_id) {
+    case VK_DRIVER_ID_ARM_PROPRIETARY:
++   case VK_DRIVER_ID_MESA_LLVMPIPE:
+    case VK_DRIVER_ID_MESA_TURNIP:
+       pool->saturate_on_overflow = true;
+       break;
+-- 
+2.42.0
+

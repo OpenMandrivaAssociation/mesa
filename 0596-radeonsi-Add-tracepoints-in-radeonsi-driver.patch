@@ -1,0 +1,410 @@
+From 05206f314cd274b1bdcc11213763f0b1d4d09cc2 Mon Sep 17 00:00:00 2001
+From: Saroj Kumar <saroj.kumar@amd.com>
+Date: Mon, 17 Jul 2023 21:03:02 +0530
+Subject: [PATCH 596/834] radeonsi: Add tracepoints in radeonsi driver
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add initialization code for u_trace and tracepoints in the
+driver code.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/23664>
+---
+ src/gallium/drivers/radeonsi/si_compute.c     |  9 ++++-
+ src/gallium/drivers/radeonsi/si_fence.c       |  4 +++
+ src/gallium/drivers/radeonsi/si_gfx_cs.c      | 20 ++++++++++-
+ src/gallium/drivers/radeonsi/si_perfetto.cpp  | 33 +++++++++++++------
+ src/gallium/drivers/radeonsi/si_pipe.c        |  8 +++++
+ .../drivers/radeonsi/si_state_draw.cpp        |  9 +++++
+ src/gallium/drivers/radeonsi/si_utrace.c      |  9 +++--
+ src/tool/pps/cfg/amd.cfg                      | 25 ++++++++++++++
+ src/tool/pps/cfg/system.cfg                   |  6 ++++
+ 9 files changed, 108 insertions(+), 15 deletions(-)
+ create mode 100644 src/tool/pps/cfg/amd.cfg
+
+diff --git a/src/gallium/drivers/radeonsi/si_compute.c b/src/gallium/drivers/radeonsi/si_compute.c
+index 642acb79cc9..c84d6e595f9 100644
+--- a/src/gallium/drivers/radeonsi/si_compute.c
++++ b/src/gallium/drivers/radeonsi/si_compute.c
+@@ -12,6 +12,7 @@
+ #include "util/u_async_debug.h"
+ #include "util/u_memory.h"
+ #include "util/u_upload_mgr.h"
++#include "si_tracepoints.h"
+ 
+ #define COMPUTE_DBG(sscreen, fmt, args...)                                                         \
+    do {                                                                                            \
+@@ -996,7 +997,10 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
+                          NULL);
+       }
+    }
+-
++   
++   if (u_trace_perfetto_active(&sctx->ds.trace_context))
++      trace_si_begin_compute(&sctx->trace);
++   
+    if (sctx->bo_list_add_all_compute_resources)
+       si_compute_resources_add_all_to_bo_list(sctx);
+ 
+@@ -1064,6 +1068,9 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
+    sctx->compute_is_busy = true;
+    sctx->num_compute_calls++;
+ 
++   if (u_trace_perfetto_active(&sctx->ds.trace_context))
++      trace_si_end_compute(&sctx->trace, info->grid[0], info->grid[1], info->grid[2]);
++   
+    if (cs_regalloc_hang) {
+       sctx->flags |= SI_CONTEXT_CS_PARTIAL_FLUSH;
+       si_mark_atom_dirty(sctx, &sctx->atoms.s.cache_flush);
+diff --git a/src/gallium/drivers/radeonsi/si_fence.c b/src/gallium/drivers/radeonsi/si_fence.c
+index 7dadb77935b..5f55f94d436 100644
+--- a/src/gallium/drivers/radeonsi/si_fence.c
++++ b/src/gallium/drivers/radeonsi/si_fence.c
+@@ -473,6 +473,10 @@ static void si_flush_all_queues(struct pipe_context *ctx,
+       if (unlikely(sctx->sqtt && (flags & PIPE_FLUSH_END_OF_FRAME))) {
+          si_handle_sqtt(sctx, &sctx->gfx_cs);
+       }
++      
++      if (u_trace_perfetto_active(&sctx->ds.trace_context)) {
++         u_trace_context_process(&sctx->ds.trace_context, flags & PIPE_FLUSH_END_OF_FRAME);
++      }
+    } else {
+       /* Instead of flushing, create a deferred fence. Constraints:
+        * - the gallium frontend must allow a deferred flush.
+diff --git a/src/gallium/drivers/radeonsi/si_gfx_cs.c b/src/gallium/drivers/radeonsi/si_gfx_cs.c
+index 811d871b2c9..567b8d1f2c8 100644
+--- a/src/gallium/drivers/radeonsi/si_gfx_cs.c
++++ b/src/gallium/drivers/radeonsi/si_gfx_cs.c
+@@ -12,6 +12,7 @@
+ #include "util/u_log.h"
+ #include "util/u_upload_mgr.h"
+ #include "ac_debug.h"
++#include "si_utrace.h"
+ 
+ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_handle **fence)
+ {
+@@ -129,9 +130,19 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
+    if (ctx->is_noop)
+       flags |= RADEON_FLUSH_NOOP;
+ 
++   uint64_t start_ts = 0, submission_id = 0;
++   if (u_trace_perfetto_active(&ctx->ds.trace_context)) {
++      start_ts = si_ds_begin_submit(&ctx->ds_queue);
++      submission_id = ctx->ds_queue.submission_id;
++   }
++
+    /* Flush the CS. */
+    ws->cs_flush(cs, flags, &ctx->last_gfx_fence);
+ 
++   if (u_trace_perfetto_active(&ctx->ds.trace_context) && start_ts > 0) {
++      si_ds_end_submit(&ctx->ds_queue, start_ts);
++   }
++
+    tc_driver_internal_flush_notify(ctx->tc);
+    if (fence)
+       ws->fence_reference(fence, ctx->last_gfx_fence);
+@@ -155,6 +166,9 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
+    if (ctx->current_saved_cs)
+       si_saved_cs_reference(&ctx->current_saved_cs, NULL);
+ 
++   if (u_trace_perfetto_active(&ctx->ds.trace_context))
++      si_utrace_flush(ctx, submission_id);
++
+    si_begin_new_gfx_cs(ctx, false);
+    ctx->gfx_flush_in_progress = false;
+ }
+@@ -352,6 +366,9 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
+ {
+    bool is_secure = false;
+ 
++   if (!first_cs)
++      u_trace_fini(&ctx->trace);
++
+    if (unlikely(radeon_uses_secure_bos(ctx->ws))) {
+       is_secure = ctx->ws->cs_is_secure(&ctx->gfx_cs);
+ 
+@@ -566,6 +583,7 @@ void si_begin_new_gfx_cs(struct si_context *ctx, bool first_cs)
+    assert(!ctx->gfx_cs.prev_dw);
+    ctx->initial_gfx_cs_size = ctx->gfx_cs.current.cdw;
+ 
++   u_trace_init(&ctx->trace, &ctx->ds.trace_context);
+    /* All buffer references are removed on a flush, so si_check_needs_implicit_sync
+     * cannot determine if si_make_CB_shader_coherent() needs to be called.
+     * ctx->force_cb_shader_coherent will be cleared by the first call to
+@@ -596,7 +614,7 @@ void si_emit_ts(struct si_context *sctx, struct si_resource* buffer, unsigned in
+    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
+    uint64_t va = buffer->gpu_address + offset;
+    si_cp_release_mem(sctx, cs, V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_INT_SEL_NONE,
+-                        EOP_DATA_SEL_TIMESTAMP, NULL, va, 0, PIPE_QUERY_TIMESTAMP);
++                        EOP_DATA_SEL_TIMESTAMP, buffer, va, 0, PIPE_QUERY_TIMESTAMP);
+ }
+ 
+ void si_emit_surface_sync(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned cp_coher_cntl)
+diff --git a/src/gallium/drivers/radeonsi/si_perfetto.cpp b/src/gallium/drivers/radeonsi/si_perfetto.cpp
+index e5c1e8c07af..56a9b314079 100644
+--- a/src/gallium/drivers/radeonsi/si_perfetto.cpp
++++ b/src/gallium/drivers/radeonsi/si_perfetto.cpp
+@@ -58,7 +58,8 @@ struct SIRenderpassTraits : public perfetto::DefaultDataSourceTraits {
+    using IncrementalStateType = SIRenderpassIncrementalState;
+ };
+ 
+-class SIRenderpassDataSource : public MesaRenderpassDataSource<SIRenderpassDataSource, SIRenderpassTraits> {
++class SIRenderpassDataSource : public MesaRenderpassDataSource<SIRenderpassDataSource, 
++                                                               SIRenderpassTraits> {
+ };
+ 
+ PERFETTO_DECLARE_DATA_SOURCE_STATIC_MEMBERS(SIRenderpassDataSource);
+@@ -84,10 +85,12 @@ static void sync_timestamp(SIRenderpassDataSource::TraceContext &ctx, struct si_
+ 
+    device->sync_gpu_ts = gpu_ts;
+    device->next_clock_sync_ns = cpu_ts + 1000000000ull;
+-   MesaRenderpassDataSource<SIRenderpassDataSource, SIRenderpassTraits>::EmitClockSync(ctx, cpu_ts, gpu_ts, device->gpu_clock_id);
++   MesaRenderpassDataSource<SIRenderpassDataSource, SIRenderpassTraits>::
++      EmitClockSync(ctx, cpu_ts, gpu_ts, device->gpu_clock_id);
+ }
+ 
+-static void send_descriptors(SIRenderpassDataSource::TraceContext &ctx, struct si_ds_device *device)
++static void send_descriptors(SIRenderpassDataSource::TraceContext &ctx, 
++                             struct si_ds_device *device)
+ {
+    PERFETTO_LOG("Sending renderstage descriptors");
+ 
+@@ -131,7 +134,8 @@ static void send_descriptors(SIRenderpassDataSource::TraceContext &ctx, struct s
+                 * by si_ds_queue_stage.
+                 */
+                char name[100];
+-               snprintf(name, sizeof(name), "%.10s-%s-%u-%s", util_get_process_name(), queue->name, s, si_queue_stage_desc[s].name);
++               snprintf(name, sizeof(name), "%.10s-%s-%u-%s", util_get_process_name(), 
++                        queue->name, s, si_queue_stage_desc[s].name);
+ 
+                auto desc = interned_data->add_gpu_specifications();
+                desc->set_iid(queue->stages[s].queue_iid);
+@@ -150,7 +154,8 @@ static void send_descriptors(SIRenderpassDataSource::TraceContext &ctx, struct s
+    sync_timestamp(ctx, device);
+ }
+ 
+-typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderStageEvent *, const void*);
++typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderStageEvent *, 
++                                            const void*);
+ 
+ static void begin_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queue_stage stage_id)
+ {
+@@ -172,7 +177,9 @@ static void begin_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_qu
+    queue->stages[stage_id].level++;
+ }
+ 
+-static void end_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queue_stage stage_id, uint32_t submission_id, const char *app_event, const void* payload = nullptr, trace_payload_as_extra_func payload_as_extra = nullptr)
++static void end_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queue_stage stage_id,
++                      uint32_t submission_id, const char *app_event, const void* payload = nullptr,
++                      trace_payload_as_extra_func payload_as_extra = nullptr)
+ {
+    PERFETTO_LOG("end event called - ts_ns=%lu", ts_ns);
+    struct si_ds_device *device = queue->device;
+@@ -208,7 +215,9 @@ static void end_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queu
+        * stage_iid if not already seen. Otherwise, it's a driver event and we
+        * have use the internal stage_iid.
+        */
+-      uint64_t stage_iid = app_event ? tctx.GetDataSourceLocked()->debug_marker_stage(tctx, app_event) : stage->stage_iid;
++      uint64_t stage_iid = app_event ? 
++                           tctx.GetDataSourceLocked()->debug_marker_stage(tctx, app_event) : 
++                           stage->stage_iid;
+ 
+       auto packet = tctx.NewTracePacket();
+ 
+@@ -340,7 +349,8 @@ void si_driver_ds_init(void)
+    si_gpu_tracepoint_config_variable();
+ }
+ 
+-void si_ds_device_init(struct si_ds_device *device, const struct radeon_info *devinfo, uint32_t gpu_id, enum amd_ds_api api)
++void si_ds_device_init(struct si_ds_device *device, const struct radeon_info *devinfo,
++                       uint32_t gpu_id, enum amd_ds_api api)
+ {
+    device->gpu_id = gpu_id;
+    device->gpu_clock_id = si_pps_clock_id(gpu_id);
+@@ -355,7 +365,9 @@ void si_ds_device_fini(struct si_ds_device *device)
+    u_trace_context_fini(&device->trace_context);
+ }
+ 
+-struct si_ds_queue * si_ds_device_init_queue(struct si_ds_device *device, struct si_ds_queue *queue, const char *fmt_name, ...)
++struct si_ds_queue * si_ds_device_init_queue(struct si_ds_device *device, 
++                                             struct si_ds_queue *queue, 
++                                             const char *fmt_name, ...)
+ {
+    va_list ap;
+    queue->device = device;
+@@ -374,7 +386,8 @@ struct si_ds_queue * si_ds_device_init_queue(struct si_ds_device *device, struct
+    return queue;
+ }
+ 
+-void si_ds_flush_data_init(struct si_ds_flush_data *data, struct si_ds_queue *queue, uint64_t submission_id)
++void si_ds_flush_data_init(struct si_ds_flush_data *data, struct si_ds_queue *queue, 
++                           uint64_t submission_id)
+ {
+    memset(data, 0, sizeof(*data));
+ 
+diff --git a/src/gallium/drivers/radeonsi/si_pipe.c b/src/gallium/drivers/radeonsi/si_pipe.c
+index 6417e6a31e2..2c6aac99fc7 100644
+--- a/src/gallium/drivers/radeonsi/si_pipe.c
++++ b/src/gallium/drivers/radeonsi/si_pipe.c
+@@ -24,6 +24,7 @@
+ #include "util/u_upload_mgr.h"
+ #include "util/xmlconfig.h"
+ #include "vl/vl_decoder.h"
++#include "si_utrace.h"
+ 
+ #include <xf86drm.h>
+ 
+@@ -204,6 +205,8 @@ static void si_destroy_context(struct pipe_context *context)
+       si_destroy_sqtt(sctx);
+    }
+ 
++   si_utrace_fini(sctx);
++
+    pipe_resource_reference(&sctx->esgs_ring, NULL);
+    pipe_resource_reference(&sctx->gsvs_ring, NULL);
+    pipe_resource_reference(&sctx->tess_rings, NULL);
+@@ -779,6 +782,8 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
+       sctx->shader.gs.key.ge.opt.prefer_mono = 1;
+    }
+ 
++   si_utrace_init(sctx);
++
+    si_begin_new_gfx_cs(sctx, true);
+    assert(sctx->gfx_cs.current.cdw == sctx->initial_gfx_cs_size);
+ 
+@@ -850,6 +855,7 @@ static struct pipe_context *si_create_context(struct pipe_screen *screen, unsign
+    }
+ 
+    sctx->initial_gfx_cs_size = sctx->gfx_cs.current.cdw;
++   sctx->last_timestamp_cmd = NULL;
+ 
+    sctx->cs_blit_shaders = _mesa_hash_table_create_u32_keys(NULL);
+    if (!sctx->cs_blit_shaders)
+@@ -1522,6 +1528,8 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
+       break;
+    }
+ 
++   si_driver_ds_init();
++
+    drmFreeVersion(version);
+    return rw ? rw->screen : NULL;
+ }
+diff --git a/src/gallium/drivers/radeonsi/si_state_draw.cpp b/src/gallium/drivers/radeonsi/si_state_draw.cpp
+index c862ff9d951..577699998fa 100644
+--- a/src/gallium/drivers/radeonsi/si_state_draw.cpp
++++ b/src/gallium/drivers/radeonsi/si_state_draw.cpp
+@@ -14,6 +14,8 @@
+ #include "util/u_prim.h"
+ #include "util/u_upload_mgr.h"
+ #include "ac_rtld.h"
++#include "si_build_pm4.h"
++#include "si_tracepoints.h"
+ 
+ #if (GFX_VER == 6)
+ #define GFX(name) name##GFX6
+@@ -1985,6 +1987,9 @@ static void si_draw(struct pipe_context *ctx,
+ 
+    si_need_gfx_cs_space(sctx, num_draws);
+ 
++   if (u_trace_perfetto_active(&sctx->ds.trace_context))
++      trace_si_begin_draw(&sctx->trace);
++   
+    unsigned instance_count = info->instance_count;
+ 
+    /* GFX6-GFX7 treat instance_count==0 as instance_count==1. There is
+@@ -2296,6 +2301,10 @@ static void si_draw(struct pipe_context *ctx,
+       zstex->depth_cleared_level_mask &= ~BITFIELD_BIT(sctx->framebuffer.state.zsbuf->u.tex.level);
+    }
+ 
++   if (u_trace_perfetto_active(&sctx->ds.trace_context)) {
++      trace_si_end_draw(&sctx->trace, total_direct_count);
++   }
++
+    DRAW_CLEANUP;
+ }
+ 
+diff --git a/src/gallium/drivers/radeonsi/si_utrace.c b/src/gallium/drivers/radeonsi/si_utrace.c
+index 9e1a1de860d..95d7cfa215a 100644
+--- a/src/gallium/drivers/radeonsi/si_utrace.c
++++ b/src/gallium/drivers/radeonsi/si_utrace.c
+@@ -12,13 +12,15 @@
+ #include "util/hash_table.h"
+ 
+ 
+-static void si_utrace_record_ts(struct u_trace *trace, void *cs, void *timestamps, unsigned idx, bool end_of_pipe)
++static void si_utrace_record_ts(struct u_trace *trace, void *cs, void *timestamps, 
++                                unsigned idx, bool end_of_pipe)
+ {
+    struct si_context *ctx = container_of(trace, struct si_context, trace);
+    struct pipe_resource *buffer = timestamps;
+    struct si_resource *ts_bo = si_resource(buffer);
+ 
+-   if (ctx->gfx_cs.current.buf == ctx->last_timestamp_cmd && ctx->gfx_cs.current.cdw == ctx->last_timestamp_cmd_cdw) {
++   if (ctx->gfx_cs.current.buf == ctx->last_timestamp_cmd && 
++       ctx->gfx_cs.current.cdw == ctx->last_timestamp_cmd_cdw) {
+       uint64_t *ts = si_buffer_map(ctx, ts_bo, PIPE_MAP_READ);
+       ts[idx] = U_TRACE_NO_TIMESTAMP;
+       return;
+@@ -31,7 +33,8 @@ static void si_utrace_record_ts(struct u_trace *trace, void *cs, void *timestamp
+    ctx->last_timestamp_cmd_cdw = ctx->gfx_cs.current.cdw;
+ }
+ 
+-static uint64_t si_utrace_read_ts(struct u_trace_context *utctx, void *timestamps, unsigned idx, void *flush_data)
++static uint64_t si_utrace_read_ts(struct u_trace_context *utctx, void *timestamps, 
++                                  unsigned idx, void *flush_data)
+ {
+    struct si_context *ctx = container_of(utctx, struct si_context, ds.trace_context);
+    struct pipe_resource *buffer = timestamps;
+diff --git a/src/tool/pps/cfg/amd.cfg b/src/tool/pps/cfg/amd.cfg
+new file mode 100644
+index 00000000000..9ba4fd76b24
+--- /dev/null
++++ b/src/tool/pps/cfg/amd.cfg
+@@ -0,0 +1,25 @@
++buffers {
++  size_kb: 16384
++  fill_policy: RING_BUFFER
++}
++
++data_sources {
++  config {
++    name: "gpu.renderstages.amd"
++  }
++}
++
++data_sources {
++  config {
++    name: "track_event"
++    track_event_config {
++      enabled_categories: "mesa.default"
++      enabled_categories: "mesa.slow"
++    }
++  }
++}
++
++duration_ms: 2000
++write_into_file: true
++file_write_period_ms: 500
++flush_period_ms: 500
+diff --git a/src/tool/pps/cfg/system.cfg b/src/tool/pps/cfg/system.cfg
+index f875c7f870b..f48f5f943a3 100644
+--- a/src/tool/pps/cfg/system.cfg
++++ b/src/tool/pps/cfg/system.cfg
+@@ -33,6 +33,12 @@ data_sources {
+   }
+ }
+ 
++data_sources {
++  config {
++    name: "gpu.renderstages.amd"
++  }
++}
++
+ data_sources {
+   config {
+     name: "track_event"
+-- 
+2.42.0
+

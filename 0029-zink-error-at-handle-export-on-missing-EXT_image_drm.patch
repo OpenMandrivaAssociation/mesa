@@ -1,0 +1,36 @@
+From c8f4cfd6411660a21430f157447875017c858193 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 3 Oct 2023 10:37:49 -0400
+Subject: [PATCH 029/834] zink: error at handle export on missing
+ EXT_image_drm_format_modifier
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+this doesn't work anyway
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Acked-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25526>
+---
+ src/gallium/drivers/zink/zink_resource.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/zink_resource.c b/src/gallium/drivers/zink/zink_resource.c
+index c389b124585..a698be9c6d3 100644
+--- a/src/gallium/drivers/zink/zink_resource.c
++++ b/src/gallium/drivers/zink/zink_resource.c
+@@ -1763,6 +1763,10 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
+          if (!res->obj->exportable) {
+             assert(!res->all_binds); //TODO handle if problematic
+             assert(!zink_resource_usage_is_unflushed(res));
++            if (!screen->info.have_EXT_image_drm_format_modifier) {
++               mesa_loge("zink: EXT_image_drm_format_modifier support required");
++               return false;
++            }
+             unsigned bind = ZINK_BIND_DMABUF;
+             if (!(res->base.b.bind & PIPE_BIND_SHARED))
+                bind |= PIPE_BIND_SHARED;
+-- 
+2.42.0
+

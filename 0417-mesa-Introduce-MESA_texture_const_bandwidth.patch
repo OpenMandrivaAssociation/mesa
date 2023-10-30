@@ -1,0 +1,144 @@
+From d0c81e12f30d8ff7cbf6784d1c5525ad2b3531e7 Mon Sep 17 00:00:00 2001
+From: Rob Clark <robdclark@chromium.org>
+Date: Thu, 28 Sep 2023 10:48:17 -0700
+Subject: [PATCH 417/834] mesa: Introduce MESA_texture_const_bandwidth
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A simple extension that builds on EXT_memory_object to allow the
+application to request that constant bandwidth (non-data-dependent)
+tiling layouts be used for a specified texture.
+
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25464>
+---
+ .../specs/MESA_texture_const_bandwidth.spec   | 83 +++++++++++++++++++
+ docs/_static/specs/enums.txt                  |  3 +
+ include/GL/glext.h                            |  5 ++
+ 3 files changed, 91 insertions(+)
+ create mode 100644 docs/_static/specs/MESA_texture_const_bandwidth.spec
+
+diff --git a/docs/_static/specs/MESA_texture_const_bandwidth.spec b/docs/_static/specs/MESA_texture_const_bandwidth.spec
+new file mode 100644
+index 00000000000..6b5a23b2ec6
+--- /dev/null
++++ b/docs/_static/specs/MESA_texture_const_bandwidth.spec
+@@ -0,0 +1,83 @@
++Name
++
++    MESA_texture_const_bandwidth
++
++Name Strings
++
++    GL_MESA_texture_const_bandwidth
++
++Contact
++
++    Rob Clark <robdclark@chromium.org>
++
++Contributors
++
++    Rob Clark, Google
++    Lina Versace, Google
++    Tapani Pälli, Intel
++
++Status
++
++    Proposal
++
++Version
++
++    Version 1, September, 2023
++
++Number
++
++    tbd
++
++Dependencies
++
++    Requires EXT_memory_object.
++
++Overview
++
++    The use of data dependent bandwidth compressed formats (UBWC, AFBC, etc)
++    can introduce a form of side-channel, in that the bandwidth used for
++    texture access is dependent on the texture's contents.  In some cases
++    an application may want to disable the use of data dependent formats on
++    specific textures.
++
++    For that purpose, this extension extends EXT_memory_object to introduce
++    a new <param> CONST_BW_TILING_MESA.
++
++IP Status
++
++    None
++
++Issues
++
++    None
++
++New Procedures and Functions
++
++    None
++
++New Types
++
++    None
++
++New Tokens
++
++    Returned in the <params> parameter of GetInternalFormativ or
++    GetInternalFormati64v when the <pname> parameter is TILING_TYPES_EXT,
++    returned in the <params> parameter of GetTexParameter{if}v,
++    GetTexParameterI{i ui}v, GetTextureParameter{if}v, and
++    GetTextureParameterI{i ui}v when the <pname> parameter is
++    TEXTURE_TILING_EXT, and accepted by the <params> parameter of
++    TexParameter{ifx}{v}, TexParameterI{i ui}v, TextureParameter{if}{v},
++    TextureParameterI{i ui}v when the <pname> parameter is
++    TEXTURE_TILING_EXT:
++
++        CONST_BW_TILING_MESA                       0x8BBE
++
++Errors
++
++    None
++
++Revision History
++
++    Version 1, 2023-9-28 (Rob Clark)
++        Initial draft.
+diff --git a/docs/_static/specs/enums.txt b/docs/_static/specs/enums.txt
+index 09211c92303..f80f6b9b269 100644
+--- a/docs/_static/specs/enums.txt
++++ b/docs/_static/specs/enums.txt
+@@ -73,6 +73,9 @@ GL_MESA_tile_raster_order
+ GL_MESA_framebuffer_flip_y
+ 	GL_FRAMEBUFFER_FLIP_Y_MESA           0x8BBB
+ 
++GL_MESA_texture_const_bandwidth
++	GL_CONST_BW_TILING_MESA                 0x8BBE
++
+ EGL_MESA_drm_image
+         EGL_DRM_BUFFER_FORMAT_MESA		0x31D0
+         EGL_DRM_BUFFER_USE_MESA			0x31D1
+diff --git a/include/GL/glext.h b/include/GL/glext.h
+index 9149c286a36..8bacaf9906a 100644
+--- a/include/GL/glext.h
++++ b/include/GL/glext.h
+@@ -12906,6 +12906,11 @@ GLAPI void APIENTRY glReplacementCodeuiTexCoord2fColor4fNormal3fVertex3fvSUN (co
+ #define GL_FOG_SPECULAR_TEXTURE_WIN       0x80EC
+ #endif /* GL_WIN_specular_fog */
+ 
++#ifndef GL_MESA_texture_const_bandwidth
++#define GL_MESA_texture_const_bandwidth 1
++#define GL_CONST_BW_TILING_MESA           0x8BBE
++#endif
++
+ #ifdef __cplusplus
+ }
+ #endif
+-- 
+2.42.0
+

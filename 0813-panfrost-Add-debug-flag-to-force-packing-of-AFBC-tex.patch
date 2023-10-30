@@ -1,0 +1,157 @@
+From 33b48a55857b15f7e7b892a89cad2f0ad2399ba6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Fri, 1 Sep 2023 13:31:19 -0400
+Subject: [PATCH 813/834] panfrost: Add debug flag to force packing of AFBC
+ textures on upload
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add `forcepack` flag that will force conversion to AFBC-packed right
+after a texture is uploaded when possible. We only pack 2D resources
+larger than 32x32 as of now.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/gallium/drivers/panfrost/pan_resource.c | 26 +++++++++++++++++++--
+ src/gallium/drivers/panfrost/pan_resource.h |  3 +++
+ src/gallium/drivers/panfrost/pan_screen.c   |  1 +
+ src/panfrost/lib/pan_afbc.c                 | 14 +++++++++++
+ src/panfrost/lib/pan_texture.h              |  2 ++
+ src/panfrost/lib/pan_util.h                 |  3 ++-
+ 6 files changed, 46 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/panfrost/pan_resource.c b/src/gallium/drivers/panfrost/pan_resource.c
+index 57420b9b4fd..afd2327cc8d 100644
+--- a/src/gallium/drivers/panfrost/pan_resource.c
++++ b/src/gallium/drivers/panfrost/pan_resource.c
+@@ -387,7 +387,23 @@ panfrost_should_tile_afbc(const struct panfrost_device *dev,
+                           const struct panfrost_resource *pres)
+ {
+    return panfrost_afbc_can_tile(dev) && pres->base.width0 >= 128 &&
+-          pres->base.height0 >= 128;
++          pres->base.height0 >= 128 && !(dev->debug & PAN_DBG_FORCE_PACK);
++}
++
++bool
++panfrost_should_pack_afbc(struct panfrost_device *dev,
++                          const struct panfrost_resource *prsrc)
++{
++   const unsigned valid_binding = PIPE_BIND_DEPTH_STENCIL |
++                                  PIPE_BIND_RENDER_TARGET |
++                                  PIPE_BIND_SAMPLER_VIEW;
++
++   return panfrost_afbc_can_pack(prsrc->base.format) && panfrost_is_2d(prsrc) &&
++          drm_is_afbc(prsrc->image.layout.modifier) &&
++          (prsrc->image.layout.modifier & AFBC_FORMAT_MOD_SPARSE) &&
++          (prsrc->base.bind & ~valid_binding) == 0 &&
++          !prsrc->modifier_constant && prsrc->base.width0 >= 32 &&
++          prsrc->base.height0 >= 32;
+ }
+ 
+ static bool
+@@ -1429,6 +1445,7 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
+ {
+    /* Gallium expects writeback here, so we tile */
+ 
++   struct panfrost_context *ctx = pan_context(pctx);
+    struct panfrost_transfer *trans = pan_transfer(transfer);
+    struct panfrost_resource *prsrc =
+       (struct panfrost_resource *)transfer->resource;
+@@ -1457,8 +1474,13 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
+          } else {
+             pan_blit_from_staging(pctx, trans);
+             panfrost_flush_batches_accessing_rsrc(
+-               pan_context(pctx), pan_resource(trans->staging.rsrc),
++               ctx, pan_resource(trans->staging.rsrc),
+                "AFBC write staging blit");
++
++            if (dev->debug & PAN_DBG_FORCE_PACK) {
++               if (panfrost_should_pack_afbc(dev, prsrc))
++                  panfrost_pack_afbc(ctx, prsrc);
++            }
+          }
+       }
+ 
+diff --git a/src/gallium/drivers/panfrost/pan_resource.h b/src/gallium/drivers/panfrost/pan_resource.h
+index 0f92cae62bb..a9a054b6c7d 100644
+--- a/src/gallium/drivers/panfrost/pan_resource.h
++++ b/src/gallium/drivers/panfrost/pan_resource.h
+@@ -181,6 +181,9 @@ struct panfrost_bo *panfrost_get_afbc_superblock_sizes(
+    struct panfrost_context *ctx, struct panfrost_resource *rsrc,
+    unsigned first_level, unsigned last_level, unsigned *out_offsets);
+ 
++bool panfrost_should_pack_afbc(struct panfrost_device *dev,
++                               const struct panfrost_resource *rsrc);
++
+ void panfrost_pack_afbc(struct panfrost_context *ctx,
+                         struct panfrost_resource *prsrc);
+ 
+diff --git a/src/gallium/drivers/panfrost/pan_screen.c b/src/gallium/drivers/panfrost/pan_screen.c
+index 363fc22cdea..d4605df94bc 100644
+--- a/src/gallium/drivers/panfrost/pan_screen.c
++++ b/src/gallium/drivers/panfrost/pan_screen.c
+@@ -72,6 +72,7 @@ static const struct debug_named_value panfrost_debug_options[] = {
+    {"overflow",   PAN_DBG_OVERFLOW, "Check for buffer overflows in pool uploads"},
+ #endif
+    {"yuv",        PAN_DBG_YUV,      "Tint YUV textures with blue for 1-plane and green for 2-plane"},
++   {"forcepack",  PAN_DBG_FORCE_PACK,  "Force packing of AFBC textures on upload"},
+    DEBUG_NAMED_VALUE_END
+ };
+ /* clang-format on */
+diff --git a/src/panfrost/lib/pan_afbc.c b/src/panfrost/lib/pan_afbc.c
+index fed4c54f8ef..f2b6f1482ea 100644
+--- a/src/panfrost/lib/pan_afbc.c
++++ b/src/panfrost/lib/pan_afbc.c
+@@ -187,6 +187,20 @@ panfrost_afbc_can_ytr(enum pipe_format format)
+    return desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB;
+ }
+ 
++/* Only support packing for RGB formats for now. */
++
++bool
++panfrost_afbc_can_pack(enum pipe_format format)
++{
++   const struct util_format_description *desc = util_format_description(format);
++
++   if (desc->nr_channels != 1 && desc->nr_channels != 3 &&
++       desc->nr_channels != 4)
++      return false;
++
++   return desc->colorspace == UTIL_FORMAT_COLORSPACE_RGB;
++}
++
+ /*
+  * Check if the device supports AFBC with tiled headers (and hence also solid
+  * colour blocks).
+diff --git a/src/panfrost/lib/pan_texture.h b/src/panfrost/lib/pan_texture.h
+index 474bdc0b0da..4163cc48475 100644
+--- a/src/panfrost/lib/pan_texture.h
++++ b/src/panfrost/lib/pan_texture.h
+@@ -233,6 +233,8 @@ enum pan_afbc_mode panfrost_afbc_format(unsigned arch, enum pipe_format format);
+ 
+ bool panfrost_afbc_can_ytr(enum pipe_format format);
+ 
++bool panfrost_afbc_can_pack(enum pipe_format format);
++
+ bool panfrost_afbc_can_tile(const struct panfrost_device *dev);
+ 
+ /*
+diff --git a/src/panfrost/lib/pan_util.h b/src/panfrost/lib/pan_util.h
+index 03ada217c30..22f84d12b91 100644
+--- a/src/panfrost/lib/pan_util.h
++++ b/src/panfrost/lib/pan_util.h
+@@ -52,7 +52,8 @@
+ #define PAN_DBG_OVERFLOW 0x8000
+ #endif
+ 
+-#define PAN_DBG_YUV 0x20000
++#define PAN_DBG_YUV        0x20000
++#define PAN_DBG_FORCE_PACK 0x40000
+ 
+ struct panfrost_device;
+ 
+-- 
+2.42.0
+

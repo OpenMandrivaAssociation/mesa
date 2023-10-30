@@ -1,0 +1,61 @@
+From 05d74265dc1b77affefa4e3c75dde24463fc1c5f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Fri, 13 Oct 2023 23:40:20 +0200
+Subject: [PATCH 550/834] ac: Rename ac_do_parse_ib to parse_pkt3_ib.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This function only parses PKT3 packets, not other types.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25769>
+---
+ src/amd/common/ac_debug.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/amd/common/ac_debug.c b/src/amd/common/ac_debug.c
+index f74b3c12cef..54fd6ebc8bf 100644
+--- a/src/amd/common/ac_debug.c
++++ b/src/amd/common/ac_debug.c
+@@ -60,7 +60,7 @@ struct ac_ib_parser {
+    unsigned cur_dw;
+ };
+ 
+-static void ac_do_parse_ib(FILE *f, struct ac_ib_parser *ib);
++static void parse_gfx_compute_ib(FILE *f, struct ac_ib_parser *ib);
+ 
+ static void print_spaces(FILE *f, unsigned num)
+ {
+@@ -561,7 +561,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
+       }
+ 
+       fprintf(f, "\n\035>------------------ nested begin ------------------\n");
+-      ac_do_parse_ib(f, &ib_recurse);
++      parse_gfx_compute_ib(f, &ib_recurse);
+       fprintf(f, "\n\035<------------------- nested end -------------------\n");
+       break;
+    }
+@@ -659,7 +659,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
+ /**
+  * Parse and print an IB into a file.
+  */
+-static void ac_do_parse_ib(FILE *f, struct ac_ib_parser *ib)
++static void parse_gfx_compute_ib(FILE *f, struct ac_ib_parser *ib)
+ {
+    int current_trace_id = -1;
+ 
+@@ -760,7 +760,7 @@ void ac_parse_ib_chunk(FILE *f, uint32_t *ib_ptr, int num_dw, const int *trace_i
+    u_memstream_open(&mem, &out, &outsize);
+    FILE *const memf = u_memstream_get(&mem);
+    ib.f = memf;
+-   ac_do_parse_ib(memf, &ib);
++   parse_gfx_compute_ib(memf, &ib);
+    u_memstream_close(&mem);
+ 
+    if (out) {
+-- 
+2.42.0
+

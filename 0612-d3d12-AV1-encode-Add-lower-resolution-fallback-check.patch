@@ -1,0 +1,38 @@
+From c0e0c829795a652925a432a75c5d0bf0813a2553 Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Mon, 18 Sep 2023 19:31:51 -0400
+Subject: [PATCH 612/834] d3d12: AV1 encode - Add lower resolution fallback
+ check for uniform tile support
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ src/gallium/drivers/d3d12/d3d12_video_screen.cpp | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_screen.cpp b/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
+index 195bff6460d..21e44c0a843 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
+@@ -370,6 +370,18 @@ d3d12_video_encode_supported_tile_structures(const D3D12_VIDEO_ENCODER_CODEC &co
+                                                   sizeof(capDataTilesSupport));
+       }
+ 
++      // Try with lower resolution as fallback
++      D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC fallbackRes = { 1920u, 1080u };
++      if(SUCCEEDED(hr) && !capDataTilesSupport.IsSupported && (fallbackRes.Width <= maxRes.Width)
++        && (fallbackRes.Height <= maxRes.Height) ) {
++         auto oldRes = capDataTilesSupport.FrameResolution;
++         capDataTilesSupport.FrameResolution = fallbackRes;
++         hr = pD3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_CONFIG,
++                                                  &capDataTilesSupport,
++                                                  sizeof(capDataTilesSupport));
++         capDataTilesSupport.FrameResolution = oldRes;
++      }
++
+       if(SUCCEEDED(hr) && capDataTilesSupport.IsSupported)
+          supportedSliceStructures |= (PIPE_VIDEO_CAP_SLICE_STRUCTURE_POWER_OF_TWO_ROWS |
+                                       PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_ROWS |
+-- 
+2.42.0
+

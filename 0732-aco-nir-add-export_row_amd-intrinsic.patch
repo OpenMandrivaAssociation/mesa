@@ -1,0 +1,85 @@
+From 4c3677094ec262ab39921ddc404adc3ae8d2c67b Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 1 Sep 2023 11:16:29 +0100
+Subject: [PATCH 732/834] aco,nir: add export_row_amd intrinsic
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25040>
+---
+ src/amd/compiler/aco_instruction_selection.cpp | 16 ++++++++++++++--
+ src/compiler/nir/nir_intrinsics.py             |  3 ++-
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/src/amd/compiler/aco_instruction_selection.cpp b/src/amd/compiler/aco_instruction_selection.cpp
+index 8dd18f72043..0f7fd5b3c27 100644
+--- a/src/amd/compiler/aco_instruction_selection.cpp
++++ b/src/amd/compiler/aco_instruction_selection.cpp
+@@ -9087,7 +9087,8 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
+       }
+       break;
+    }
+-   case nir_intrinsic_export_amd: {
++   case nir_intrinsic_export_amd:
++   case nir_intrinsic_export_row_amd: {
+       unsigned flags = nir_intrinsic_flags(instr);
+       unsigned target = nir_intrinsic_base(instr);
+       unsigned write_mask = nir_intrinsic_write_mask(instr);
+@@ -9099,8 +9100,10 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
+       if (target < V_008DFC_SQ_EXP_MRTZ)
+          ctx->program->has_color_exports = true;
+ 
++      const bool row_en = instr->intrinsic == nir_intrinsic_export_row_amd;
++
+       aco_ptr<Export_instruction> exp{
+-         create_instruction<Export_instruction>(aco_opcode::exp, Format::EXP, 4, 0)};
++         create_instruction<Export_instruction>(aco_opcode::exp, Format::EXP, 4 + row_en, 0)};
+ 
+       exp->dest = target;
+       exp->enabled_mask = write_mask;
+@@ -9124,6 +9127,8 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
+       else
+          exp->valid_mask = false;
+ 
++      exp->row_en = row_en;
++
+       /* Compressed export uses two bits for a channel. */
+       uint32_t channel_mask =
+          exp->compressed ? (write_mask & 0x3 ? 1 : 0) | (write_mask & 0xc ? 2 : 0) : write_mask;
+@@ -9135,6 +9140,13 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
+                                : Operand(v1);
+       }
+ 
++      if (row_en) {
++         Temp row = bld.as_uniform(get_ssa_temp(ctx, instr->src[1].ssa));
++         /* Hack to prevent the RA from moving the source into m0 and then back to a normal SGPR. */
++         row = bld.copy(bld.def(s1, m0), row);
++         exp->operands[4] = bld.m0(row);
++      }
++
+       ctx->block->instructions.emplace_back(std::move(exp));
+       break;
+    }
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index 59ad89b1c60..07bcea5da8f 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1651,10 +1651,11 @@ system_value("lds_ngg_scratch_base_amd", 1)
+ system_value("lds_ngg_gs_out_vertex_base_amd", 1)
+ 
+ # AMD GPU shader output export instruction
+-# src[] = { export_value }
++# src[] = { export_value, row }
+ # BASE = export target
+ # FLAGS = AC_EXP_FLAG_*
+ intrinsic("export_amd", [0], indices=[BASE, WRITE_MASK, FLAGS])
++intrinsic("export_row_amd", [0, 1], indices=[BASE, WRITE_MASK, FLAGS])
+ 
+ # Export dual source blend outputs with swizzle operation
+ # src[] = { mrt0, mrt1 }
+-- 
+2.42.0
+

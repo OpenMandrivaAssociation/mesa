@@ -1,0 +1,47 @@
+From 8b5b362be6f145c59b477a4c3f323b3e686bd9f9 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Tue, 5 Sep 2023 18:09:40 -0400
+Subject: [PATCH 210/834] nir/lower_io: Use load_global_constant for OpenCL
+
+Map __constant with a 64-bit address format to load_global_constant instead of
+load_global. This notably allows nir_opt_preamble to hoist the load.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25625>
+---
+ src/compiler/nir/nir_lower_io.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/compiler/nir/nir_lower_io.c b/src/compiler/nir/nir_lower_io.c
+index 107cb8735dc..a08b1246cd4 100644
+--- a/src/compiler/nir/nir_lower_io.c
++++ b/src/compiler/nir/nir_lower_io.c
+@@ -1335,6 +1335,15 @@ get_load_global_op_from_addr_format(nir_address_format addr_format)
+       return nir_intrinsic_load_global_2x32;
+ }
+ 
++static nir_intrinsic_op
++get_load_global_constant_op_from_addr_format(nir_address_format addr_format)
++{
++   if (addr_format != nir_address_format_2x32bit_global)
++      return nir_intrinsic_load_global_constant;
++   else
++      return nir_intrinsic_load_global_2x32; /* no dedicated op, fallback */
++}
++
+ static nir_def *
+ build_explicit_io_load(nir_builder *b, nir_intrinsic_instr *intrin,
+                        nir_def *addr, nir_address_format addr_format,
+@@ -1446,7 +1455,7 @@ build_explicit_io_load(nir_builder *b, nir_intrinsic_instr *intrin,
+             op = nir_intrinsic_load_constant;
+          } else {
+             assert(addr_format_is_global(addr_format, mode));
+-            op = get_load_global_op_from_addr_format(addr_format);
++            op = get_load_global_constant_op_from_addr_format(addr_format);
+          }
+          break;
+       default:
+-- 
+2.42.0
+

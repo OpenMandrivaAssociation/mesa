@@ -1,0 +1,40 @@
+From a29cd20d1725647f63fea648f7fb4d0e32b8d62b Mon Sep 17 00:00:00 2001
+From: Bas Nieuwenhuizen <bas@basnieuwenhuizen.nl>
+Date: Sat, 15 Jul 2023 19:24:07 +0200
+Subject: [PATCH 713/834] nir: Add AMD cooperative matrix intrinsics.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24683>
+---
+ src/compiler/nir/nir_divergence_analysis.c | 1 +
+ src/compiler/nir/nir_intrinsics.py         | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/src/compiler/nir/nir_divergence_analysis.c b/src/compiler/nir/nir_divergence_analysis.c
+index c5954f59fcb..eb6f6405099 100644
+--- a/src/compiler/nir/nir_divergence_analysis.c
++++ b/src/compiler/nir/nir_divergence_analysis.c
+@@ -610,6 +610,7 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
+    case nir_intrinsic_rq_load:
+    case nir_intrinsic_load_ray_triangle_vertex_positions:
+    case nir_intrinsic_cmat_extract:
++   case nir_intrinsic_cmat_muladd_amd:
+       is_divergent = true;
+       break;
+ 
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index fb31c13e41b..59ad89b1c60 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1671,6 +1671,9 @@ system_value("barycentric_optimize_amd", dest_comp=1, bit_sizes=[1])
+ intrinsic("strict_wqm_coord_amd", src_comp=[0], dest_comp=0, bit_sizes=[32], indices=[BASE],
+           flags=[CAN_ELIMINATE])
+ 
++intrinsic("cmat_muladd_amd", src_comp=[16, 16, 0], dest_comp=0, bit_sizes=src2,
++          indices=[SATURATE, CMAT_SIGNED_MASK], flags=[CAN_ELIMINATE])
++
+ # V3D-specific instrinc for tile buffer color reads.
+ #
+ # The hardware requires that we read the samples and components of a pixel
+-- 
+2.42.0
+

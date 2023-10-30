@@ -1,0 +1,122 @@
+From 653bcbcb091d4619bca6edfc44a0a2cfc4f30d50 Mon Sep 17 00:00:00 2001
+From: Bas Nieuwenhuizen <bas@basnieuwenhuizen.nl>
+Date: Sun, 16 Jul 2023 01:34:29 +0200
+Subject: [PATCH 718/834] radv: Expose VK_KHR_cooperative_matrix.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24683>
+---
+ docs/relnotes/new_features.txt        |  1 +
+ src/amd/vulkan/radv_physical_device.c | 70 +++++++++++++++++++++++++++
+ 2 files changed, 71 insertions(+)
+
+diff --git a/docs/relnotes/new_features.txt b/docs/relnotes/new_features.txt
+index 62f583879a1..ca79cf2a745 100644
+--- a/docs/relnotes/new_features.txt
++++ b/docs/relnotes/new_features.txt
+@@ -18,3 +18,4 @@ GL_OES_sample_variables on Asahi
+ GL_OES_shader_multisample_interpolation on Asahi
+ GL_OES_gpu_shader5 on Asahi
+ EGL_ANDROID_blob_cache works when disk caching is disabled
++VK_KHR_cooperative_matrix on RADV/GFX11+
+diff --git a/src/amd/vulkan/radv_physical_device.c b/src/amd/vulkan/radv_physical_device.c
+index ff897fd1518..3402415c3cd 100644
+--- a/src/amd/vulkan/radv_physical_device.c
++++ b/src/amd/vulkan/radv_physical_device.c
+@@ -380,6 +380,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device
+       .KHR_8bit_storage = true,
+       .KHR_16bit_storage = true,
+       .KHR_acceleration_structure = radv_enable_rt(device, false),
++      .KHR_cooperative_matrix = device->rad_info.gfx_level >= GFX11 && !device->use_llvm,
+       .KHR_bind_memory2 = true,
+       .KHR_buffer_device_address = true,
+       .KHR_copy_commands2 = true,
+@@ -1038,6 +1039,10 @@ radv_physical_device_get_features(const struct radv_physical_device *pdevice, st
+       .deviceGeneratedCompute = true,
+       .deviceGeneratedComputePipelines = false,
+       .deviceGeneratedComputeCaptureReplay = false,
++
++      /* VK_KHR_cooperative_matrix */
++      .cooperativeMatrix = pdevice->rad_info.gfx_level >= GFX11 && !pdevice->use_llvm,
++      .cooperativeMatrixRobustBufferAccess = pdevice->rad_info.gfx_level >= GFX11 && !pdevice->use_llvm,
+    };
+ }
+ 
+@@ -1710,6 +1715,9 @@ radv_get_physical_device_properties(struct radv_physical_device *pdevice)
+    p->polygonModePointSize = true;
+    p->nonStrictSinglePixelWideLinesUseParallelogram = false;
+    p->nonStrictWideLinesUseParallelogram = false;
++
++   /* VK_KHR_cooperative_matrix */
++   p->cooperativeMatrixSupportedStages = VK_SHADER_STAGE_COMPUTE_BIT;
+ }
+ 
+ static VkResult
+@@ -2436,3 +2444,65 @@ radv_GetPhysicalDeviceToolProperties(VkPhysicalDevice physicalDevice, uint32_t *
+ 
+    return vk_outarray_status(&out);
+ }
++
++VKAPI_ATTR VkResult VKAPI_CALL
++radv_GetPhysicalDeviceCooperativeMatrixPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount,
++                                                     VkCooperativeMatrixPropertiesKHR *pProperties)
++{
++   VK_OUTARRAY_MAKE_TYPED(VkCooperativeMatrixPropertiesKHR, out, pProperties, pPropertyCount);
++
++   vk_outarray_append_typed(VkCooperativeMatrixPropertiesKHR, &out, p)
++   {
++      *p = (struct VkCooperativeMatrixPropertiesKHR){.sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR,
++                                                     .MSize = 16,
++                                                     .NSize = 16,
++                                                     .KSize = 16,
++                                                     .AType = VK_COMPONENT_TYPE_FLOAT16_KHR,
++                                                     .BType = VK_COMPONENT_TYPE_FLOAT16_KHR,
++                                                     .CType = VK_COMPONENT_TYPE_FLOAT16_KHR,
++                                                     .ResultType = VK_COMPONENT_TYPE_FLOAT16_KHR,
++                                                     .saturatingAccumulation = false,
++                                                     .scope = VK_SCOPE_SUBGROUP_KHR};
++   }
++
++   vk_outarray_append_typed(VkCooperativeMatrixPropertiesKHR, &out, p)
++   {
++      *p = (struct VkCooperativeMatrixPropertiesKHR){.sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR,
++                                                     .MSize = 16,
++                                                     .NSize = 16,
++                                                     .KSize = 16,
++                                                     .AType = VK_COMPONENT_TYPE_FLOAT16_KHR,
++                                                     .BType = VK_COMPONENT_TYPE_FLOAT16_KHR,
++                                                     .CType = VK_COMPONENT_TYPE_FLOAT32_KHR,
++                                                     .ResultType = VK_COMPONENT_TYPE_FLOAT32_KHR,
++                                                     .saturatingAccumulation = false,
++                                                     .scope = VK_SCOPE_SUBGROUP_KHR};
++   }
++
++   for (unsigned asigned = 0; asigned < 2; asigned++) {
++      for (unsigned bsigned = 0; bsigned < 2; bsigned++) {
++         for (unsigned csigned = 0; csigned < 2; csigned++) {
++            for (unsigned saturate = 0; saturate < 2; saturate++) {
++               if (!csigned && saturate)
++                  continue; /* The HW only supports signed acc. */
++               vk_outarray_append_typed(VkCooperativeMatrixPropertiesKHR, &out, p)
++               {
++                  *p = (struct VkCooperativeMatrixPropertiesKHR){
++                     .sType = VK_STRUCTURE_TYPE_COOPERATIVE_MATRIX_PROPERTIES_KHR,
++                     .MSize = 16,
++                     .NSize = 16,
++                     .KSize = 16,
++                     .AType = asigned ? VK_COMPONENT_TYPE_SINT8_KHR : VK_COMPONENT_TYPE_UINT8_KHR,
++                     .BType = bsigned ? VK_COMPONENT_TYPE_SINT8_KHR : VK_COMPONENT_TYPE_UINT8_KHR,
++                     .CType = csigned ? VK_COMPONENT_TYPE_SINT32_KHR : VK_COMPONENT_TYPE_UINT32_KHR,
++                     .ResultType = csigned ? VK_COMPONENT_TYPE_SINT32_KHR : VK_COMPONENT_TYPE_UINT32_KHR,
++                     .saturatingAccumulation = saturate,
++                     .scope = VK_SCOPE_SUBGROUP_KHR};
++               }
++            }
++         }
++      }
++   }
++
++   return vk_outarray_status(&out);
++}
+-- 
+2.42.0
+

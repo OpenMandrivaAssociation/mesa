@@ -1,0 +1,31 @@
+From e4842c02704a660f95a137111da3f7babf35513c Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 22 Sep 2023 19:33:17 +0100
+Subject: [PATCH 164/834] aco: consider exec_hi in reads_exec()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Daniel Schürmann <daniel@schuermann.dev>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25374>
+---
+ src/amd/compiler/aco_ir.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/amd/compiler/aco_ir.h b/src/amd/compiler/aco_ir.h
+index ef355553255..d521c4d929a 100644
+--- a/src/amd/compiler/aco_ir.h
++++ b/src/amd/compiler/aco_ir.h
+@@ -1052,7 +1052,7 @@ struct Instruction {
+    constexpr bool reads_exec() const noexcept
+    {
+       for (const Operand& op : operands) {
+-         if (op.isFixed() && op.physReg() == exec)
++         if (op.isFixed() && (op.physReg() == exec_lo || op.physReg() == exec_hi))
+             return true;
+       }
+       return false;
+-- 
+2.42.0
+

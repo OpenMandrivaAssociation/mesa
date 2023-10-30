@@ -1,0 +1,79 @@
+From f97a701d8986ebd4576cc3d13c148c3857b73faf Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Sat, 19 Aug 2023 11:20:00 +0800
+Subject: [PATCH 057/834] aco,radv,radeonsi: pass spi ps input ena and addr
+
+radeonsi may pass different ena and addr when part mode shader.
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/compiler/aco_instruction_selection_setup.cpp | 4 ++--
+ src/amd/compiler/aco_shader_info.h                   | 3 ++-
+ src/amd/vulkan/radv_aco_shader_info.h                | 3 ++-
+ src/gallium/drivers/radeonsi/si_shader_aco.c         | 3 ++-
+ 4 files changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/src/amd/compiler/aco_instruction_selection_setup.cpp b/src/amd/compiler/aco_instruction_selection_setup.cpp
+index 27b318451d7..d444b89f63d 100644
+--- a/src/amd/compiler/aco_instruction_selection_setup.cpp
++++ b/src/amd/compiler/aco_instruction_selection_setup.cpp
+@@ -625,8 +625,8 @@ init_context(isel_context* ctx, nir_shader* shader)
+       }
+    }
+ 
+-   ctx->program->config->spi_ps_input_ena = ctx->program->info.ps.spi_ps_input;
+-   ctx->program->config->spi_ps_input_addr = ctx->program->info.ps.spi_ps_input;
++   ctx->program->config->spi_ps_input_ena = ctx->program->info.ps.spi_ps_input_ena;
++   ctx->program->config->spi_ps_input_addr = ctx->program->info.ps.spi_ps_input_addr;
+ 
+    ctx->cf_info.nir_to_aco = std::move(nir_to_aco);
+ 
+diff --git a/src/amd/compiler/aco_shader_info.h b/src/amd/compiler/aco_shader_info.h
+index dce49f7169e..a9559f9d783 100644
+--- a/src/amd/compiler/aco_shader_info.h
++++ b/src/amd/compiler/aco_shader_info.h
+@@ -171,7 +171,8 @@ struct aco_shader_info {
+    } tcs;
+    struct {
+       uint32_t num_interp;
+-      unsigned spi_ps_input;
++      unsigned spi_ps_input_ena;
++      unsigned spi_ps_input_addr;
+ 
+       /* Vulkan only */
+       struct ac_arg epilog_pc;
+diff --git a/src/amd/vulkan/radv_aco_shader_info.h b/src/amd/vulkan/radv_aco_shader_info.h
+index f53c433f769..ec235a7279b 100644
+--- a/src/amd/vulkan/radv_aco_shader_info.h
++++ b/src/amd/vulkan/radv_aco_shader_info.h
+@@ -58,9 +58,10 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info, const struct radv
+    ASSIGN_FIELD(tcs.num_linked_patch_outputs);
+    ASSIGN_FIELD(tcs.tcs_vertices_out);
+    ASSIGN_FIELD(ps.num_interp);
+-   ASSIGN_FIELD(ps.spi_ps_input);
+    ASSIGN_FIELD(cs.subgroup_size);
+    ASSIGN_FIELD(cs.uses_full_subgroups);
++   aco_info->ps.spi_ps_input_ena = radv->ps.spi_ps_input;
++   aco_info->ps.spi_ps_input_addr = radv->ps.spi_ps_input;
+    aco_info->gfx9_gs_ring_lds_size = radv->gs_ring_info.lds_size;
+    aco_info->is_trap_handler_shader = radv->type == RADV_SHADER_TYPE_TRAP_HANDLER;
+    aco_info->image_2d_view_of_3d = radv_key->image_2d_view_of_3d;
+diff --git a/src/gallium/drivers/radeonsi/si_shader_aco.c b/src/gallium/drivers/radeonsi/si_shader_aco.c
+index 526bf19c3a2..8d925bc6694 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_aco.c
++++ b/src/gallium/drivers/radeonsi/si_shader_aco.c
+@@ -104,7 +104,8 @@ si_fill_aco_shader_info(struct si_shader *shader, struct aco_shader_info *info,
+       break;
+    case MESA_SHADER_FRAGMENT:
+       info->ps.num_interp = si_get_ps_num_interp(shader);
+-      info->ps.spi_ps_input = shader->config.spi_ps_input_ena;
++      info->ps.spi_ps_input_ena = shader->config.spi_ps_input_ena;
++      info->ps.spi_ps_input_addr = shader->config.spi_ps_input_addr;
+       break;
+    default:
+       break;
+-- 
+2.42.0
+

@@ -1,0 +1,53 @@
+From ff86147f91edba89117c90114c446de29a0a5b2f Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Wed, 6 Oct 2021 12:01:10 +0200
+Subject: [PATCH 285/834] broadcom/qpu: fail packing on unhandled mul
+ pack/unpack
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We are doing this for the ADD alu already and it may be helpful to
+identify cases where we have QPU code with pack/unpack modifiers on
+MUL opcodes that we then are not packing into the actual QPU
+instructions.
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/qpu/qpu_pack.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/broadcom/qpu/qpu_pack.c b/src/broadcom/qpu/qpu_pack.c
+index e226d93fa8a..01462bd11bc 100644
+--- a/src/broadcom/qpu/qpu_pack.c
++++ b/src/broadcom/qpu/qpu_pack.c
+@@ -2109,6 +2109,12 @@ v3d33_qpu_mul_pack(const struct v3d_device_info *devinfo,
+         }
+ 
+         default:
++                if (instr->alu.mul.op != V3D_QPU_M_NOP &&
++                    (instr->alu.mul.output_pack != V3D_QPU_PACK_NONE ||
++                     instr->alu.mul.a.unpack != V3D_QPU_UNPACK_NONE ||
++                     instr->alu.mul.b.unpack != V3D_QPU_UNPACK_NONE)) {
++                        return false;
++                }
+                 break;
+         }
+ 
+@@ -2228,6 +2234,12 @@ v3d71_qpu_mul_pack(const struct v3d_device_info *devinfo,
+         }
+ 
+         default:
++                if (instr->alu.mul.op != V3D_QPU_M_NOP &&
++                    (instr->alu.mul.output_pack != V3D_QPU_PACK_NONE ||
++                     instr->alu.mul.a.unpack != V3D_QPU_UNPACK_NONE ||
++                     instr->alu.mul.b.unpack != V3D_QPU_UNPACK_NONE)) {
++                        return false;
++                }
+                 break;
+         }
+ 
+-- 
+2.42.0
+

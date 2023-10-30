@@ -1,0 +1,38 @@
+From 42b70f624b2a4ec9b17a745235a3ef601dd3816f Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Tue, 28 Sep 2021 13:37:28 +0200
+Subject: [PATCH 281/834] broadcom/compiler: CS payload registers have changed
+ in v71
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/compiler/nir_to_vir.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/broadcom/compiler/nir_to_vir.c b/src/broadcom/compiler/nir_to_vir.c
+index e9d4db123c8..5776bfcde30 100644
+--- a/src/broadcom/compiler/nir_to_vir.c
++++ b/src/broadcom/compiler/nir_to_vir.c
+@@ -4348,8 +4348,13 @@ nir_to_vir(struct v3d_compile *c)
+                                                       V3D_QPU_WADDR_SYNC));
+                 }
+ 
+-                c->cs_payload[0] = vir_MOV(c, vir_reg(QFILE_REG, 0));
+-                c->cs_payload[1] = vir_MOV(c, vir_reg(QFILE_REG, 2));
++                if (c->devinfo->ver <= 42) {
++                        c->cs_payload[0] = vir_MOV(c, vir_reg(QFILE_REG, 0));
++                        c->cs_payload[1] = vir_MOV(c, vir_reg(QFILE_REG, 2));
++                } else if (c->devinfo->ver >= 71) {
++                        c->cs_payload[0] = vir_MOV(c, vir_reg(QFILE_REG, 3));
++                        c->cs_payload[1] = vir_MOV(c, vir_reg(QFILE_REG, 2));
++                }
+ 
+                 /* Set up the division between gl_LocalInvocationIndex and
+                  * wg_in_mem in the payload reg.
+-- 
+2.42.0
+

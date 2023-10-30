@@ -1,0 +1,744 @@
+From a164e147e91e8c6090d4dceca59806e091244c50 Mon Sep 17 00:00:00 2001
+From: Saroj Kumar <saroj.kumar@amd.com>
+Date: Mon, 17 Jul 2023 20:21:29 +0530
+Subject: [PATCH 594/834] radeonsi: Add perfetto support in radeonsi
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add perfetto code in new files si_perfetto.h/cc which add tracepoint
+begin and end event and calls to the generated code from python
+si_tracepoints.py
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/23664>
+---
+ src/gallium/drivers/radeonsi/meson.build      |  26 +-
+ src/gallium/drivers/radeonsi/si_perfetto.cpp  | 394 ++++++++++++++++++
+ src/gallium/drivers/radeonsi/si_perfetto.h    | 159 +++++++
+ src/gallium/drivers/radeonsi/si_pipe.h        |   3 +
+ .../drivers/radeonsi/si_tracepoints.py        |  79 ++++
+ 5 files changed, 659 insertions(+), 2 deletions(-)
+ create mode 100644 src/gallium/drivers/radeonsi/si_perfetto.cpp
+ create mode 100644 src/gallium/drivers/radeonsi/si_perfetto.h
+ create mode 100644 src/gallium/drivers/radeonsi/si_tracepoints.py
+
+diff --git a/src/gallium/drivers/radeonsi/meson.build b/src/gallium/drivers/radeonsi/meson.build
+index ec0b8bf377e..a45e5298f16 100644
+--- a/src/gallium/drivers/radeonsi/meson.build
++++ b/src/gallium/drivers/radeonsi/meson.build
+@@ -18,6 +18,20 @@
+ # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ # SOFTWARE.
+ 
++si_tracepoints = custom_target(
++  'si_tracepoints.[ch]',
++  input: 'si_tracepoints.py',
++  output: ['si_tracepoints.c', 'si_tracepoints_perfetto.h', 'si_tracepoints.h'],
++  command: [
++    prog_python, '@INPUT@',
++    '-p', join_paths(dir_source_root, 'src/util/perf/'),
++    '-C', '@OUTPUT0@',
++    '--perfetto-hdr', '@OUTPUT1@',
++    '-H', '@OUTPUT2@'
++  ],
++  depend_files: u_trace_py,
++)
++
+ files_libradeonsi = files(
+   'driinfo_radeonsi.h',
+   'gfx10_shader_ngg.c',
+@@ -101,9 +115,17 @@ files_libradeonsi = files(
+   'radeon_video.h',
+ )
+ 
++files_libradeonsi += si_tracepoints
++
+ radeonsi_include_dirs = [inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_amd_common,
+-                         inc_amd_common_llvm, inc_gallium_drivers]
+-radeonsi_deps = [dep_llvm, dep_clock, dep_libdrm_radeon, idep_nir_headers, idep_amdgfxregs_h, idep_mesautil, idep_aco]
++                         inc_amd_common_llvm, inc_gallium_drivers, inc_compiler]
++radeonsi_deps = [dep_llvm, dep_clock, dep_libdrm_radeon, idep_nir_headers, idep_amdgfxregs_h, idep_mesautil, idep_aco, idep_u_tracepoints]
++
++if with_perfetto
++  radeonsi_deps += dep_perfetto
++endif
++
++files_libradeonsi += ['si_perfetto.cpp', 'si_perfetto.h']
+ 
+ radeonsi_gfx_libs = []
+ foreach ver : ['6', '7', '8', '9', '10', '103', '11']
+diff --git a/src/gallium/drivers/radeonsi/si_perfetto.cpp b/src/gallium/drivers/radeonsi/si_perfetto.cpp
+new file mode 100644
+index 00000000000..e5c1e8c07af
+--- /dev/null
++++ b/src/gallium/drivers/radeonsi/si_perfetto.cpp
+@@ -0,0 +1,394 @@
++/*
++ * Copyright 2023 Advanced Micro Devices, Inc.
++ *
++ * SPDX-License-Identifier: MIT
++ */
++#include <stdio.h>
++#include <stdarg.h>
++#include <string.h>
++
++#include "util/hash_table.h"
++#include "util/u_process.h"
++#include "util/hash_table.h"
++
++#include "si_pipe.h"
++#include "si_perfetto.h"
++#include "si_tracepoints.h"
++
++#ifdef HAVE_PERFETTO
++
++#include "util/perf/u_perfetto.h"
++#include "util/perf/u_perfetto_renderpass.h"
++
++#include "si_tracepoints_perfetto.h"
++
++/* Just naming stages */
++static const struct {
++   const char *name;
++
++   /* The perfetto UI requires that there is a parent-child relationship
++    * within a row of elements. Which means that all children elements must
++    * end within the lifespan of their parent.
++    *
++    * Some elements like stalls and command buffers follow that relationship,
++    * but not all. This tells us in which UI row the elements should live.
++    */
++   enum si_ds_queue_stage draw_stage;
++} si_queue_stage_desc[SI_DS_QUEUE_STAGE_N_STAGES] = {
++   /* Order must match the enum! */
++   {
++      "queue",
++      SI_DS_QUEUE_STAGE_QUEUE,
++   },
++   {
++      "compute",
++      SI_DS_QUEUE_STAGE_COMPUTE,
++   },
++   {
++      "draw",
++      SI_DS_QUEUE_STAGE_DRAW,
++   }
++};
++
++struct SIRenderpassIncrementalState {
++   bool was_cleared = true;
++};
++
++struct SIRenderpassTraits : public perfetto::DefaultDataSourceTraits {
++   using IncrementalStateType = SIRenderpassIncrementalState;
++};
++
++class SIRenderpassDataSource : public MesaRenderpassDataSource<SIRenderpassDataSource, SIRenderpassTraits> {
++};
++
++PERFETTO_DECLARE_DATA_SOURCE_STATIC_MEMBERS(SIRenderpassDataSource);
++PERFETTO_DEFINE_DATA_SOURCE_STATIC_MEMBERS(SIRenderpassDataSource);
++
++using perfetto::protos::pbzero::InternedGpuRenderStageSpecification_RenderStageCategory;
++
++static void sync_timestamp(SIRenderpassDataSource::TraceContext &ctx, struct si_ds_device *device)
++{
++   uint64_t cpu_ts = perfetto::base::GetBootTimeNs().count();
++   uint64_t gpu_ts;
++
++   struct si_context *sctx = container_of(device, struct si_context, ds);   
++   gpu_ts = sctx->screen->b.get_timestamp(&sctx->screen->b);
++
++
++   cpu_ts = perfetto::base::GetBootTimeNs().count();
++
++   if (cpu_ts < device->next_clock_sync_ns)
++      return;
++
++   PERFETTO_LOG("sending clocks gpu=0x%08x", device->gpu_clock_id);
++
++   device->sync_gpu_ts = gpu_ts;
++   device->next_clock_sync_ns = cpu_ts + 1000000000ull;
++   MesaRenderpassDataSource<SIRenderpassDataSource, SIRenderpassTraits>::EmitClockSync(ctx, cpu_ts, gpu_ts, device->gpu_clock_id);
++}
++
++static void send_descriptors(SIRenderpassDataSource::TraceContext &ctx, struct si_ds_device *device)
++{
++   PERFETTO_LOG("Sending renderstage descriptors");
++
++   device->event_id = 0;
++   list_for_each_entry_safe(struct si_ds_queue, queue, &device->queues, link) {
++      for (uint32_t s = 0; s < ARRAY_SIZE(queue->stages); s++) {
++         queue->stages[s].start_ns[0] = 0;
++      }
++   }
++
++   {
++      auto packet = ctx.NewTracePacket();
++
++      packet->set_timestamp(perfetto::base::GetBootTimeNs().count());
++      packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
++      packet->set_sequence_flags(perfetto::protos::pbzero::TracePacket::SEQ_INCREMENTAL_STATE_CLEARED);
++
++      auto interned_data = packet->set_interned_data();
++
++      {
++         auto desc = interned_data->add_graphics_contexts();
++         desc->set_iid(device->iid);
++         desc->set_pid(getpid());
++         switch (device->api) {
++         case AMD_DS_API_OPENGL:
++            desc->set_api(perfetto::protos::pbzero::InternedGraphicsContext_Api::OPEN_GL);
++            break;
++         case AMD_DS_API_VULKAN:
++            desc->set_api(perfetto::protos::pbzero::InternedGraphicsContext_Api::VULKAN);
++            break;
++         default:
++            break;
++         }
++      }
++
++      /* Emit all the IID picked at device/queue creation. */
++      list_for_each_entry_safe(struct si_ds_queue, queue, &device->queues, link) {
++         for (unsigned s = 0; s < SI_DS_QUEUE_STAGE_N_STAGES; s++) {
++            {
++               /* We put the stage number in there so that all rows are order
++                * by si_ds_queue_stage.
++                */
++               char name[100];
++               snprintf(name, sizeof(name), "%.10s-%s-%u-%s", util_get_process_name(), queue->name, s, si_queue_stage_desc[s].name);
++
++               auto desc = interned_data->add_gpu_specifications();
++               desc->set_iid(queue->stages[s].queue_iid);
++               desc->set_name(name);
++            }
++            {
++               auto desc = interned_data->add_gpu_specifications();
++               desc->set_iid(queue->stages[s].stage_iid);
++               desc->set_name(si_queue_stage_desc[s].name);
++            }
++         }
++      }
++   }
++
++   device->next_clock_sync_ns = 0;
++   sync_timestamp(ctx, device);
++}
++
++typedef void (*trace_payload_as_extra_func)(perfetto::protos::pbzero::GpuRenderStageEvent *, const void*);
++
++static void begin_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queue_stage stage_id)
++{
++   PERFETTO_LOG("begin event called - ts_ns=%lu", ts_ns);
++   uint32_t level = queue->stages[stage_id].level;
++   /* If we haven't managed to calibrate the alignment between GPU and CPU
++    * timestamps yet, then skip this trace, otherwise perfetto won't know
++    * what to do with it.
++    */
++   if (!queue->device->sync_gpu_ts) {
++      queue->stages[stage_id].start_ns[level] = 0;
++      return;
++   }
++
++   if (level >= (ARRAY_SIZE(queue->stages[stage_id].start_ns) - 1))
++      return;
++
++   queue->stages[stage_id].start_ns[level] = ts_ns;
++   queue->stages[stage_id].level++;
++}
++
++static void end_event(struct si_ds_queue *queue, uint64_t ts_ns, enum si_ds_queue_stage stage_id, uint32_t submission_id, const char *app_event, const void* payload = nullptr, trace_payload_as_extra_func payload_as_extra = nullptr)
++{
++   PERFETTO_LOG("end event called - ts_ns=%lu", ts_ns);
++   struct si_ds_device *device = queue->device;
++
++   /* If we haven't managed to calibrate the alignment between GPU and CPU
++    * timestamps yet, then skip this trace, otherwise perfetto won't know
++    * what to do with it.
++    */
++   if (!device->sync_gpu_ts)
++      return;
++
++   if (queue->stages[stage_id].level == 0)
++      return;
++
++   uint32_t level = --queue->stages[stage_id].level;
++   struct si_ds_stage *stage = &queue->stages[stage_id];
++   uint64_t start_ns = stage->start_ns[level];
++   PERFETTO_LOG("end event called - start_ns=%lu ts_ns=%lu", start_ns, ts_ns);
++   if (!start_ns || start_ns > ts_ns)
++      return;
++
++   SIRenderpassDataSource::Trace([=](SIRenderpassDataSource::TraceContext tctx) {
++      if (auto state = tctx.GetIncrementalState(); state->was_cleared) {
++         send_descriptors(tctx, queue->device);
++         state->was_cleared = false;
++      }
++
++      sync_timestamp(tctx, queue->device);
++
++      uint64_t evt_id = device->event_id++;
++
++      /* If this is an application event, we might need to generate a new
++       * stage_iid if not already seen. Otherwise, it's a driver event and we
++       * have use the internal stage_iid.
++       */
++      uint64_t stage_iid = app_event ? tctx.GetDataSourceLocked()->debug_marker_stage(tctx, app_event) : stage->stage_iid;
++
++      auto packet = tctx.NewTracePacket();
++
++      packet->set_timestamp(start_ns);
++      packet->set_timestamp_clock_id(queue->device->gpu_clock_id);
++
++      assert(ts_ns >= start_ns);
++
++      auto event = packet->set_gpu_render_stage_event();
++      event->set_gpu_id(queue->device->gpu_id);
++
++      event->set_hw_queue_iid(stage->queue_iid);
++      event->set_stage_iid(stage_iid);
++      event->set_context(queue->device->iid);
++      event->set_event_id(evt_id);
++      event->set_duration(ts_ns - start_ns);
++      event->set_submission_id(submission_id);
++
++      if (payload && payload_as_extra) {
++         payload_as_extra(event, payload);
++      }
++   });
++
++   stage->start_ns[level] = 0;
++}
++
++#endif /* HAVE_PERFETTO */
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#ifdef HAVE_PERFETTO
++
++/*
++ * Trace callbacks, called from u_trace once the timestamps from GPU have been
++ * collected.
++ */
++
++#define CREATE_DUAL_EVENT_CALLBACK(event_name, stage)                                             \
++void si_ds_begin_##event_name(struct si_ds_device *device, uint64_t ts_ns, uint16_t tp_idx,       \
++                              const void *flush_data,                                             \
++                              const struct trace_si_begin_##event_name *payload)                  \
++{                                                                                                 \
++   const struct si_ds_flush_data *flush = (const struct si_ds_flush_data *) flush_data;           \
++   begin_event(flush->queue, ts_ns, stage);                                                       \
++}                                                                                                 \
++                                                                                                  \
++void si_ds_end_##event_name(struct si_ds_device *device, uint64_t ts_ns, uint16_t tp_idx,         \
++                            const void *flush_data,                                               \
++                            const struct trace_si_end_##event_name *payload)                      \
++{                                                                                                 \
++   const struct si_ds_flush_data *flush =  (const struct si_ds_flush_data *) flush_data;          \
++   end_event(flush->queue, ts_ns, stage, flush->submission_id, NULL, payload,                     \
++             (trace_payload_as_extra_func)&trace_payload_as_extra_si_end_##event_name);           \
++}                                                                                                 \
++
++CREATE_DUAL_EVENT_CALLBACK(draw, SI_DS_QUEUE_STAGE_DRAW)
++CREATE_DUAL_EVENT_CALLBACK(compute, SI_DS_QUEUE_STAGE_COMPUTE)
++
++uint64_t si_ds_begin_submit(struct si_ds_queue *queue)
++{
++   return perfetto::base::GetBootTimeNs().count();
++}
++
++void si_ds_end_submit(struct si_ds_queue *queue, uint64_t start_ts)
++{
++   if (!u_trace_should_process(&queue->device->trace_context)) {
++      queue->device->sync_gpu_ts = 0;
++      queue->device->next_clock_sync_ns = 0;
++      return;
++   }
++
++   uint64_t end_ts = perfetto::base::GetBootTimeNs().count();
++   uint32_t submission_id = queue->submission_id++;
++
++   SIRenderpassDataSource::Trace([=](SIRenderpassDataSource::TraceContext tctx) {
++      if (auto state = tctx.GetIncrementalState(); state->was_cleared) {
++         send_descriptors(tctx, queue->device);
++         state->was_cleared = false;
++      }
++
++      sync_timestamp(tctx, queue->device);
++
++      auto packet = tctx.NewTracePacket();
++
++      packet->set_timestamp(start_ts);
++
++      auto event = packet->set_vulkan_api_event();
++      auto submit = event->set_vk_queue_submit();
++
++      submit->set_duration_ns(end_ts - start_ts);
++      submit->set_vk_queue((uintptr_t) queue);
++      submit->set_submission_id(submission_id);
++   });
++}
++
++#endif /* HAVE_PERFETTO */
++
++static void si_driver_ds_init_once(void)
++{
++#ifdef HAVE_PERFETTO
++   util_perfetto_init();
++   perfetto::DataSourceDescriptor dsd;
++   dsd.set_name("gpu.renderstages.amd");
++   SIRenderpassDataSource::Register(dsd);
++#endif
++}
++
++static once_flag si_driver_ds_once_flag = ONCE_FLAG_INIT;
++static uint64_t iid = 1;
++
++static uint64_t get_iid()
++{
++   return iid++;
++}
++
++static uint32_t si_pps_clock_id(uint32_t gpu_id)
++{
++   char buf[40];
++   snprintf(buf, sizeof(buf), "org.freedesktop.mesa.amd.gpu%u", gpu_id);
++
++   return _mesa_hash_string(buf) | 0x80000000;
++}
++
++void si_driver_ds_init(void)
++{
++   call_once(&si_driver_ds_once_flag, si_driver_ds_init_once);
++   si_gpu_tracepoint_config_variable();
++}
++
++void si_ds_device_init(struct si_ds_device *device, const struct radeon_info *devinfo, uint32_t gpu_id, enum amd_ds_api api)
++{
++   device->gpu_id = gpu_id;
++   device->gpu_clock_id = si_pps_clock_id(gpu_id);
++   device->info = devinfo;
++   device->iid = get_iid();
++   device->api = api;
++   list_inithead(&device->queues);
++}
++
++void si_ds_device_fini(struct si_ds_device *device)
++{
++   u_trace_context_fini(&device->trace_context);
++}
++
++struct si_ds_queue * si_ds_device_init_queue(struct si_ds_device *device, struct si_ds_queue *queue, const char *fmt_name, ...)
++{
++   va_list ap;
++   queue->device = device;
++
++   va_start(ap, fmt_name);
++   vsnprintf(queue->name, sizeof(queue->name), fmt_name, ap);
++   va_end(ap);
++
++   for (unsigned s = 0; s < SI_DS_QUEUE_STAGE_N_STAGES; s++) {
++      queue->stages[s].queue_iid = get_iid();
++      queue->stages[s].stage_iid = get_iid();
++   }
++
++   list_add(&queue->link, &device->queues);
++
++   return queue;
++}
++
++void si_ds_flush_data_init(struct si_ds_flush_data *data, struct si_ds_queue *queue, uint64_t submission_id)
++{
++   memset(data, 0, sizeof(*data));
++
++   data->queue = queue;
++   data->submission_id = submission_id;
++
++   u_trace_init(&data->trace, &queue->device->trace_context);
++}
++
++void si_ds_flush_data_fini(struct si_ds_flush_data *data)
++{
++   u_trace_fini(&data->trace);
++}
++
++#ifdef __cplusplus
++}
++#endif
+diff --git a/src/gallium/drivers/radeonsi/si_perfetto.h b/src/gallium/drivers/radeonsi/si_perfetto.h
+new file mode 100644
+index 00000000000..1897064bae1
+--- /dev/null
++++ b/src/gallium/drivers/radeonsi/si_perfetto.h
+@@ -0,0 +1,159 @@
++/*
++ * Copyright 2023 Advanced Micro Devices, Inc.
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#ifndef SI_PERFETTO_H
++#define SI_PERFETTO_H
++
++#include <stdint.h>
++
++#include "util/macros.h"
++#include "util/perf/u_trace.h"
++#include "util/u_vector.h"
++
++#include "amd/common/ac_gpu_info.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Perfetto collects TracePackets from the application and/or drivers. It is the root object of a 
++ * Perfetto trace. A Perfetto trace is a linear sequence of TracePackets.
++ * TracePackets contains timestamp and timestamp_clock_id along with lots of other data 
++ * like gpu_counter_event and gpu_render_stage_event.
++ * gpu_render_stage_event contains data such as event_id, duration, gpu_id, stage_iid, context etc.
++ * So a render stage can be named as "draw" which will collect start timestamp and end timestamp 
++ * along with other payload data of each draw call from OpenGL
++ */
++
++enum amd_ds_api {
++   AMD_DS_API_OPENGL,
++   AMD_DS_API_VULKAN,
++};
++
++enum si_ds_queue_stage {
++   SI_DS_QUEUE_STAGE_QUEUE,
++   SI_DS_QUEUE_STAGE_COMPUTE,
++   SI_DS_QUEUE_STAGE_DRAW,
++   SI_DS_QUEUE_STAGE_N_STAGES,
++};
++
++struct si_ds_device {
++   const struct radeon_info *info;
++
++   /* API of this device */
++   enum amd_ds_api api;
++
++   /* GPU identifier domain:bus:device:func:pci_id */
++   uint32_t gpu_id;
++
++   /* Clock identifier for this device. */
++   uint32_t gpu_clock_id;
++
++   /* The timestamp at the point where we first emitted the clock_sync..
++    * this  will be a *later* timestamp that the first GPU traces (since
++    * we capture the first clock_sync from the CPU *after* the first GPU
++    * tracepoints happen).  To avoid confusing perfetto we need to drop
++    * the GPU traces with timestamps before this.
++    */
++   uint64_t sync_gpu_ts;
++
++   /* Next timestamp after which we should resend a clock correlation. */
++   uint64_t next_clock_sync_ns;
++
++   /* Unique perfetto identifier for the context */
++   uint64_t iid;
++
++   /* Event ID generator (manipulate only inside
++    * SIRenderpassDataSource::Trace)
++    */
++   uint64_t event_id;
++
++   struct u_trace_context trace_context;
++
++   /* List of si_ds_queue */
++   struct list_head queues;
++};
++
++struct si_ds_stage {
++   /* Unique hw_queue IID */
++   uint64_t queue_iid;
++
++   /* Unique stage IID */
++   uint64_t stage_iid;
++
++   /* Start timestamp of the last work element. We have a array indexed by
++    * level so that we can track multi levels of events (like
++    * primary/secondary command buffers).
++    */
++   uint64_t start_ns[5];
++
++   /* Current number of valid elements in start_ns */
++   uint32_t level;
++};
++
++struct si_ds_queue {
++   struct list_head link;
++
++   /* Device this queue belongs to */
++   struct si_ds_device *device;
++
++   /* Unique name of the queue */
++   char name[80];
++
++   /* Counter incremented on each si_ds_end_submit() call */
++   uint64_t submission_id;
++
++   struct si_ds_stage stages[SI_DS_QUEUE_STAGE_N_STAGES];
++};
++
++struct si_ds_flush_data {
++   struct si_ds_queue *queue;
++
++   /* u_trace element in which we copy other traces in case we deal with
++    * reusable command buffers.
++    */
++   struct u_trace trace;
++
++   /* Unique submission ID associated with the trace */
++   uint64_t submission_id;
++};
++
++void si_driver_ds_init(void);
++
++void si_ds_device_init(struct si_ds_device *device, const struct radeon_info *devinfo,
++                       uint32_t gpu_id, enum amd_ds_api api);
++void si_ds_device_fini(struct si_ds_device *device);
++
++struct si_ds_queue *si_ds_device_init_queue(struct si_ds_device *device, struct si_ds_queue *queue,
++                                            const char *fmt_name, ...);
++
++void si_ds_flush_data_init(struct si_ds_flush_data *data, struct si_ds_queue *queue,
++                           uint64_t submission_id);
++
++void si_ds_flush_data_fini(struct si_ds_flush_data *data);
++
++#ifdef HAVE_PERFETTO
++uint64_t si_ds_begin_submit(struct si_ds_queue *queue);
++void si_ds_end_submit(struct si_ds_queue *queue,
++                         uint64_t start_ts);
++
++#else
++static inline uint64_t si_ds_begin_submit(struct si_ds_queue *queue)
++{
++   return 0;
++}
++
++static inline void si_ds_end_submit(struct si_ds_queue *queue, uint64_t start_ts)
++{
++}
++
++#endif /* HAVE_PERFETTO */
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* SI_PERFETTO_H */
+diff --git a/src/gallium/drivers/radeonsi/si_pipe.h b/src/gallium/drivers/radeonsi/si_pipe.h
+index af042af269a..c3950844acd 100644
+--- a/src/gallium/drivers/radeonsi/si_pipe.h
++++ b/src/gallium/drivers/radeonsi/si_pipe.h
+@@ -17,6 +17,7 @@
+ #include "util/u_vertex_state_cache.h"
+ #include "ac_sqtt.h"
+ #include "ac_spm.h"
++#include "si_perfetto.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -1361,6 +1362,8 @@ struct si_context {
+    /* TODO: move other shaders here too */
+    /* Only used for DCC MSAA clears with 4-8 fragments and 4-16 samples. */
+    void *cs_clear_dcc_msaa[32][5][2][3][2]; /* [swizzle_mode][log2(bpe)][fragments == 8][log2(samples)-2][is_array] */
++   
++   struct si_ds_device ds;
+ };
+ 
+ /* si_blit.c */
+diff --git a/src/gallium/drivers/radeonsi/si_tracepoints.py b/src/gallium/drivers/radeonsi/si_tracepoints.py
+new file mode 100644
+index 00000000000..00320b9c963
+--- /dev/null
++++ b/src/gallium/drivers/radeonsi/si_tracepoints.py
+@@ -0,0 +1,79 @@
++#
++# Copyright 2023 Advanced Micro Devices, Inc.
++#
++# SPDX-License-Identifier: MIT
++#
++
++import argparse
++import sys
++
++# List of the default tracepoints enabled. By default most tracepoints are
++# enabled, set tp_default=False to disable them by default.
++#
++si_default_tps = []
++
++#
++# Tracepoint definitions:
++#
++def define_tracepoints(args):
++    from u_trace import Header, HeaderScope
++    from u_trace import ForwardDecl
++    from u_trace import Tracepoint
++    from u_trace import TracepointArg as Arg
++    from u_trace import TracepointArgStruct as ArgStruct
++
++    Header('si_perfetto.h', scope=HeaderScope.HEADER)
++    
++
++    def begin_end_tp(name, tp_args=[], tp_struct=None, tp_print=None,
++                     tp_default_enabled=True, end_pipelined=True,
++                     need_cs_param=False):
++        global si_default_tps
++        if tp_default_enabled:
++            si_default_tps.append(name)
++        Tracepoint('si_begin_{0}'.format(name),
++                   toggle_name=name,
++                   tp_perfetto='si_ds_begin_{0}'.format(name),
++                   need_cs_param=need_cs_param)
++        Tracepoint('si_end_{0}'.format(name),
++                   toggle_name=name,
++                   args=tp_args,
++                   tp_struct=tp_struct,
++                   tp_perfetto='si_ds_end_{0}'.format(name),
++                   tp_print=tp_print,
++                   end_of_pipe=end_pipelined,
++                   need_cs_param=need_cs_param)
++
++    # Various draws/dispatch, radeonsi
++    begin_end_tp('draw',
++                 tp_args=[Arg(type='uint32_t', var='count', c_format='%u')])
++
++    begin_end_tp('compute',
++                 tp_args=[Arg(type='uint32_t', var='group_x', c_format='%u'),
++                          Arg(type='uint32_t', var='group_y', c_format='%u'),
++                          Arg(type='uint32_t', var='group_z', c_format='%u'),],
++                 tp_print=['group=%ux%ux%u', '__entry->group_x', '__entry->group_y', '__entry->group_z'])
++
++def generate_code(args):
++    from u_trace import utrace_generate
++    from u_trace import utrace_generate_perfetto_utils
++
++    utrace_generate(cpath=args.src, hpath=args.hdr,
++                    ctx_param='struct si_ds_device *dev',
++                    trace_toggle_name='si_gpu_tracepoint',
++                    trace_toggle_defaults=si_default_tps)
++    utrace_generate_perfetto_utils(hpath=args.perfetto_hdr)
++
++def main():
++    parser = argparse.ArgumentParser()
++    parser.add_argument('-p', '--import-path', required=True)
++    parser.add_argument('-C','--src', required=True)
++    parser.add_argument('-H','--hdr', required=True)
++    parser.add_argument('--perfetto-hdr', required=True)
++    args = parser.parse_args()
++    sys.path.insert(0, args.import_path)
++    define_tracepoints(args)
++    generate_code(args)
++
++if __name__ == '__main__':
++    main()
+-- 
+2.42.0
+

@@ -1,0 +1,48 @@
+From 19f8e0e3aa3ebb5d9c5a07cc2711e95ec64c58fb Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Mon, 14 Aug 2023 10:33:18 -0400
+Subject: [PATCH 089/834] nir: Add trivial nir_src_* getters
+
+These will become nontrivial later in the series. For now these have no smarts
+in them, in order to make the conversion completely mechanical.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24671>
+---
+ src/compiler/nir/nir.h | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 42776b5607d..7623bc2b0be 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -1009,6 +1009,24 @@ typedef struct nir_src {
+    bool is_if;
+ } nir_src;
+ 
++static inline bool
++nir_src_is_if(const nir_src *src)
++{
++   return src->is_if;
++}
++
++static inline nir_instr *
++nir_src_parent_instr(const nir_src *src)
++{
++   return src->parent_instr;
++}
++
++static inline struct nir_if *
++nir_src_parent_if(const nir_src *src)
++{
++   return src->parent_if;
++}
++
+ static inline void
+ nir_src_set_parent_instr(nir_src *src, nir_instr *parent_instr)
+ {
+-- 
+2.42.0
+

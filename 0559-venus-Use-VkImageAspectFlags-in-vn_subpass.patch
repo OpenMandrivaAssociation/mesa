@@ -1,0 +1,92 @@
+From 1d4822d894967813c6f5cda92ec1a5eebd7e98ae Mon Sep 17 00:00:00 2001
+From: Lina Versace <linyaa@google.com>
+Date: Fri, 9 Jun 2023 16:29:21 -0700
+Subject: [PATCH 559/834] venus: Use VkImageAspectFlags in vn_subpass
+
+No intended change in behavior. This little improvement will help
+vn_pipeline track its graphics state more accurately.
+
+Signed-off-by: Lina Versace <linyaa@google.com>
+Reviewed-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/22419>
+---
+ src/virtio/vulkan/vn_pipeline.c    | 7 +++++--
+ src/virtio/vulkan/vn_render_pass.c | 8 ++++++--
+ src/virtio/vulkan/vn_render_pass.h | 3 +--
+ 3 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_pipeline.c b/src/virtio/vulkan/vn_pipeline.c
+index 48db936cf1f..2ed1c18252b 100644
+--- a/src/virtio/vulkan/vn_pipeline.c
++++ b/src/virtio/vulkan/vn_pipeline.c
+@@ -583,7 +583,9 @@ vn_fix_graphics_pipeline_create_info(
+       /* Ignore pDepthStencilState? */
+       if (info->pDepthStencilState) {
+          const bool has_static_attachment =
+-            subpass && subpass->has_depth_stencil_attachment;
++            subpass &&
++            (subpass->attachment_aspects &
++             (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT));
+ 
+          /* VUID-VkGraphicsPipelineCreateInfo-renderPass-06043 */
+          bool require_state =
+@@ -610,7 +612,8 @@ vn_fix_graphics_pipeline_create_info(
+       /* Ignore pColorBlendState? */
+       if (info->pColorBlendState) {
+          const bool has_static_attachment =
+-            subpass && subpass->has_color_attachment;
++            subpass &&
++            (subpass->attachment_aspects & VK_IMAGE_ASPECT_COLOR_BIT);
+ 
+          /* VUID-VkGraphicsPipelineCreateInfo-renderPass-06044 */
+          bool require_state =
+diff --git a/src/virtio/vulkan/vn_render_pass.c b/src/virtio/vulkan/vn_render_pass.c
+index 4e796e7bebc..58ab0e70010 100644
+--- a/src/virtio/vulkan/vn_render_pass.c
++++ b/src/virtio/vulkan/vn_render_pass.c
+@@ -12,6 +12,7 @@
+ 
+ #include "venus-protocol/vn_protocol_driver_framebuffer.h"
+ #include "venus-protocol/vn_protocol_driver_render_pass.h"
++#include "vk_format.h"
+ 
+ #include "vn_device.h"
+ #include "vn_image.h"
+@@ -59,7 +60,7 @@
+          for (uint32_t j = 0; j < subpass_desc->colorAttachmentCount; j++) { \
+             if (subpass_desc->pColorAttachments[j].attachment !=             \
+                 VK_ATTACHMENT_UNUSED) {                                      \
+-               subpass->has_color_attachment = true;                         \
++               subpass->attachment_aspects |= VK_IMAGE_ASPECT_COLOR_BIT;     \
+                break;                                                        \
+             }                                                                \
+          }                                                                   \
+@@ -67,7 +68,10 @@
+          if (subpass_desc->pDepthStencilAttachment &&                        \
+              subpass_desc->pDepthStencilAttachment->attachment !=            \
+                 VK_ATTACHMENT_UNUSED) {                                      \
+-            subpass->has_depth_stencil_attachment = true;                    \
++            uint32_t att =                                                   \
++               subpass_desc->pDepthStencilAttachment->attachment;            \
++            subpass->attachment_aspects |=                                   \
++               vk_format_aspects(_pCreateInfo->pAttachments[att].format);    \
+          }                                                                   \
+       }                                                                      \
+    } while (false)
+diff --git a/src/virtio/vulkan/vn_render_pass.h b/src/virtio/vulkan/vn_render_pass.h
+index 3b0941293ea..ffa565b6aab 100644
+--- a/src/virtio/vulkan/vn_render_pass.h
++++ b/src/virtio/vulkan/vn_render_pass.h
+@@ -24,8 +24,7 @@ struct vn_present_src_attachment {
+ };
+ 
+ struct vn_subpass {
+-   bool has_color_attachment;
+-   bool has_depth_stencil_attachment;
++   VkImageAspectFlags attachment_aspects;
+    uint32_t view_mask;
+ };
+ 
+-- 
+2.42.0
+

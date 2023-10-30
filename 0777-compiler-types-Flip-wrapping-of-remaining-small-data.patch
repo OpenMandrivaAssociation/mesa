@@ -1,0 +1,252 @@
+From 8bebd40d5c3e30a37881aee5f554a5c1ee5b6ea0 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 2 Sep 2023 18:29:09 -0700
+Subject: [PATCH 777/834] compiler/types: Flip wrapping of remaining small data
+ getters
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 37 +++++++++++++++++++---
+ src/compiler/glsl_types.h      | 22 +++++++++++--
+ src/compiler/glsl_types_impl.h | 13 ++------
+ src/compiler/nir_gl_types.h    |  2 +-
+ src/compiler/nir_types.cpp     | 57 ----------------------------------
+ 5 files changed, 54 insertions(+), 77 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 2835b279818..24ebf703f24 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -2990,18 +2990,22 @@ glsl_count_dword_slots(const struct glsl_type *t, bool is_bindless)
+    return 0;
+ }
+ 
+-int
+-glsl_type::coordinate_components() const
++extern "C" int
++glsl_get_sampler_coordinate_components(const struct glsl_type *t)
+ {
+-   enum glsl_sampler_dim dim = (enum glsl_sampler_dim)sampler_dimensionality;
++   assert(glsl_type_is_sampler(t) ||
++          glsl_type_is_texture(t) ||
++          glsl_type_is_image(t));
++
++   enum glsl_sampler_dim dim = (enum glsl_sampler_dim)t->sampler_dimensionality;
+    int size = glsl_get_sampler_dim_coordinate_components(dim);
+ 
+    /* Array textures need an additional component for the array index, except
+     * for cubemap array images that behave like a 2D array of interleaved
+     * cubemap faces.
+     */
+-   if (sampler_array &&
+-       !(is_image() && sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE))
++   if (t->sampler_array &&
++       !(t->is_image() && t->sampler_dimensionality == GLSL_SAMPLER_DIM_CUBE))
+       size += 1;
+ 
+    return size;
+@@ -3356,6 +3360,18 @@ glsl_get_cl_size(const struct glsl_type *t)
+ 
+ extern "C" {
+ 
++extern const char glsl_type_builtin_names[];
++
++const char *
++glsl_get_type_name(const struct glsl_type *type)
++{
++   if (type->has_builtin_name) {
++      return &glsl_type_builtin_names[type->name_id];
++   } else {
++      return (const char *) type->name_id;
++   }
++}
++
+ void
+ glsl_get_cl_type_size_align(const struct glsl_type *t,
+                             unsigned *size, unsigned *align)
+@@ -3595,4 +3611,15 @@ glsl_get_column_type(const struct glsl_type *t)
+    }
+ }
+ 
++unsigned
++glsl_atomic_size(const struct glsl_type *t)
++{
++   if (t->is_atomic_uint())
++      return 4; /* ATOMIC_COUNTER_SIZE */
++   else if (t->is_array())
++      return t->length * t->fields.array->atomic_size();
++   else
++      return 0;
++}
++
+ }
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 7393a20aa74..839b13a6484 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1153,7 +1153,7 @@ struct glsl_struct_field {
+ #endif
+ };
+ 
+-enum glsl_base_type glsl_get_base_type(const struct glsl_type *t);
++static inline enum glsl_base_type glsl_get_base_type(const struct glsl_type *t) { return t->base_type; }
+ 
+ static inline unsigned
+ glsl_get_bit_size(const struct glsl_type *t)
+@@ -1323,8 +1323,24 @@ bool glsl_contains_double(const struct glsl_type *t);
+ bool glsl_contains_integer(const struct glsl_type *t);
+ bool glsl_contains_opaque(const struct glsl_type *t);
+ 
+-enum glsl_sampler_dim glsl_get_sampler_dim(const struct glsl_type *t);
+-enum glsl_base_type glsl_get_sampler_result_type(const struct glsl_type *t);
++static inline enum glsl_sampler_dim
++glsl_get_sampler_dim(const struct glsl_type *t)
++{
++   assert(glsl_type_is_sampler(t) ||
++          glsl_type_is_texture(t) ||
++          glsl_type_is_image(t));
++   return (enum glsl_sampler_dim)t->sampler_dimensionality;
++}
++
++static inline enum glsl_base_type
++glsl_get_sampler_result_type(const struct glsl_type *t)
++{
++   assert(glsl_type_is_sampler(t) ||
++          glsl_type_is_texture(t) ||
++          glsl_type_is_image(t));
++   return (enum glsl_base_type)t->sampled_type;
++}
++
+ int glsl_get_sampler_coordinate_components(const struct glsl_type *t);
+ 
+ bool glsl_record_compare(const struct glsl_type *a, const struct glsl_type *b,
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index c4c3719828b..12ff479cafe 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -63,6 +63,8 @@ inline unsigned glsl_type::count_vec4_slots(bool is_gl_vertex_input, bool bindle
+ inline unsigned glsl_type::count_dword_slots(bool bindless) const { return glsl_count_dword_slots(this, bindless); };
+ inline unsigned glsl_type::count_attribute_slots(bool is_gl_vertex_input) const { return glsl_count_attribute_slots(this, is_gl_vertex_input); }
+ inline unsigned glsl_type::varying_count() const { return glsl_varying_count(this); }
++inline unsigned glsl_type::atomic_size() const { return glsl_atomic_size(this); }
++inline int glsl_type::coordinate_components() const { return glsl_get_sampler_coordinate_components(this); }
+ 
+ inline unsigned glsl_type::cl_size() const { return glsl_get_cl_size(this); }
+ inline unsigned glsl_type::cl_alignment() const { return glsl_get_cl_alignment(this); }
+@@ -265,17 +267,6 @@ glsl_type::bit_size() const
+    return glsl_base_type_bit_size(this->base_type);
+ }
+ 
+-inline unsigned
+-glsl_type::atomic_size() const
+-{
+-   if (is_atomic_uint())
+-      return 4; /* ATOMIC_COUNTER_SIZE */
+-   else if (is_array())
+-      return length * fields.array->atomic_size();
+-   else
+-      return 0;
+-}
+-
+ inline bool glsl_type::is_unsized_array() const { return glsl_type_is_unsized_array(this); }
+ 
+ inline bool
+diff --git a/src/compiler/nir_gl_types.h b/src/compiler/nir_gl_types.h
+index 14bf4d8be28..5c77e43a1d7 100644
+--- a/src/compiler/nir_gl_types.h
++++ b/src/compiler/nir_gl_types.h
+@@ -34,7 +34,7 @@
+ extern "C" {
+ #endif
+ 
+-GLenum glsl_get_gl_type(const struct glsl_type *type);
++static inline GLenum glsl_get_gl_type(const struct glsl_type *t) { return t->gl_type; }
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index 664e27a93c2..af7d71cf11c 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -28,18 +28,6 @@
+ #include "nir_types.h"
+ #include "nir_gl_types.h"
+ 
+-extern "C" const char glsl_type_builtin_names[];
+-
+-const char *
+-glsl_get_type_name(const struct glsl_type *type)
+-{
+-   if (type->has_builtin_name) {
+-      return &glsl_type_builtin_names[type->name_id];
+-   } else {
+-      return (const char *) type->name_id;
+-   }
+-}
+-
+ const struct glsl_type *
+ glsl_texture_type_to_sampler(const struct glsl_type *type, bool is_shadow)
+ {
+@@ -58,45 +46,6 @@ glsl_sampler_type_to_texture(const struct glsl_type *type)
+                             (enum glsl_base_type)type->sampled_type);
+ }
+ 
+-GLenum
+-glsl_get_gl_type(const struct glsl_type *type)
+-{
+-   return type->gl_type;
+-}
+-
+-enum glsl_base_type
+-glsl_get_base_type(const struct glsl_type *type)
+-{
+-   return type->base_type;
+-}
+-
+-glsl_sampler_dim
+-glsl_get_sampler_dim(const struct glsl_type *type)
+-{
+-   assert(glsl_type_is_sampler(type) ||
+-          glsl_type_is_texture(type) ||
+-          glsl_type_is_image(type));
+-   return (glsl_sampler_dim)type->sampler_dimensionality;
+-}
+-
+-enum glsl_base_type
+-glsl_get_sampler_result_type(const struct glsl_type *type)
+-{
+-   assert(glsl_type_is_sampler(type) ||
+-          glsl_type_is_texture(type) ||
+-          glsl_type_is_image(type));
+-   return (enum glsl_base_type)type->sampled_type;
+-}
+-
+-int
+-glsl_get_sampler_coordinate_components(const struct glsl_type *type)
+-{
+-   assert(glsl_type_is_sampler(type) ||
+-          glsl_type_is_texture(type) ||
+-          glsl_type_is_image(type));
+-   return type->coordinate_components();
+-}
+-
+ const struct glsl_type *
+ glsl_scalar_type(enum glsl_base_type base_type)
+ {
+@@ -356,12 +305,6 @@ glsl_get_vec4_size_align_bytes(const struct glsl_type *type,
+    }
+ }
+ 
+-unsigned
+-glsl_atomic_size(const struct glsl_type *type)
+-{
+-   return type->atomic_size();
+-}
+-
+ static unsigned
+ glsl_type_count(const struct glsl_type *type, enum glsl_base_type base_type)
+ {
+-- 
+2.42.0
+

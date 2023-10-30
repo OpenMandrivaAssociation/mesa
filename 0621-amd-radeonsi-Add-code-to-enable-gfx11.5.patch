@@ -1,0 +1,112 @@
+From 74978fd8e9c85df7a4720e6cd4c29067ac940fe3 Mon Sep 17 00:00:00 2001
+From: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Date: Mon, 18 Sep 2023 21:47:59 +0200
+Subject: [PATCH 621/834] amd, radeonsi: Add code to enable gfx11.5
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25278>
+---
+ src/amd/common/ac_gpu_info.c            | 7 ++++++-
+ src/amd/common/ac_nir_lower_ngg.c       | 2 +-
+ src/amd/common/amd_family.c             | 4 ++++
+ src/amd/common/amd_family.h             | 2 ++
+ src/gallium/drivers/radeonsi/si_state.c | 5 +++++
+ 5 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 4d99554ffbe..57f232c8f79 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -856,9 +856,14 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+          identify_chip(GFX1103_R1);
+          identify_chip(GFX1103_R2);
+          break;
++      case FAMILY_GFX1150:
++         identify_chip(GFX1150);
++         break;
+       }
+ 
+-      if (info->ip[AMD_IP_GFX].ver_major == 11)
++      if (info->ip[AMD_IP_GFX].ver_major == 11 && info->ip[AMD_IP_GFX].ver_minor == 5)
++         info->gfx_level = GFX11_5;
++      else if (info->ip[AMD_IP_GFX].ver_major == 11)
+          info->gfx_level = GFX11;
+       else if (info->ip[AMD_IP_GFX].ver_major == 10 && info->ip[AMD_IP_GFX].ver_minor == 3)
+          info->gfx_level = GFX10_3;
+diff --git a/src/amd/common/ac_nir_lower_ngg.c b/src/amd/common/ac_nir_lower_ngg.c
+index 3af489153f4..5cc8c620fa9 100644
+--- a/src/amd/common/ac_nir_lower_ngg.c
++++ b/src/amd/common/ac_nir_lower_ngg.c
+@@ -2329,7 +2329,7 @@ export_vertex_params_gfx11(nir_builder *b, nir_def *export_tid, nir_def *num_exp
+ 
+ static bool must_wait_attr_ring(enum amd_gfx_level gfx_level, bool has_param_exports)
+ {
+-   return gfx_level == GFX11 && has_param_exports;
++   return (gfx_level == GFX11 || gfx_level == GFX11_5) && has_param_exports;
+ }
+ 
+ static void
+diff --git a/src/amd/common/amd_family.c b/src/amd/common/amd_family.c
+index 39dda078b5d..aff7df36d98 100644
+--- a/src/amd/common/amd_family.c
++++ b/src/amd/common/amd_family.c
+@@ -95,6 +95,8 @@ const char *ac_get_family_name(enum radeon_family family)
+       return "GFX1103_R1";
+    case CHIP_GFX1103_R2:
+       return "GFX1103_R2";
++   case CHIP_GFX1150:
++      return "GFX1150";
+    default:
+       unreachable("Unknown GPU family");
+    }
+@@ -219,6 +221,8 @@ const char *ac_get_llvm_processor_name(enum radeon_family family)
+    case CHIP_GFX1103_R1:
+    case CHIP_GFX1103_R2:
+       return "gfx1103";
++   case CHIP_GFX1150:
++      return "gfx1150";
+    default:
+       return "";
+    }
+diff --git a/src/amd/common/amd_family.h b/src/amd/common/amd_family.h
+index 3b7a3d777e3..09d90895adc 100644
+--- a/src/amd/common/amd_family.h
++++ b/src/amd/common/amd_family.h
+@@ -119,6 +119,7 @@ enum radeon_family
+    CHIP_NAVI33,         /* Radeon 7600, 7700S (mobile) */
+    CHIP_GFX1103_R1,
+    CHIP_GFX1103_R2,
++   CHIP_GFX1150,
+    CHIP_LAST,
+ };
+ 
+@@ -139,6 +140,7 @@ enum amd_gfx_level
+    GFX10,
+    GFX10_3,
+    GFX11,
++   GFX11_5,
+ 
+    NUM_GFX_VERSIONS,
+ };
+diff --git a/src/gallium/drivers/radeonsi/si_state.c b/src/gallium/drivers/radeonsi/si_state.c
+index 89bb631910e..88b43d89d45 100644
+--- a/src/gallium/drivers/radeonsi/si_state.c
++++ b/src/gallium/drivers/radeonsi/si_state.c
+@@ -6068,6 +6068,11 @@ static void gfx10_init_gfx_preamble_state(struct si_context *sctx)
+    si_pm4_set_reg(pm4, R_028C48_PA_SC_BINNER_CNTL_1,
+                   S_028C48_MAX_ALLOC_COUNT(sscreen->info.pbb_max_alloc_count - 1) |
+                   S_028C48_MAX_PRIM_PER_BATCH(1023));
++
++   if (sctx->gfx_level >= GFX11_5)
++      si_pm4_set_reg(pm4, R_028C54_PA_SC_BINNER_CNTL_2,
++                     S_028C54_ENABLE_PING_PONG_BIN_ORDER(1));
++
+    /* Break up a pixel wave if it contains deallocs for more than
+     * half the parameter cache.
+     *
+-- 
+2.42.0
+

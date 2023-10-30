@@ -1,0 +1,118 @@
+From bd546f9e548a523dbd1e68e520ebfe607267f241 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jos=C3=A9=20Roberto=20de=20Souza?= <jose.souza@intel.com>
+Date: Fri, 29 Sep 2023 14:09:19 -0700
+Subject: [PATCH 692/834] anv: Switch Xe KMD vm bind to sync
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It was never actually async as it was doing a DRM_IOCTL_SYNCOBJ_WAIT
+right after DRM_IOCTL_XE_VM_BIND but it was required to allow the
+partial binds required by sparse.
+But it is now fixed and we can switch back to sync vm bind.
+
+In future we will switch back to async vm bind to improve performance
+but this time it will be properly implemented.
+
+Signed-off-by: José Roberto de Souza <jose.souza@intel.com>
+Reviewed-by: Paulo Zanoni <paulo.r.zanoni@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25300>
+---
+ src/intel/vulkan/xe/anv_device.c      |  3 +-
+ src/intel/vulkan/xe/anv_kmd_backend.c | 42 ++++-----------------------
+ 2 files changed, 7 insertions(+), 38 deletions(-)
+
+diff --git a/src/intel/vulkan/xe/anv_device.c b/src/intel/vulkan/xe/anv_device.c
+index de5b98afd16..d7b466f6635 100644
+--- a/src/intel/vulkan/xe/anv_device.c
++++ b/src/intel/vulkan/xe/anv_device.c
+@@ -37,8 +37,7 @@ bool anv_xe_device_destroy_vm(struct anv_device *device)
+ VkResult anv_xe_device_setup_vm(struct anv_device *device)
+ {
+    struct drm_xe_vm_create create = {
+-      .flags = DRM_XE_VM_CREATE_ASYNC_DEFAULT |
+-               DRM_XE_VM_CREATE_SCRATCH_PAGE,
++      .flags = DRM_XE_VM_CREATE_SCRATCH_PAGE,
+    };
+    if (intel_ioctl(device->fd, DRM_IOCTL_XE_VM_CREATE, &create) != 0)
+       return vk_errorf(device, VK_ERROR_INITIALIZATION_FAILED,
+diff --git a/src/intel/vulkan/xe/anv_kmd_backend.c b/src/intel/vulkan/xe/anv_kmd_backend.c
+index 7a61499d004..c3c22d98be7 100644
+--- a/src/intel/vulkan/xe/anv_kmd_backend.c
++++ b/src/intel/vulkan/xe/anv_kmd_backend.c
+@@ -97,30 +97,19 @@ static inline int
+ xe_vm_bind_op(struct anv_device *device, int num_binds,
+               struct anv_vm_bind *binds)
+ {
+-   uint32_t syncobj_handle;
+-   int ret = drmSyncobjCreate(device->fd, 0, &syncobj_handle);
+-   if (ret)
+-      return ret;
+-
+-   struct drm_xe_sync sync = {
+-      .flags = DRM_XE_SYNC_SYNCOBJ | DRM_XE_SYNC_SIGNAL,
+-      .handle = syncobj_handle,
+-   };
++   int ret;
++
+    struct drm_xe_vm_bind args = {
+       .vm_id = device->vm_id,
+       .num_binds = num_binds,
+       .bind = {},
+-      .num_syncs = 1,
+-      .syncs = (uintptr_t)&sync,
+    };
+ 
+    STACK_ARRAY(struct drm_xe_vm_bind_op, xe_binds_stackarray, num_binds);
+    struct drm_xe_vm_bind_op *xe_binds;
+    if (num_binds > 1) {
+-      if (!xe_binds_stackarray) {
+-         ret = -ENOMEM;
+-         goto out_syncobj;
+-      }
++      if (!xe_binds_stackarray)
++         return -ENOMEM;
+ 
+       xe_binds = xe_binds_stackarray;
+       args.vector_of_binds = (uintptr_t)xe_binds;
+@@ -140,11 +129,7 @@ xe_vm_bind_op(struct anv_device *device, int num_binds,
+          .addr = intel_48b_address(bind->address),
+          .tile_mask = 0,
+          .op = XE_VM_BIND_OP_UNMAP,
+-         /* TODO: do proper error handling here, once the way to do it is
+-          * settled. As of right now the final interface is still under
+-          * discussion.
+-          */
+-         .flags = XE_VM_BIND_FLAG_ASYNC,
++         .flags = 0,
+          .region = 0,
+       };
+ 
+@@ -167,23 +152,8 @@ xe_vm_bind_op(struct anv_device *device, int num_binds,
+    }
+ 
+    ret = intel_ioctl(device->fd, DRM_IOCTL_XE_VM_BIND, &args);
+-   if (ret)
+-      goto bind_error;
+-
+-   struct drm_syncobj_wait wait = {
+-      .handles = (uintptr_t)&syncobj_handle,
+-      .timeout_nsec = INT64_MAX,
+-      .count_handles = 1,
+-      .flags = 0,
+-      .first_signaled = 0,
+-      .pad = 0,
+-   };
+-   ret = intel_ioctl(device->fd, DRM_IOCTL_SYNCOBJ_WAIT, &wait);
+-
+-bind_error:
+    STACK_ARRAY_FINISH(xe_binds_stackarray);
+-out_syncobj:
+-   drmSyncobjDestroy(device->fd, syncobj_handle);
++
+    return ret;
+ }
+ 
+-- 
+2.42.0
+

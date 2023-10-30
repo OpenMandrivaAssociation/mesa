@@ -1,0 +1,40 @@
+From d8fa106c1797a7304f5657886f9be7724dfb4322 Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Mon, 14 Aug 2023 09:43:18 +0800
+Subject: [PATCH 052/834] aco,radv: remove unused ps epilog info fields
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/compiler/aco_shader_info.h    | 1 -
+ src/amd/vulkan/radv_aco_shader_info.h | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/src/amd/compiler/aco_shader_info.h b/src/amd/compiler/aco_shader_info.h
+index d2b6335f040..5fecb0fa0fd 100644
+--- a/src/amd/compiler/aco_shader_info.h
++++ b/src/amd/compiler/aco_shader_info.h
+@@ -66,7 +66,6 @@ struct aco_vs_prolog_info {
+ 
+ struct aco_ps_epilog_info {
+    struct ac_arg inputs[8];
+-   struct ac_arg pc;
+ 
+    uint32_t spi_shader_col_format;
+ 
+diff --git a/src/amd/vulkan/radv_aco_shader_info.h b/src/amd/vulkan/radv_aco_shader_info.h
+index a9fbf3943f9..04035720a5f 100644
+--- a/src/amd/vulkan/radv_aco_shader_info.h
++++ b/src/amd/vulkan/radv_aco_shader_info.h
+@@ -118,7 +118,6 @@ radv_aco_convert_ps_epilog_key(struct aco_ps_epilog_info *aco_info, const struct
+    ASSIGN_FIELD(mrt0_is_dual_src);
+ 
+    memcpy(aco_info->inputs, radv_args->ps_epilog_inputs, sizeof(aco_info->inputs));
+-   aco_info->pc = radv_args->ps_epilog_pc;
+ }
+ 
+ static inline void
+-- 
+2.42.0
+

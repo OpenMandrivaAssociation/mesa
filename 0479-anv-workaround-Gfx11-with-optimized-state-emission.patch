@@ -1,0 +1,56 @@
+From f900b763b1a8880bc616715219d4a3b0f3f8ce8e Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Mon, 16 Oct 2023 15:20:45 +0300
+Subject: [PATCH 479/834] anv: workaround Gfx11 with optimized state emission
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+No real explanation so far.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Fixes: 50f6903bd9 ("anv: add new low level emission & dirty state tracking")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9781
+Reviewed-by: Tapani Pälli <tapani.palli@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25750>
+---
+ src/intel/vulkan/genX_gfx_state.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/intel/vulkan/genX_gfx_state.c b/src/intel/vulkan/genX_gfx_state.c
+index 1a2f4550765..804458b8709 100644
+--- a/src/intel/vulkan/genX_gfx_state.c
++++ b/src/intel/vulkan/genX_gfx_state.c
+@@ -1151,6 +1151,11 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
+                 device->gfx_dirty_state);
+    }
+ 
++   /**
++    * Put potential workarounds here if you need to reemit an instruction
++    * because of another one is changing.
++    */
++
+    /* Since Wa_16011773973 will disable 3DSTATE_STREAMOUT, we need to reemit
+     * it after.
+     */
+@@ -1160,6 +1165,17 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
+       BITSET_SET(hw_state->dirty, ANV_GFX_STATE_STREAMOUT);
+    }
+ 
++   /* Gfx11 undocumented issue :
++    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/9781
++    */
++#if GFX_VER == 11
++   if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WM))
++      BITSET_SET(hw_state->dirty, ANV_GFX_STATE_MULTISAMPLE);
++#endif
++
++   /**
++    * State emission
++    */
+    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_URB))
+       anv_batch_emit_pipeline_state(&cmd_buffer->batch, pipeline, final.urb);
+ 
+-- 
+2.42.0
+

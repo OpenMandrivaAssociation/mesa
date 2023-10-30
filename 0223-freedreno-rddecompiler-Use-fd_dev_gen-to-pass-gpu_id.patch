@@ -1,0 +1,37 @@
+From 0338b1465706fb745ee7cda6354fc7f952ded521 Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Thu, 12 Oct 2023 11:26:00 +0200
+Subject: [PATCH 223/834] freedreno/rddecompiler: Use fd_dev_gen to pass gpu_id
+ to ir3 disasm
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25677>
+---
+ src/freedreno/decode/rddecompiler.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/freedreno/decode/rddecompiler.c b/src/freedreno/decode/rddecompiler.c
+index 2011bbb8b74..8b9eb1bc23a 100644
+--- a/src/freedreno/decode/rddecompiler.c
++++ b/src/freedreno/decode/rddecompiler.c
+@@ -189,7 +189,7 @@ decompile_shader(const char *name, uint32_t regbase, uint32_t *dwords, int level
+       size_t stream_size = 0;
+       FILE *stream = open_memstream(&stream_data, &stream_size);
+ 
+-      try_disasm_a3xx(buf, sizedwords, 0, stream, dev_id.gpu_id);
++      try_disasm_a3xx(buf, sizedwords, 0, stream, fd_dev_gen(&dev_id) * 100);
+       fclose(stream);
+ 
+       printlvl(level, "{\n");
+@@ -512,7 +512,7 @@ emit_header()
+           "int main(int argc, char **argv)\n"
+           "{\n"
+           "\tstruct replay_context ctx;\n"
+-          "\tstruct fd_dev_id dev_id = {%u, %" PRIu64 "};\n"
++          "\tstruct fd_dev_id dev_id = {%u, 0x%" PRIx64 "};\n"
+           "\treplay_context_init(&ctx, &dev_id, argc, argv);\n"
+           "\tstruct cmdstream *cs = ctx.submit_cs;\n\n",
+           dev_id.gpu_id, dev_id.chip_id);
+-- 
+2.42.0
+

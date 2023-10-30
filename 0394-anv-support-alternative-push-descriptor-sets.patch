@@ -1,0 +1,105 @@
+From 7a4903626b882b2d204b6f45f953cff2c06b2f24 Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Mon, 9 Oct 2023 16:43:36 -0700
+Subject: [PATCH 394/834] anv: support alternative push descriptor sets
+
+Do not assume anv_cmd_pipeline_state::push_descriptor is the currently
+bound push descriptor set.  With this and anv_push_descriptor_set_init,
+it is possible to initialize a temporary push descriptor set on stack
+for internal use.
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/intel/vulkan/anv_descriptor_set.c |  7 ++++++
+ src/intel/vulkan/anv_private.h        |  1 +
+ src/intel/vulkan/genX_cmd_buffer.c    | 31 ++++++++++++++-------------
+ 3 files changed, 24 insertions(+), 15 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_descriptor_set.c b/src/intel/vulkan/anv_descriptor_set.c
+index bb08cb2dce3..1945fafee66 100644
+--- a/src/intel/vulkan/anv_descriptor_set.c
++++ b/src/intel/vulkan/anv_descriptor_set.c
+@@ -845,6 +845,7 @@ anv_pipeline_sets_layout_init(struct anv_pipeline_sets_layout *layout,
+    memset(layout, 0, sizeof(*layout));
+ 
+    layout->device = device;
++   layout->push_descriptor_set_index = -1;
+    layout->independent_sets = independent_sets;
+ }
+ 
+@@ -874,6 +875,12 @@ anv_pipeline_sets_layout_add(struct anv_pipeline_sets_layout *layout,
+    layout->num_dynamic_buffers += set_layout->dynamic_offset_count;
+ 
+    assert(layout->num_dynamic_buffers < MAX_DYNAMIC_BUFFERS);
++
++   if (set_layout->flags &
++       VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR) {
++      assert(layout->push_descriptor_set_index == -1);
++      layout->push_descriptor_set_index = set_idx;
++   }
+ }
+ 
+ void
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index b745837a19b..fb65719f48b 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -2574,6 +2574,7 @@ struct anv_pipeline_sets_layout {
+ 
+    uint32_t num_sets;
+    uint32_t num_dynamic_buffers;
++   int push_descriptor_set_index;
+ 
+    bool independent_sets;
+ 
+diff --git a/src/intel/vulkan/genX_cmd_buffer.c b/src/intel/vulkan/genX_cmd_buffer.c
+index 63fd078c90f..a75fe633f2d 100644
+--- a/src/intel/vulkan/genX_cmd_buffer.c
++++ b/src/intel/vulkan/genX_cmd_buffer.c
+@@ -2444,25 +2444,26 @@ flush_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
+                           struct anv_cmd_pipeline_state *state,
+                           struct anv_pipeline *pipeline)
+ {
+-   struct anv_descriptor_set *set = &state->push_descriptor.set;
+-   struct anv_descriptor_set_layout *layout = set->layout;
+-
+-   if (pipeline->use_push_descriptor) {
+-      while (set->generate_surface_states) {
+-         int desc_idx = u_bit_scan(&set->generate_surface_states);
+-         struct anv_descriptor *desc = &set->descriptors[desc_idx];
+-         struct anv_buffer_view *bview = desc->set_buffer_view;
+-
+-         if (bview != NULL) {
+-            bview->general.state =
+-               anv_cmd_buffer_alloc_surface_state(cmd_buffer);
+-            anv_descriptor_write_surface_state(cmd_buffer->device, desc,
+-                                               bview->general.state);
+-         }
++   assert(pipeline->use_push_descriptor &&
++          pipeline->layout.push_descriptor_set_index != -1);
++
++   struct anv_descriptor_set *set =
++      state->descriptors[pipeline->layout.push_descriptor_set_index];
++   while (set->generate_surface_states) {
++      int desc_idx = u_bit_scan(&set->generate_surface_states);
++      struct anv_descriptor *desc = &set->descriptors[desc_idx];
++      struct anv_buffer_view *bview = desc->set_buffer_view;
++
++      if (bview != NULL) {
++         bview->general.state =
++            anv_cmd_buffer_alloc_surface_state(cmd_buffer);
++         anv_descriptor_write_surface_state(cmd_buffer->device, desc,
++                                            bview->general.state);
+       }
+    }
+ 
+    if (pipeline->use_push_descriptor_buffer) {
++      struct anv_descriptor_set_layout *layout = set->layout;
+       enum isl_format format =
+          anv_isl_format_for_descriptor_type(cmd_buffer->device,
+                                             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+-- 
+2.42.0
+

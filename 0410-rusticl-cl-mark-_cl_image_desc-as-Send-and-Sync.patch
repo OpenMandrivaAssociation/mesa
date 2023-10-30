@@ -1,0 +1,29 @@
+From aa1d746a8e8164ff7242688271cc7ef8e556b75e Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Thu, 5 Oct 2023 23:48:37 +0200
+Subject: [PATCH 410/834] rusticl/cl: mark _cl_image_desc as Send and Sync
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ src/gallium/frontends/rusticl/meson.build | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/meson.build b/src/gallium/frontends/rusticl/meson.build
+index 4d232fe5e2f..d7aee75240c 100644
+--- a/src/gallium/frontends/rusticl/meson.build
++++ b/src/gallium/frontends/rusticl/meson.build
+@@ -153,6 +153,9 @@ rusticl_opencl_bindings_rs = rust.bindgen(
+     '--ignore-functions',
+     # needed because bindgen adds *mut void fields...
+     '--raw-line', 'unsafe impl std::marker::Sync for _cl_icd_dispatch {}',
++    # _cl_image_desc contains a pointer to _cl_mem
++    '--raw-line', 'unsafe impl std::marker::Send for _cl_image_desc {}',
++    '--raw-line', 'unsafe impl std::marker::Sync for _cl_image_desc {}',
+     '--allowlist-type', 'cl_.*',
+     '--allowlist-var', 'CL_.*',
+     # some info types need to be strongly typed so we can implement various get_infos
+-- 
+2.42.0
+

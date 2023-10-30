@@ -1,0 +1,54 @@
+From 113d88f94d20c5805092609ee25c5c3e49b17505 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Thu, 31 Aug 2023 11:33:39 -0400
+Subject: [PATCH 804/834] panfrost: Precalculate stride and nr of blocks for
+ AFBC layouts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+For AFBC packing, we will need to have the stride of the resource
+in terms of superblocks and the total number of blocks. It is
+easier to pre-calculate once when initializing the resource layout.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/panfrost/lib/pan_layout.c  | 3 +++
+ src/panfrost/lib/pan_texture.h | 6 ++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/src/panfrost/lib/pan_layout.c b/src/panfrost/lib/pan_layout.c
+index 309f4895c30..b5789e2a7b1 100644
+--- a/src/panfrost/lib/pan_layout.c
++++ b/src/panfrost/lib/pan_layout.c
+@@ -410,6 +410,9 @@ pan_image_layout_init(const struct panfrost_device *dev,
+       if (afbc) {
+          slice->row_stride =
+             pan_afbc_row_stride(layout->modifier, effective_width);
++         slice->afbc.stride = effective_width / block_size.width;
++         slice->afbc.nr_blocks =
++            slice->afbc.stride * (effective_height / block_size.height);
+          slice->afbc.header_size =
+             ALIGN_POT(slice->row_stride * (effective_height / align_h),
+                       pan_afbc_body_align(layout->modifier));
+diff --git a/src/panfrost/lib/pan_texture.h b/src/panfrost/lib/pan_texture.h
+index 80028be275b..474bdc0b0da 100644
+--- a/src/panfrost/lib/pan_texture.h
++++ b/src/panfrost/lib/pan_texture.h
+@@ -63,6 +63,12 @@ struct pan_image_slice_layout {
+    unsigned surface_stride;
+ 
+    struct {
++      /* Stride in number of superblocks */
++      unsigned stride;
++
++      /* Number of superblocks */
++      unsigned nr_blocks;
++
+       /* Size of the AFBC header preceding each slice */
+       unsigned header_size;
+ 
+-- 
+2.42.0
+

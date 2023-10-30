@@ -1,0 +1,443 @@
+From 1afc876afdf7e2856628dee07e7decbdc5ddba9f Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sat, 14 Oct 2023 19:33:46 +0300
+Subject: [PATCH 490/834] u_trace: generate tracepoint index parameter in
+ perfetto callbacks
+
+Useful to figure out what's the tracepoint name you're implementing.
+We'll use this in the intel perfetto integration glue to index into an
+array of perfetto iid.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25730>
+---
+ src/freedreno/vulkan/tu_perfetto.cc           | 12 +++--
+ .../drivers/freedreno/freedreno_perfetto.cc   | 44 +++++++++----------
+ src/intel/ds/intel_driver_ds.cc               |  9 ++++
+ src/util/perf/u_trace.c                       |  2 +-
+ src/util/perf/u_trace.py                      |  6 ++-
+ src/util/perf/u_trace_priv.h                  | 15 ++++++-
+ 6 files changed, 58 insertions(+), 30 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_perfetto.cc b/src/freedreno/vulkan/tu_perfetto.cc
+index 852b3086c65..b1b9eab9ba5 100644
+--- a/src/freedreno/vulkan/tu_perfetto.cc
++++ b/src/freedreno/vulkan/tu_perfetto.cc
+@@ -442,8 +442,8 @@ tu_perfetto_submit(struct tu_device *dev,
+ 
+ #define CREATE_EVENT_CALLBACK(event_name, stage_id)                                 \
+    void tu_perfetto_start_##event_name(                                             \
+-      struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
+-      const struct trace_start_##event_name *payload)                               \
++      struct tu_device *dev, uint64_t ts_ns, uint16_t tp_idx,                       \
++      const void *flush_data, const struct trace_start_##event_name *payload)       \
+    {                                                                                \
+       stage_start(                                                                  \
+          dev, ts_ns, stage_id, NULL, payload, sizeof(*payload),                     \
+@@ -451,8 +451,8 @@ tu_perfetto_submit(struct tu_device *dev,
+    }                                                                                \
+                                                                                     \
+    void tu_perfetto_end_##event_name(                                               \
+-      struct tu_device *dev, uint64_t ts_ns, const void *flush_data,                \
+-      const struct trace_end_##event_name *payload)                                 \
++      struct tu_device *dev, uint64_t ts_ns, uint16_t tp_idx,                       \
++      const void *flush_data, const struct trace_end_##event_name *payload)         \
+    {                                                                                \
+       stage_end(                                                                    \
+          dev, ts_ns, stage_id, flush_data, payload,                                 \
+@@ -477,6 +477,7 @@ void
+ tu_perfetto_start_cmd_buffer_annotation(
+    struct tu_device *dev,
+    uint64_t ts_ns,
++   uint16_t tp_idx,
+    const void *flush_data,
+    const struct trace_start_cmd_buffer_annotation *payload)
+ {
+@@ -489,6 +490,7 @@ void
+ tu_perfetto_end_cmd_buffer_annotation(
+    struct tu_device *dev,
+    uint64_t ts_ns,
++   uint16_t tp_idx,
+    const void *flush_data,
+    const struct trace_end_cmd_buffer_annotation *payload)
+ {
+@@ -503,6 +505,7 @@ void
+ tu_perfetto_start_cmd_buffer_annotation_rp(
+    struct tu_device *dev,
+    uint64_t ts_ns,
++   uint16_t tp_idx,
+    const void *flush_data,
+    const struct trace_start_cmd_buffer_annotation_rp *payload)
+ {
+@@ -515,6 +518,7 @@ void
+ tu_perfetto_end_cmd_buffer_annotation_rp(
+    struct tu_device *dev,
+    uint64_t ts_ns,
++   uint16_t tp_idx,
+    const void *flush_data,
+    const struct trace_end_cmd_buffer_annotation_rp *payload)
+ {
+diff --git a/src/gallium/drivers/freedreno/freedreno_perfetto.cc b/src/gallium/drivers/freedreno/freedreno_perfetto.cc
+index 132eb3ee65a..28ad7757ab3 100644
+--- a/src/gallium/drivers/freedreno/freedreno_perfetto.cc
++++ b/src/gallium/drivers/freedreno/freedreno_perfetto.cc
+@@ -356,7 +356,7 @@ fd_perfetto_submit(struct fd_context *ctx)
+ 
+ void
+ fd_start_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
+-                     const void *flush_data,
++                     uint16_t tp_idx, const void *flush_data,
+                      const struct trace_start_render_pass *payload)
+ {
+    stage_start(pctx, ts_ns, SURFACE_STAGE_ID);
+@@ -377,7 +377,7 @@ fd_start_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
+-                   const void *flush_data,
++                   uint16_t tp_idx, const void *flush_data,
+                    const struct trace_end_render_pass *payload)
+ {
+    stage_end(pctx, ts_ns, SURFACE_STAGE_ID);
+@@ -385,7 +385,7 @@ fd_end_render_pass(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
+-                    const void *flush_data,
++                    uint16_t tp_idx, const void *flush_data,
+                     const struct trace_start_binning_ib *payload)
+ {
+    stage_start(pctx, ts_ns, BINNING_STAGE_ID);
+@@ -393,7 +393,7 @@ fd_start_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
+-                  const void *flush_data,
++                  uint16_t tp_idx, const void *flush_data,
+                   const struct trace_end_binning_ib *payload)
+ {
+    stage_end(pctx, ts_ns, BINNING_STAGE_ID);
+@@ -401,7 +401,7 @@ fd_end_binning_ib(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
+-                 const void *flush_data,
++                 uint16_t tp_idx, const void *flush_data,
+                  const struct trace_start_draw_ib *payload)
+ {
+    stage_start(
+@@ -411,7 +411,7 @@ fd_start_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
+-               const void *flush_data,
++               uint16_t tp_idx, const void *flush_data,
+                const struct trace_end_draw_ib *payload)
+ {
+    stage_end(
+@@ -421,7 +421,7 @@ fd_end_draw_ib(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_blit(struct pipe_context *pctx, uint64_t ts_ns,
+-              const void *flush_data,
++              uint16_t tp_idx, const void *flush_data,
+               const struct trace_start_blit *payload)
+ {
+    stage_start(pctx, ts_ns, BLIT_STAGE_ID);
+@@ -429,7 +429,7 @@ fd_start_blit(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_blit(struct pipe_context *pctx, uint64_t ts_ns,
+-            const void *flush_data,
++            uint16_t tp_idx, const void *flush_data,
+             const struct trace_end_blit *payload)
+ {
+    stage_end(pctx, ts_ns, BLIT_STAGE_ID);
+@@ -437,7 +437,7 @@ fd_end_blit(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_compute(struct pipe_context *pctx, uint64_t ts_ns,
+-                 const void *flush_data,
++                 uint16_t tp_idx, const void *flush_data,
+                  const struct trace_start_compute *payload)
+ {
+    stage_start(pctx, ts_ns, COMPUTE_STAGE_ID);
+@@ -457,7 +457,7 @@ fd_start_compute(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_compute(struct pipe_context *pctx, uint64_t ts_ns,
+-               const void *flush_data,
++               uint16_t tp_idx, const void *flush_data,
+                const struct trace_end_compute *payload)
+ {
+    stage_end(pctx, ts_ns, COMPUTE_STAGE_ID);
+@@ -465,7 +465,7 @@ fd_end_compute(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_clears(struct pipe_context *pctx, uint64_t ts_ns,
+-                const void *flush_data,
++                uint16_t tp_idx, const void *flush_data,
+                 const struct trace_start_clears *payload)
+ {
+    stage_start(pctx, ts_ns, CLEAR_STAGE_ID);
+@@ -473,7 +473,7 @@ fd_start_clears(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_clears(struct pipe_context *pctx, uint64_t ts_ns,
+-              const void *flush_data,
++              uint16_t tp_idx, const void *flush_data,
+               const struct trace_end_clears *payload)
+ {
+    stage_end(pctx, ts_ns, CLEAR_STAGE_ID);
+@@ -481,7 +481,7 @@ fd_end_clears(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_tile_loads(struct pipe_context *pctx, uint64_t ts_ns,
+-                    const void *flush_data,
++                    uint16_t tp_idx, const void *flush_data,
+                     const struct trace_start_tile_loads *payload)
+ {
+    stage_start(pctx, ts_ns, TILE_LOAD_STAGE_ID);
+@@ -489,7 +489,7 @@ fd_start_tile_loads(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_tile_loads(struct pipe_context *pctx, uint64_t ts_ns,
+-                  const void *flush_data,
++                  uint16_t tp_idx, const void *flush_data,
+                   const struct trace_end_tile_loads *payload)
+ {
+    stage_end(pctx, ts_ns, TILE_LOAD_STAGE_ID);
+@@ -497,7 +497,7 @@ fd_end_tile_loads(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_tile_stores(struct pipe_context *pctx, uint64_t ts_ns,
+-                     const void *flush_data,
++                     uint16_t tp_idx, const void *flush_data,
+                      const struct trace_start_tile_stores *payload)
+ {
+    stage_start(pctx, ts_ns, TILE_STORE_STAGE_ID);
+@@ -505,7 +505,7 @@ fd_start_tile_stores(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_tile_stores(struct pipe_context *pctx, uint64_t ts_ns,
+-                   const void *flush_data,
++                   uint16_t tp_idx, const void *flush_data,
+                    const struct trace_end_tile_stores *payload)
+ {
+    stage_end(pctx, ts_ns, TILE_STORE_STAGE_ID);
+@@ -513,7 +513,7 @@ fd_end_tile_stores(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_state_restore(struct pipe_context *pctx, uint64_t ts_ns,
+-                       const void *flush_data,
++                       uint16_t tp_idx, const void *flush_data,
+                        const struct trace_start_state_restore *payload)
+ {
+    stage_start(pctx, ts_ns, STATE_RESTORE_STAGE_ID);
+@@ -521,7 +521,7 @@ fd_start_state_restore(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_state_restore(struct pipe_context *pctx, uint64_t ts_ns,
+-                     const void *flush_data,
++                     uint16_t tp_idx, const void *flush_data,
+                      const struct trace_end_state_restore *payload)
+ {
+    stage_end(pctx, ts_ns, STATE_RESTORE_STAGE_ID);
+@@ -529,7 +529,7 @@ fd_end_state_restore(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_vsc_overflow_test(struct pipe_context *pctx, uint64_t ts_ns,
+-                           const void *flush_data,
++                           uint16_t tp_idx, const void *flush_data,
+                            const struct trace_start_vsc_overflow_test *payload)
+ {
+    stage_start(pctx, ts_ns, VSC_OVERFLOW_STAGE_ID);
+@@ -537,7 +537,7 @@ fd_start_vsc_overflow_test(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_vsc_overflow_test(struct pipe_context *pctx, uint64_t ts_ns,
+-                         const void *flush_data,
++                         uint16_t tp_idx, const void *flush_data,
+                          const struct trace_end_vsc_overflow_test *payload)
+ {
+    stage_end(pctx, ts_ns, VSC_OVERFLOW_STAGE_ID);
+@@ -545,7 +545,7 @@ fd_end_vsc_overflow_test(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_start_prologue(struct pipe_context *pctx, uint64_t ts_ns,
+-                  const void *flush_data,
++                  uint16_t tp_idx, const void *flush_data,
+                   const struct trace_start_prologue *payload)
+ {
+    stage_start(pctx, ts_ns, PROLOGUE_STAGE_ID);
+@@ -553,7 +553,7 @@ fd_start_prologue(struct pipe_context *pctx, uint64_t ts_ns,
+ 
+ void
+ fd_end_prologue(struct pipe_context *pctx, uint64_t ts_ns,
+-                const void *flush_data,
++                uint16_t tp_idx, const void *flush_data,
+                 const struct trace_end_prologue *payload)
+ {
+    stage_end(pctx, ts_ns, PROLOGUE_STAGE_ID);
+diff --git a/src/intel/ds/intel_driver_ds.cc b/src/intel/ds/intel_driver_ds.cc
+index 2ccaf8b24f1..50b976fbc58 100644
+--- a/src/intel/ds/intel_driver_ds.cc
++++ b/src/intel/ds/intel_driver_ds.cc
+@@ -242,6 +242,7 @@ static void
+ end_event(struct intel_ds_queue *queue, uint64_t ts_ns,
+           enum intel_ds_queue_stage stage_id,
+           uint32_t submission_id,
++          uint16_t tracepoint_idx,
+           const char *app_event,
+           const void* payload = nullptr,
+           trace_payload_as_extra_func payload_as_extra = nullptr)
+@@ -362,6 +363,7 @@ extern "C" {
+    void                                                                 \
+    intel_ds_begin_##event_name(struct intel_ds_device *device,          \
+                                uint64_t ts_ns,                          \
++                               uint16_t tp_idx,                         \
+                                const void *flush_data,                  \
+                                const struct trace_intel_begin_##event_name *payload) \
+    {                                                                    \
+@@ -373,6 +375,7 @@ extern "C" {
+    void                                                                 \
+    intel_ds_end_##event_name(struct intel_ds_device *device,            \
+                              uint64_t ts_ns,                            \
++                             uint16_t tp_idx,                           \
+                              const void *flush_data,                    \
+                              const struct trace_intel_end_##event_name *payload) \
+    {                                                                    \
+@@ -416,6 +419,7 @@ CREATE_DUAL_EVENT_CALLBACK(as_build, INTEL_DS_QUEUE_STAGE_AS)
+ void
+ intel_ds_begin_cmd_buffer_annotation(struct intel_ds_device *device,
+                                      uint64_t ts_ns,
++                                     uint16_t tp_idx,
+                                      const void *flush_data,
+                                      const struct trace_intel_begin_cmd_buffer_annotation *payload)
+ {
+@@ -427,6 +431,7 @@ intel_ds_begin_cmd_buffer_annotation(struct intel_ds_device *device,
+ void
+ intel_ds_end_cmd_buffer_annotation(struct intel_ds_device *device,
+                                    uint64_t ts_ns,
++                                   uint16_t tp_idx,
+                                    const void *flush_data,
+                                    const struct trace_intel_end_cmd_buffer_annotation *payload)
+ {
+@@ -439,6 +444,7 @@ intel_ds_end_cmd_buffer_annotation(struct intel_ds_device *device,
+ void
+ intel_ds_begin_queue_annotation(struct intel_ds_device *device,
+                                 uint64_t ts_ns,
++                                uint16_t tp_idx,
+                                 const void *flush_data,
+                                 const struct trace_intel_begin_queue_annotation *payload)
+ {
+@@ -450,6 +456,7 @@ intel_ds_begin_queue_annotation(struct intel_ds_device *device,
+ void
+ intel_ds_end_queue_annotation(struct intel_ds_device *device,
+                               uint64_t ts_ns,
++                              uint16_t tp_idx,
+                               const void *flush_data,
+                               const struct trace_intel_end_queue_annotation *payload)
+ {
+@@ -462,6 +469,7 @@ intel_ds_end_queue_annotation(struct intel_ds_device *device,
+ void
+ intel_ds_begin_stall(struct intel_ds_device *device,
+                      uint64_t ts_ns,
++                     uint16_t tp_idx,
+                      const void *flush_data,
+                      const struct trace_intel_begin_stall *payload)
+ {
+@@ -473,6 +481,7 @@ intel_ds_begin_stall(struct intel_ds_device *device,
+ void
+ intel_ds_end_stall(struct intel_ds_device *device,
+                    uint64_t ts_ns,
++                   uint16_t tp_idx,
+                    const void *flush_data,
+                    const struct trace_intel_end_stall *payload)
+ {
+diff --git a/src/util/perf/u_trace.c b/src/util/perf/u_trace.c
+index fba62f50617..2be5f226b00 100644
+--- a/src/util/perf/u_trace.c
++++ b/src/util/perf/u_trace.c
+@@ -602,7 +602,7 @@ process_chunk(void *job, void *gdata, int thread_index)
+       if (evt->tp->perfetto &&
+           (p_atomic_read_relaxed(&utctx->enabled_traces) &
+            U_TRACE_TYPE_PERFETTO_ACTIVE)) {
+-         evt->tp->perfetto(utctx->pctx, ns, chunk->flush_data, evt->payload);
++         evt->tp->perfetto(utctx->pctx, ns, evt->tp->tp_idx, chunk->flush_data, evt->payload);
+       }
+ #endif
+ 
+diff --git a/src/util/perf/u_trace.py b/src/util/perf/u_trace.py
+index 04cbe7a7eb3..90c2c8a4c9d 100644
+--- a/src/util/perf/u_trace.py
++++ b/src/util/perf/u_trace.py
+@@ -246,6 +246,7 @@ struct trace_${trace_name} {
+ void ${trace.tp_perfetto}(
+    ${ctx_param},
+    uint64_t ts_ns,
++   uint16_t tp_idx,
+    const void *flush_data,
+    const struct trace_${trace_name} *payload);
+ #endif
+@@ -360,7 +361,7 @@ ${trace_toggle_name}_config_variable(void)
+ }
+ % endif
+ 
+-% for trace_name, trace in TRACEPOINTS.items():
++% for index, (trace_name, trace) in enumerate(TRACEPOINTS.items()):
+ /*
+  * ${trace_name}
+  */
+@@ -446,11 +447,12 @@ static const struct u_tracepoint __tp_${trace_name} = {
+     ALIGN_POT(sizeof(struct trace_${trace_name}), 8),   /* keep size 64b aligned */
+     "${trace_name}",
+     ${"true" if trace.end_of_pipe else "false"},
++    ${index},
+     __print_${trace_name},
+     __print_json_${trace_name},
+  % if trace.tp_perfetto is not None:
+ #ifdef HAVE_PERFETTO
+-    (void (*)(void *pctx, uint64_t, const void *, const void *))${trace.tp_perfetto},
++    (void (*)(void *pctx, uint64_t, uint16_t, const void *, const void *))${trace.tp_perfetto},
+ #endif
+  % endif
+ };
+diff --git a/src/util/perf/u_trace_priv.h b/src/util/perf/u_trace_priv.h
+index 359e2395e0e..a25811a48e8 100644
+--- a/src/util/perf/u_trace_priv.h
++++ b/src/util/perf/u_trace_priv.h
+@@ -45,7 +45,19 @@ extern "C" {
+ struct u_tracepoint {
+    unsigned payload_sz;
+    const char *name;
+-   bool end_of_pipe;
++   /**
++    * Whether this tracepoint's timestamp must be recorded with as an
++    * end-of-pipe timestamp (for some GPUs the recording timestamp instruction
++    * might be different for top/end of pipe).
++    */
++   bool end_of_pipe:1;
++   /**
++    * Index of this tracepoint in <basename>_tracepoint_names in the generated
++    * u_trace perfetto header. By associating these names with iids in setup,
++    * tracepoints can be presented with with their own names by passing that
++    * to event->set_stage_iid().
++    */
++   uint16_t tp_idx;
+    void (*print)(FILE *out, const void *payload);
+    void (*print_json)(FILE *out, const void *payload);
+ #ifdef HAVE_PERFETTO
+@@ -54,6 +66,7 @@ struct u_tracepoint {
+     */
+    void (*perfetto)(void *pctx,
+                     uint64_t ts_ns,
++                    uint16_t tp_idx,
+                     const void *flush_data,
+                     const void *payload);
+ #endif
+-- 
+2.42.0
+

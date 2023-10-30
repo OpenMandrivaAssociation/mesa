@@ -1,0 +1,34 @@
+From 01e7ac328fd3458eb9b30c436b70411d57508345 Mon Sep 17 00:00:00 2001
+From: Jani Nikula <jani@nikula.org>
+Date: Tue, 10 Oct 2023 09:17:46 +0200
+Subject: [PATCH 102/834] docs/vulkan: fixup some typos
+
+The type is called vk_object_base, not vk_vk_objet_base... This should
+fix the cross-referencing of this type.
+
+Fixes: f6d4641433e ("vulkan,docs: Document vk_instance")
+Reviewed-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Acked-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25634>
+---
+ docs/vulkan/base-objs.rst | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/docs/vulkan/base-objs.rst b/docs/vulkan/base-objs.rst
+index 0bddd20023c..fed73b7c8f9 100644
+--- a/docs/vulkan/base-objs.rst
++++ b/docs/vulkan/base-objs.rst
+@@ -14,8 +14,8 @@ As one might expect, :cpp:struct:`vk_instance` is the required base struct
+ for implementing ``VkInstance``, :cpp:struct:`vk_physical_device` is
+ required for ``VkPhysicalDevice``, and :cpp:struct:`vk_device` for
+ ``VkDevice``.  Everything else must derive from
+-:cpp:struct:`vk_vk_objet_base` or from some struct that derives from
+-:cpp:struct:`vk_vk_objet_base`.
++:cpp:struct:`vk_object_base` or from some struct that derives from
++:cpp:struct:`vk_object_base`.
+ 
+ 
+ vk_object_base
+-- 
+2.42.0
+

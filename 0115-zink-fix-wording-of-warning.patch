@@ -1,0 +1,30 @@
+From 34857440870e3b9087da63aeea456e7a9c1756fe Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Tue, 10 Oct 2023 16:27:25 +0200
+Subject: [PATCH 115/834] zink: fix wording of warning
+
+The string-argument for this function is the name of the feature, not
+the entire message.
+
+Fixes: ea0e22da442 ("zink: use warn_missing_feature for missing modifier support")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25644>
+---
+ src/gallium/drivers/zink/zink_resource.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_resource.c b/src/gallium/drivers/zink/zink_resource.c
+index f41504889bf..d4e9b5e8096 100644
+--- a/src/gallium/drivers/zink/zink_resource.c
++++ b/src/gallium/drivers/zink/zink_resource.c
+@@ -1765,7 +1765,7 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
+             assert(!zink_resource_usage_is_unflushed(res));
+             if (!screen->info.have_EXT_image_drm_format_modifier) {
+                static bool warned = false;
+-               warn_missing_feature(warned, "zink: EXT_image_drm_format_modifier support required");
++               warn_missing_feature(warned, "EXT_image_drm_format_modifier");
+                return false;
+             }
+             unsigned bind = ZINK_BIND_DMABUF;
+-- 
+2.42.0
+

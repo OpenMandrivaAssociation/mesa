@@ -1,0 +1,66 @@
+From 69012e355efb9eff2ad9aeb5caab3404d8714227 Mon Sep 17 00:00:00 2001
+From: Helen Koike <helen.koike@collabora.com>
+Date: Fri, 20 Oct 2023 19:29:13 -0300
+Subject: [PATCH 711/834] ci/marge_queue: add pretty_dutation()
+
+Add pretty_duration() function that prints time in format 6m23s and use
+it for marge_queue.
+
+Signed-of-by: Helen Koike <helen.koike@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25822>
+---
+ bin/ci/gitlab_common.py | 11 +++++++++++
+ bin/ci/marge_queue.py   |  8 +++++---
+ 2 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/bin/ci/gitlab_common.py b/bin/ci/gitlab_common.py
+index 758f81b56a1..04afa877a2d 100644
+--- a/bin/ci/gitlab_common.py
++++ b/bin/ci/gitlab_common.py
+@@ -12,6 +12,17 @@ import time
+ from typing import Optional
+ 
+ 
++def pretty_duration(seconds):
++    """Pretty print duration"""
++    hours, rem = divmod(seconds, 3600)
++    minutes, seconds = divmod(rem, 60)
++    if hours:
++        return f"{hours:0.0f}h{minutes:0.0f}m{seconds:0.0f}s"
++    if minutes:
++        return f"{minutes:0.0f}m{seconds:0.0f}s"
++    return f"{seconds:0.0f}s"
++
++
+ def get_gitlab_project(glab, name: str):
+     """Finds a specified gitlab project for given user"""
+     if "/" in name:
+diff --git a/bin/ci/marge_queue.py b/bin/ci/marge_queue.py
+index ef9edec9668..5455047e13d 100755
+--- a/bin/ci/marge_queue.py
++++ b/bin/ci/marge_queue.py
+@@ -16,7 +16,7 @@ from datetime import datetime, timezone
+ from dateutil import parser
+ 
+ import gitlab
+-from gitlab_common import read_token
++from gitlab_common import read_token, pretty_duration
+ 
+ REFRESH_WAIT = 30
+ MARGE_BOT_USER_ID = 9716
+@@ -52,8 +52,10 @@ if __name__ == "__main__":
+         for mr in mrs:
+             updated = parser.parse(mr.updated_at)
+             now = datetime.now(timezone.utc)
+-            diff = str(now - updated).split('.', maxsplit=1)[0]
+-            print(f"{diff} | \u001b]8;;{mr.web_url}\u001b\\{mr.title}\u001b]8;;\u001b\\")
++            diff = (now - updated).total_seconds()
++            print(
++                f"⛭ \u001b]8;;{mr.web_url}\u001b\\{mr.title}\u001b]8;;\u001b\\ ({pretty_duration(diff)})"
++            )
+ 
+         print("Job waiting: " + str(jobs_num))
+ 
+-- 
+2.42.0
+

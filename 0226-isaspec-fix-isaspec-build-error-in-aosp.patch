@@ -1,0 +1,31 @@
+From cf22954973e93fb0dae6019f72124d57bba476d6 Mon Sep 17 00:00:00 2001
+From: cheyang <cheyang@bytedance.com>
+Date: Fri, 13 Oct 2023 11:43:57 +0800
+Subject: [PATCH 226/834] isaspec : fix isaspec build error in aosp
+
+in Android 12 build have error "ninja:
+'external/mesa/src/compiler/isaspec/README.rst', needed by
+'out/target/product/s/obj/MESON_MESA3D_GEN/.timestamp', missing and
+no known rule to make it" because commit:
+d48d8aefdff44e8a6ece030a782dc9d152bb1d5d  (docs: Move isaspec out of
+drivers/freedreno) modify isaspec.rst Location.
+
+Signed-off-by: cheyang <cheyang@bytedance.com>
+Reviewed-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25697>
+---
+ src/compiler/isaspec/README.rst | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/compiler/isaspec/README.rst b/src/compiler/isaspec/README.rst
+index 27379790c02..82ef360f79b 120000
+--- a/src/compiler/isaspec/README.rst
++++ b/src/compiler/isaspec/README.rst
+@@ -1 +1 @@
+-../../../docs/drivers/freedreno/isaspec.rst
+\ No newline at end of file
++../../../docs/isaspec.rst
+\ No newline at end of file
+-- 
+2.42.0
+

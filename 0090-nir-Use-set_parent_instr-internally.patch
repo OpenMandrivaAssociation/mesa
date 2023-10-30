@@ -1,0 +1,31 @@
+From ad619da3bc77ab4b749c69b0f97b8ba53e86904b Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Mon, 14 Aug 2023 10:35:43 -0400
+Subject: [PATCH 090/834] nir: Use set_parent_instr internally
+
+This properly clears is_if.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24671>
+---
+ src/compiler/nir/nir_serialize.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/compiler/nir/nir_serialize.c b/src/compiler/nir/nir_serialize.c
+index 5d783ec3c55..5f6cec0b119 100644
+--- a/src/compiler/nir/nir_serialize.c
++++ b/src/compiler/nir/nir_serialize.c
+@@ -1518,7 +1518,7 @@ read_phi(read_ctx *ctx, nir_block *blk, union packed_instr header)
+        * we have to set the parent_instr manually.  It doesn't really matter
+        * when we do it, so we might as well do it here.
+        */
+-      src->src.parent_instr = &phi->instr;
++      nir_src_set_parent_instr(&src->src, &phi->instr);
+ 
+       /* Stash it in the list of phi sources.  We'll walk this list and fix up
+        * sources at the very end of read_function_impl.
+-- 
+2.42.0
+

@@ -1,0 +1,29 @@
+From e891c78af1656b0de91f91bd6daae727f0baed58 Mon Sep 17 00:00:00 2001
+From: Gert Wollny <gert.wollny@collabora.com>
+Date: Mon, 16 Oct 2023 20:20:43 +0200
+Subject: [PATCH 488/834] virgl: Fix logic for reporting PIPE_MIRROR_CLAMP
+
+Fixes: 9efe50c83 (virgl: report MIRROR_CLAMP features better)
+
+Signed-off-by: Gert Wollny <gert.wollny@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25755>
+---
+ src/gallium/drivers/virgl/virgl_screen.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/virgl/virgl_screen.c b/src/gallium/drivers/virgl/virgl_screen.c
+index 36580e7efe1..c3a8ce5db3d 100644
+--- a/src/gallium/drivers/virgl/virgl_screen.c
++++ b/src/gallium/drivers/virgl/virgl_screen.c
+@@ -98,7 +98,7 @@ virgl_get_param(struct pipe_screen *screen, enum pipe_cap param)
+       FALLTHROUGH;
+    case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
+       return vscreen->caps.caps.v1.bset.mirror_clamp &&
+-             (vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES);
++             !(vscreen->caps.caps.v2.capability_bits & VIRGL_CAP_HOST_IS_GLES);
+    case PIPE_CAP_TEXTURE_SWIZZLE:
+       return 1;
+    case PIPE_CAP_MAX_TEXTURE_2D_SIZE:
+-- 
+2.42.0
+

@@ -1,0 +1,84 @@
+From 3083b854e06db8b3da00bf5d7f25267a96b3ba99 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Thu, 5 Oct 2023 01:24:28 +0200
+Subject: [PATCH 413/834] rusticl/kernel: get rid of Arcs in
+ KernelDevStateVariant
+
+We only used Arcs as we wanted to deal with either getting a reference or
+having an owned temporary. But we can also just use a local variable for
+temporary storage.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ src/gallium/frontends/rusticl/core/kernel.rs  | 18 +++++++++++-------
+ src/gallium/frontends/rusticl/core/program.rs |  2 +-
+ 2 files changed, 12 insertions(+), 8 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/kernel.rs b/src/gallium/frontends/rusticl/core/kernel.rs
+index 8ef491e1a91..09ab0bd4b29 100644
+--- a/src/gallium/frontends/rusticl/core/kernel.rs
++++ b/src/gallium/frontends/rusticl/core/kernel.rs
+@@ -267,15 +267,15 @@ pub struct CSOWrapper {
+ }
+ 
+ impl CSOWrapper {
+-    pub fn new(dev: &'static Device, nir: &NirShader) -> Arc<Self> {
++    pub fn new(dev: &'static Device, nir: &NirShader) -> Self {
+         let cso_ptr = dev
+             .helper_ctx()
+             .create_compute_state(nir, nir.shared_size());
+ 
+-        Arc::new(Self {
++        Self {
+             cso_ptr: cso_ptr,
+             dev: dev,
+-        })
++        }
+     }
+ 
+     pub fn get_cso_info(&self) -> pipe_compute_state_object_info {
+@@ -290,8 +290,8 @@ impl Drop for CSOWrapper {
+ }
+ 
+ pub enum KernelDevStateVariant {
+-    Cso(Arc<CSOWrapper>),
+-    Nir(Arc<NirShader>),
++    Cso(CSOWrapper),
++    Nir(NirShader),
+ }
+ 
+ pub struct Kernel {
+@@ -1054,9 +1054,13 @@ impl Kernel {
+                 );
+             }
+ 
++            let temp_cso;
+             let cso = match &nir_kernel_build.nir_or_cso {
+-                KernelDevStateVariant::Cso(cso) => cso.clone(),
+-                KernelDevStateVariant::Nir(nir) => CSOWrapper::new(q.device, nir),
++                KernelDevStateVariant::Cso(cso) => cso,
++                KernelDevStateVariant::Nir(nir) => {
++                    temp_cso = CSOWrapper::new(q.device, nir);
++                    &temp_cso
++                }
+             };
+ 
+             ctx.bind_compute_state(cso.cso_ptr);
+diff --git a/src/gallium/frontends/rusticl/core/program.rs b/src/gallium/frontends/rusticl/core/program.rs
+index 5d838de5257..0a3703ce6b2 100644
+--- a/src/gallium/frontends/rusticl/core/program.rs
++++ b/src/gallium/frontends/rusticl/core/program.rs
+@@ -93,7 +93,7 @@ impl NirKernelBuild {
+         let printf_info = nir.take_printf_info();
+ 
+         let nir_or_cso = if !dev.shareable_shaders() {
+-            KernelDevStateVariant::Nir(Arc::new(nir))
++            KernelDevStateVariant::Nir(nir)
+         } else {
+             KernelDevStateVariant::Cso(cso)
+         };
+-- 
+2.42.0
+

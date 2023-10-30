@@ -1,0 +1,33 @@
+From b66afc2a54c866cbad41a4704e89478cc0f1655a Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Fri, 6 Oct 2023 12:56:39 +1000
+Subject: [PATCH 075/834] llvmpipe: don't create texture functions for planar
+ textures.
+
+Since we can't sample from these directly, just don't create the
+functions.
+
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/drivers/llvmpipe/lp_texture_handle.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/gallium/drivers/llvmpipe/lp_texture_handle.c b/src/gallium/drivers/llvmpipe/lp_texture_handle.c
+index 9bb8f228bb4..18014f5fca1 100644
+--- a/src/gallium/drivers/llvmpipe/lp_texture_handle.c
++++ b/src/gallium/drivers/llvmpipe/lp_texture_handle.c
+@@ -386,6 +386,9 @@ compile_sample_function(struct llvmpipe_context *ctx, struct lp_static_texture_s
+             return NULL;
+       }
+ 
++      if (util_format_get_num_planes(texture->format) > 1)
++         return NULL;
++
+       uint32_t bind = op_type == LP_SAMPLER_OP_FETCH ? PIPE_BIND_CONSTANT_BUFFER : PIPE_BIND_SAMPLER_VIEW;
+       if (!ctx->pipe.screen->is_format_supported(ctx->pipe.screen, texture->format, texture->target, 0, 0, bind))
+          return NULL;
+-- 
+2.42.0
+

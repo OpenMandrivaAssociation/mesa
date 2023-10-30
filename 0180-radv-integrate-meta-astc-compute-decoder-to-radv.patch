@@ -1,0 +1,473 @@
+From f97b449e9e332026a4b352423f71c6031e5f9e8b Mon Sep 17 00:00:00 2001
+From: Yogesh Mohan Marimuthu <yogesh.mohanmarimuthu@amd.com>
+Date: Thu, 7 Sep 2023 20:55:12 +0530
+Subject: [PATCH 180/834] radv: integrate meta astc compute decoder to radv
+
+this patch calls the init and finish functions of the vk
+runtime astc decoder. initializes emulate_astc flag. sets
+up the additional plane to store decoded texture.
+
+v2: fix _tex_dataformat() and _tex_numformat() (Chia-I Wu)
+    use correct function for bufferToImage (Chia-I Wu)
+v3: add radv_is_layout_emulated() (Chia-I Wu)
+    avoid repeated pattern (Chia-I Wu)
+v4: not create all pipelines on_demand (Chia-I Wu)
+v5: current code does not support astc hdr (Chia-I Wu)
+v6: keep luts in staging buffer only (Chia-I Wu)
+v7: use 2DArray for both input and output
+v8: document todo to use fp16 (Chia-I Wu)
+    not required to move meta init anymore (Chia-I Wu)
+    move astc_emulation_format to vk_texcompress_astc.h (Chia-I Wu)
+v9: remove LAYOUT check (Chia-I Wu)
+    check on iview->vk.view_format
+    move setting tiled flags for astc (Chia-I Wu)
+    remove is format emulated check in radv_is_storage_image* (Chia-I Wu)
+    use LAYOUT_ASTC for if check (Chia-I Wu)
+    no 1D support (Chia-I Wu)
+    calculate start end offset in 2x blk size
+v10: remove old wrong code (Chia-I Wu)
+v11: use existing defined local format variable (Chia-I Wu)
+     dst image layout is always VK_IMAGE_LAYOUT_GENERAL (Chia-I Wu)
+
+Reviewed-by: Chia-I Wu <olvaffe@gmail.com>
+Acked-by: Bas Nieuwenhuizen <bas@basnieuwenhuizen.nl>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24672>
+---
+ src/amd/vulkan/meson.build                  |   1 +
+ src/amd/vulkan/meta/radv_meta.c             |   7 +
+ src/amd/vulkan/meta/radv_meta.h             |   5 +
+ src/amd/vulkan/meta/radv_meta_astc_decode.c | 169 ++++++++++++++++++++
+ src/amd/vulkan/meta/radv_meta_copy.c        |  31 ++--
+ src/amd/vulkan/radv_formats.c               |   6 +-
+ src/amd/vulkan/radv_image.c                 |   7 +-
+ src/amd/vulkan/radv_instance.c              |   1 +
+ src/amd/vulkan/radv_physical_device.c       |   4 +-
+ src/amd/vulkan/radv_private.h               |   6 +
+ src/util/driconf.h                          |   4 +
+ 11 files changed, 228 insertions(+), 13 deletions(-)
+ create mode 100644 src/amd/vulkan/meta/radv_meta_astc_decode.c
+
+diff --git a/src/amd/vulkan/meson.build b/src/amd/vulkan/meson.build
+index e9d2f7e0a30..d1c41726693 100644
+--- a/src/amd/vulkan/meson.build
++++ b/src/amd/vulkan/meson.build
+@@ -55,6 +55,7 @@ libradv_files = files(
+   'layers/radv_sqtt_layer.c',
+   'meta/radv_meta.c',
+   'meta/radv_meta.h',
++  'meta/radv_meta_astc_decode.c',
+   'meta/radv_meta_blit.c',
+   'meta/radv_meta_blit2d.c',
+   'meta/radv_meta_buffer.c',
+diff --git a/src/amd/vulkan/meta/radv_meta.c b/src/amd/vulkan/meta/radv_meta.c
+index 20695c8a003..d6e01efc99a 100644
+--- a/src/amd/vulkan/meta/radv_meta.c
++++ b/src/amd/vulkan/meta/radv_meta.c
+@@ -506,6 +506,10 @@ radv_device_init_meta(struct radv_device *device)
+    if (result != VK_SUCCESS)
+       goto fail_etc_decode;
+ 
++   result = radv_device_init_meta_astc_decode_state(device, on_demand);
++   if (result != VK_SUCCESS)
++      goto fail_astc_decode;
++
+    if (device->uses_device_generated_commands) {
+       result = radv_device_init_dgc_prepare_state(device);
+       if (result != VK_SUCCESS)
+@@ -539,6 +543,8 @@ fail_accel_struct:
+    radv_device_finish_accel_struct_build_state(device);
+ fail_dgc:
+    radv_device_finish_dgc_prepare_state(device);
++fail_astc_decode:
++   radv_device_finish_meta_astc_decode_state(device);
+ fail_etc_decode:
+    radv_device_finish_meta_etc_decode_state(device);
+ fail_fmask_copy:
+@@ -578,6 +584,7 @@ radv_device_finish_meta(struct radv_device *device)
+ {
+    radv_device_finish_dgc_prepare_state(device);
+    radv_device_finish_meta_etc_decode_state(device);
++   radv_device_finish_meta_astc_decode_state(device);
+    radv_device_finish_accel_struct_build_state(device);
+    radv_device_finish_meta_clear_state(device);
+    radv_device_finish_meta_resolve_state(device);
+diff --git a/src/amd/vulkan/meta/radv_meta.h b/src/amd/vulkan/meta/radv_meta.h
+index 98c8e713e2e..f42e954f4b7 100644
+--- a/src/amd/vulkan/meta/radv_meta.h
++++ b/src/amd/vulkan/meta/radv_meta.h
+@@ -109,6 +109,9 @@ void radv_device_finish_accel_struct_build_state(struct radv_device *device);
+ VkResult radv_device_init_meta_etc_decode_state(struct radv_device *device, bool on_demand);
+ void radv_device_finish_meta_etc_decode_state(struct radv_device *device);
+ 
++VkResult radv_device_init_meta_astc_decode_state(struct radv_device *device, bool on_demand);
++void radv_device_finish_meta_astc_decode_state(struct radv_device *device);
++
+ VkResult radv_device_init_dgc_prepare_state(struct radv_device *device);
+ void radv_device_finish_dgc_prepare_state(struct radv_device *device);
+ 
+@@ -220,6 +223,8 @@ void radv_update_buffer_cp(struct radv_cmd_buffer *cmd_buffer, uint64_t va, cons
+ 
+ void radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
+                           const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent);
++void radv_meta_decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
++                           const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent);
+ 
+ /**
+  * Return whether the bound pipeline is the FMASK decompress pass.
+diff --git a/src/amd/vulkan/meta/radv_meta_astc_decode.c b/src/amd/vulkan/meta/radv_meta_astc_decode.c
+new file mode 100644
+index 00000000000..3659336ef42
+--- /dev/null
++++ b/src/amd/vulkan/meta/radv_meta_astc_decode.c
+@@ -0,0 +1,169 @@
++/* Copyright (c) 2017-2023 Hans-Kristian Arntzen
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining
++ * a copy of this software and associated documentation files (the
++ * "Software"), to deal in the Software without restriction, including
++ * without limitation the rights to use, copy, modify, merge, publish,
++ * distribute, sublicense, and/or sell copies of the Software, and to
++ * permit persons to whom the Software is furnished to do so, subject to
++ * the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be
++ * included in all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
++ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
++ * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
++ * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
++ * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
++ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
++ */
++
++#include <assert.h>
++#include <stdbool.h>
++
++#include "radv_meta.h"
++#include "radv_private.h"
++#include "sid.h"
++#include "vk_common_entrypoints.h"
++#include "vk_format.h"
++
++VkResult
++radv_device_init_meta_astc_decode_state(struct radv_device *device, bool on_demand)
++{
++   struct radv_meta_state *state = &device->meta_state;
++
++   if (!device->physical_device->emulate_astc)
++      return VK_SUCCESS;
++
++   return vk_texcompress_astc_init(&device->vk, &state->alloc, state->cache, &state->astc_decode);
++}
++
++void
++radv_device_finish_meta_astc_decode_state(struct radv_device *device)
++{
++   struct radv_meta_state *state = &device->meta_state;
++   struct vk_texcompress_astc_state *astc = state->astc_decode;
++
++   if (!device->physical_device->emulate_astc)
++      return;
++
++   vk_texcompress_astc_finish(&device->vk, &state->alloc, astc);
++}
++
++static void
++decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview, struct radv_image_view *dst_iview,
++            VkImageLayout layout, const VkOffset3D *offset, const VkExtent3D *extent)
++{
++   struct radv_device *device = cmd_buffer->device;
++   struct radv_meta_state *state = &device->meta_state;
++   struct vk_texcompress_astc_write_descriptor_set write_desc_set;
++   VkFormat format = src_iview->image->vk.format;
++   int blk_w = vk_format_get_blockwidth(format);
++   int blk_h = vk_format_get_blockheight(format);
++
++   vk_texcompress_astc_fill_write_descriptor_sets(state->astc_decode, &write_desc_set,
++                                                  radv_image_view_to_handle(src_iview), layout,
++                                                  radv_image_view_to_handle(dst_iview), format);
++   radv_meta_push_descriptor_set(cmd_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, state->astc_decode->p_layout,
++                                 0, /* set number */
++                                 VK_TEXCOMPRESS_ASTC_WRITE_DESC_SET_COUNT, write_desc_set.descriptor_set);
++
++   VkPipeline pipeline =
++      vk_texcompress_astc_get_decode_pipeline(&device->vk, &state->alloc, state->astc_decode, state->cache, format);
++   if (pipeline == VK_NULL_HANDLE)
++      return;
++
++   radv_CmdBindPipeline(radv_cmd_buffer_to_handle(cmd_buffer), VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
++
++   bool is_3Dimage = (src_iview->image->vk.image_type == VK_IMAGE_TYPE_3D) ? true : false;
++   int push_constants[5] = {offset->x / blk_w, offset->y / blk_h, extent->width + offset->x, extent->height + offset->y,
++                            is_3Dimage};
++   radv_CmdPushConstants(radv_cmd_buffer_to_handle(cmd_buffer), device->meta_state.etc_decode.pipeline_layout,
++                         VK_SHADER_STAGE_COMPUTE_BIT, 0, 20, push_constants);
++
++   struct radv_dispatch_info info = {
++      .blocks[0] = DIV_ROUND_UP(extent->width, blk_w * 2),
++      .blocks[1] = DIV_ROUND_UP(extent->height, blk_h * 2),
++      .blocks[2] = extent->depth,
++      .offsets[0] = 0,
++      .offsets[1] = 0,
++      .offsets[2] = offset->z,
++      .unaligned = 0,
++   };
++   radv_compute_dispatch(cmd_buffer, &info);
++}
++
++static VkImageViewType
++get_view_type(const struct radv_image *image)
++{
++   switch (image->vk.image_type) {
++   case VK_IMAGE_TYPE_2D:
++      return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
++   case VK_IMAGE_TYPE_3D:
++      return VK_IMAGE_VIEW_TYPE_3D;
++   default:
++      unreachable("bad VkImageViewType");
++   }
++}
++
++static void
++image_view_init(struct radv_device *device, struct radv_image *image, VkFormat format, VkImageAspectFlags aspectMask,
++                uint32_t baseMipLevel, uint32_t baseArrayLayer, uint32_t layerCount, struct radv_image_view *iview)
++{
++   VkImageViewCreateInfo iview_create_info = {
++      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
++      .image = radv_image_to_handle(image),
++      .viewType = get_view_type(image),
++      .format = format,
++      .subresourceRange =
++         {
++            .aspectMask = aspectMask,
++            .baseMipLevel = baseMipLevel,
++            .levelCount = 1,
++            .baseArrayLayer = 0,
++            .layerCount = baseArrayLayer + layerCount,
++         },
++   };
++
++   radv_image_view_init(iview, device, &iview_create_info, 0, NULL);
++}
++
++void
++radv_meta_decode_astc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *image, VkImageLayout layout,
++                      const VkImageSubresourceLayers *subresource, VkOffset3D offset, VkExtent3D extent)
++{
++   struct radv_meta_saved_state saved_state;
++   radv_meta_save(&saved_state, cmd_buffer,
++                  RADV_META_SAVE_COMPUTE_PIPELINE | RADV_META_SAVE_CONSTANTS | RADV_META_SAVE_DESCRIPTORS |
++                     RADV_META_SUSPEND_PREDICATING);
++
++   uint32_t base_slice = radv_meta_get_iview_layer(image, subresource, &offset);
++   uint32_t slice_count = image->vk.image_type == VK_IMAGE_TYPE_3D
++                             ? extent.depth
++                             : vk_image_subresource_layer_count(&image->vk, subresource);
++
++   extent = vk_image_sanitize_extent(&image->vk, extent);
++   offset = vk_image_sanitize_offset(&image->vk, offset);
++
++   struct radv_image_view src_iview, dst_iview;
++   image_view_init(cmd_buffer->device, image, VK_FORMAT_R32G32B32A32_UINT, VK_IMAGE_ASPECT_COLOR_BIT,
++                   subresource->mipLevel, subresource->baseArrayLayer,
++                   vk_image_subresource_layer_count(&image->vk, subresource), &src_iview);
++   image_view_init(cmd_buffer->device, image, VK_FORMAT_R8G8B8A8_UINT, VK_IMAGE_ASPECT_PLANE_1_BIT,
++                   subresource->mipLevel, subresource->baseArrayLayer,
++                   vk_image_subresource_layer_count(&image->vk, subresource), &dst_iview);
++
++   VkExtent3D extent_copy = {
++      .width = extent.width,
++      .height = extent.height,
++      .depth = slice_count,
++   };
++   decode_astc(cmd_buffer, &src_iview, &dst_iview, layout, &(VkOffset3D){offset.x, offset.y, base_slice}, &extent_copy);
++
++   radv_image_view_finish(&src_iview);
++   radv_image_view_finish(&dst_iview);
++
++   radv_meta_restore(&saved_state, cmd_buffer);
++}
+diff --git a/src/amd/vulkan/meta/radv_meta_copy.c b/src/amd/vulkan/meta/radv_meta_copy.c
+index c4c4da93d08..ede2cb92f76 100644
+--- a/src/amd/vulkan/meta/radv_meta_copy.c
++++ b/src/amd/vulkan/meta/radv_meta_copy.c
+@@ -213,12 +213,19 @@ radv_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer, const VkCopyBufferToIm
+          radv_src_access_flush(cmd_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, dst_image) |
+          radv_dst_access_flush(cmd_buffer, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, dst_image);
+ 
+-      assert(vk_format_description(dst_image->vk.format)->layout == UTIL_FORMAT_LAYOUT_ETC);
++      const enum util_format_layout format_layout = vk_format_description(dst_image->vk.format)->layout;
+       for (unsigned r = 0; r < pCopyBufferToImageInfo->regionCount; r++) {
+-         radv_meta_decode_etc(cmd_buffer, dst_image, pCopyBufferToImageInfo->dstImageLayout,
+-                              &pCopyBufferToImageInfo->pRegions[r].imageSubresource,
+-                              pCopyBufferToImageInfo->pRegions[r].imageOffset,
+-                              pCopyBufferToImageInfo->pRegions[r].imageExtent);
++         if (format_layout == UTIL_FORMAT_LAYOUT_ASTC) {
++            radv_meta_decode_astc(cmd_buffer, dst_image, pCopyBufferToImageInfo->dstImageLayout,
++                                  &pCopyBufferToImageInfo->pRegions[r].imageSubresource,
++                                  pCopyBufferToImageInfo->pRegions[r].imageOffset,
++                                  pCopyBufferToImageInfo->pRegions[r].imageExtent);
++         } else {
++            radv_meta_decode_etc(cmd_buffer, dst_image, pCopyBufferToImageInfo->dstImageLayout,
++                                 &pCopyBufferToImageInfo->pRegions[r].imageSubresource,
++                                 pCopyBufferToImageInfo->pRegions[r].imageOffset,
++                                 pCopyBufferToImageInfo->pRegions[r].imageExtent);
++         }
+       }
+    }
+ }
+@@ -559,11 +566,17 @@ radv_CmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pCopyI
+          radv_src_access_flush(cmd_buffer, VK_ACCESS_TRANSFER_WRITE_BIT, dst_image) |
+          radv_dst_access_flush(cmd_buffer, VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, dst_image);
+ 
+-      assert(vk_format_description(dst_image->vk.format)->layout == UTIL_FORMAT_LAYOUT_ETC);
++      const enum util_format_layout format_layout = vk_format_description(dst_image->vk.format)->layout;
+       for (unsigned r = 0; r < pCopyImageInfo->regionCount; r++) {
+-         radv_meta_decode_etc(cmd_buffer, dst_image, pCopyImageInfo->dstImageLayout,
+-                              &pCopyImageInfo->pRegions[r].dstSubresource, pCopyImageInfo->pRegions[r].dstOffset,
+-                              pCopyImageInfo->pRegions[r].extent);
++         if (format_layout == UTIL_FORMAT_LAYOUT_ASTC) {
++            radv_meta_decode_astc(cmd_buffer, dst_image, pCopyImageInfo->dstImageLayout,
++                                  &pCopyImageInfo->pRegions[r].dstSubresource, pCopyImageInfo->pRegions[r].dstOffset,
++                                  pCopyImageInfo->pRegions[r].extent);
++         } else {
++            radv_meta_decode_etc(cmd_buffer, dst_image, pCopyImageInfo->dstImageLayout,
++                                 &pCopyImageInfo->pRegions[r].dstSubresource, pCopyImageInfo->pRegions[r].dstOffset,
++                                 pCopyImageInfo->pRegions[r].extent);
++         }
+       }
+    }
+ }
+diff --git a/src/amd/vulkan/radv_formats.c b/src/amd/vulkan/radv_formats.c
+index 4e7fa800969..d4840037853 100644
+--- a/src/amd/vulkan/radv_formats.c
++++ b/src/amd/vulkan/radv_formats.c
+@@ -623,6 +623,9 @@ radv_is_format_emulated(const struct radv_physical_device *physical_device, VkFo
+    if (physical_device->emulate_etc2 && vk_texcompress_etc2_emulation_format(format) != VK_FORMAT_UNDEFINED)
+       return true;
+ 
++   if (physical_device->emulate_astc && vk_texcompress_astc_emulation_format(format) != VK_FORMAT_UNDEFINED)
++      return true;
++
+    return false;
+ }
+ 
+@@ -649,7 +652,8 @@ radv_physical_device_get_format_properties(struct radv_physical_device *physical
+       return;
+    }
+ 
+-   if (desc->layout == UTIL_FORMAT_LAYOUT_ETC && !radv_device_supports_etc(physical_device)) {
++   if ((desc->layout == UTIL_FORMAT_LAYOUT_ETC && !radv_device_supports_etc(physical_device)) ||
++       desc->layout == UTIL_FORMAT_LAYOUT_ASTC) {
+       if (radv_is_format_emulated(physical_device, format)) {
+          /* required features for compressed formats */
+          tiled = VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
+diff --git a/src/amd/vulkan/radv_image.c b/src/amd/vulkan/radv_image.c
+index 5a45d09e320..6100bd27e8d 100644
+--- a/src/amd/vulkan/radv_image.c
++++ b/src/amd/vulkan/radv_image.c
+@@ -535,11 +535,14 @@ static VkFormat
+ radv_image_get_plane_format(const struct radv_physical_device *pdev, const struct radv_image *image, unsigned plane)
+ {
+    if (radv_is_format_emulated(pdev, image->vk.format)) {
+-      assert(vk_format_description(image->vk.format)->layout == UTIL_FORMAT_LAYOUT_ETC);
+       if (plane == 0)
+          return image->vk.format;
+-      return vk_texcompress_etc2_emulation_format(image->vk.format);
++      if (vk_format_description(image->vk.format)->layout == UTIL_FORMAT_LAYOUT_ASTC)
++         return vk_texcompress_astc_emulation_format(image->vk.format);
++      else
++         return vk_texcompress_etc2_emulation_format(image->vk.format);
+    }
++
+    return vk_format_get_plane_format(image->vk.format, plane);
+ }
+ 
+diff --git a/src/amd/vulkan/radv_instance.c b/src/amd/vulkan/radv_instance.c
+index b0b593dd43e..f8be41c8362 100644
+--- a/src/amd/vulkan/radv_instance.c
++++ b/src/amd/vulkan/radv_instance.c
+@@ -142,6 +142,7 @@ static const driOptionDescription radv_dri_options[] = {
+       DRI_CONF_RADV_DISABLE_TC_COMPAT_HTILE_GENERAL(false)
+       DRI_CONF_RADV_DISABLE_DCC(false)
+       DRI_CONF_RADV_REQUIRE_ETC2(false)
++      DRI_CONF_RADV_REQUIRE_ASTC(false)
+       DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(false)
+       DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(false)
+       DRI_CONF_RADV_DGC(false)
+diff --git a/src/amd/vulkan/radv_physical_device.c b/src/amd/vulkan/radv_physical_device.c
+index 7dab2d8a8da..bef564fb53e 100644
+--- a/src/amd/vulkan/radv_physical_device.c
++++ b/src/amd/vulkan/radv_physical_device.c
+@@ -619,7 +619,7 @@ radv_physical_device_get_features(const struct radv_physical_device *pdevice, st
+       .multiViewport = true,
+       .samplerAnisotropy = true,
+       .textureCompressionETC2 = radv_device_supports_etc(pdevice) || pdevice->emulate_etc2,
+-      .textureCompressionASTC_LDR = false,
++      .textureCompressionASTC_LDR = pdevice->emulate_astc,
+       .textureCompressionBC = true,
+       .occlusionQueryPrecise = true,
+       .pipelineStatisticsQuery = true,
+@@ -1824,9 +1824,11 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
+ 
+ #ifdef ANDROID
+    device->emulate_etc2 = !radv_device_supports_etc(device);
++   device->emulate_astc = true;
+ #else
+    device->emulate_etc2 =
+       !radv_device_supports_etc(device) && driQueryOptionb(&device->instance->dri_options, "radv_require_etc2");
++   device->emulate_astc = driQueryOptionb(&device->instance->dri_options, "radv_require_astc");
+ #endif
+ 
+    snprintf(device->name, sizeof(device->name), "AMD RADV %s%s", device->rad_info.name,
+diff --git a/src/amd/vulkan/radv_private.h b/src/amd/vulkan/radv_private.h
+index c06078275f8..99bb6fbe7b2 100644
+--- a/src/amd/vulkan/radv_private.h
++++ b/src/amd/vulkan/radv_private.h
+@@ -69,6 +69,7 @@
+ #include "vk_queue.h"
+ #include "vk_sampler.h"
+ #include "vk_shader_module.h"
++#include "vk_texcompress_astc.h"
+ #include "vk_texcompress_etc2.h"
+ #include "vk_util.h"
+ #include "vk_video.h"
+@@ -325,6 +326,9 @@ struct radv_physical_device {
+    /* Whether to emulate ETC2 image support on HW without support. */
+    bool emulate_etc2;
+ 
++   /* Whether to emulate ASTC image support on HW without support. */
++   bool emulate_astc;
++
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    enum radeon_bo_domain memory_domains[VK_MAX_MEMORY_TYPES];
+    enum radeon_bo_flag memory_flags[VK_MAX_MEMORY_TYPES];
+@@ -741,6 +745,8 @@ struct radv_meta_state {
+ 
+    struct vk_texcompress_etc2_state etc_decode;
+ 
++   struct vk_texcompress_astc_state *astc_decode;
++
+    struct {
+       VkDescriptorSetLayout ds_layout;
+       VkPipelineLayout p_layout;
+diff --git a/src/util/driconf.h b/src/util/driconf.h
+index dca737c977e..1a2e6840271 100644
+--- a/src/util/driconf.h
++++ b/src/util/driconf.h
+@@ -641,6 +641,10 @@
+   DRI_CONF_OPT_B(radv_require_etc2, def,                                       \
+                  "Implement emulated ETC2 on HW that does not support it")
+ 
++#define DRI_CONF_RADV_REQUIRE_ASTC(def)                                      \
++   DRI_CONF_OPT_B(radv_require_astc, def,                                    \
++                  "Implement emulated ASTC on HW that does not support it")
++
+ #define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
+   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
+                  "Disable anisotropic filtering for single level images")
+-- 
+2.42.0
+

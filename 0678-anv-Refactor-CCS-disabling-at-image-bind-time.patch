@@ -1,0 +1,97 @@
+From 207db221179894fd388fa8272a151403b270d171 Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Fri, 25 Aug 2023 16:10:29 -0400
+Subject: [PATCH 678/834] anv: Refactor CCS disabling at image bind time
+
+Split out the discrete and integrated implicit CCS cases. We'll do more
+work in the integrated case in a future commit.
+
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_image.c   | 21 ++++++++++++++-------
+ src/intel/vulkan/anv_private.h | 16 ++++++++++++++++
+ 2 files changed, 30 insertions(+), 7 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index 8f9b4dbf3ee..e0dbff99b02 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -2259,26 +2259,33 @@ VkResult anv_BindImageMemory2(
+          did_bind = true;
+       }
+ 
+-      /* On platforms that use implicit CCS, if the plane's bo lacks implicit
+-       * CCS then disable compression on the plane.
+-       */
++      /* Now that we have the BO, finalize CCS setup. */
+       for (int p = 0; p < image->n_planes; ++p) {
+          enum anv_image_memory_binding binding =
+             image->planes[p].primary_surface.memory_range.binding;
+          const struct anv_bo *bo =
+             image->bindings[binding].address.bo;
+ 
+-         if (!bo || bo->has_implicit_ccs)
++         if (!bo || !isl_aux_usage_has_ccs(image->planes[p].aux_usage))
+             continue;
+ 
+-         if (!device->physical->has_implicit_ccs)
++         /* Do nothing if flat CCS requirements are satisfied. */
++         if (device->info->has_flat_ccs && bo->vram_only)
+             continue;
+ 
+-         if (!isl_aux_usage_has_ccs(image->planes[p].aux_usage))
++         if (anv_bo_allows_aux_map(device, bo)) {
+             continue;
++         }
++
++         /* Do nothing prior to gfx12. There are no special requirements. */
++         if (device->info->ver < 12)
++            continue;
++
++         /* The plane's BO cannot support CCS, disable compression on it. */
++         assert(!isl_drm_modifier_has_aux(image->vk.drm_format_mod));
+ 
+          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+-                       "BO lacks implicit CCS. Disabling the CCS aux usage.");
++                       "BO lacks CCS support. Disabling the CCS aux usage.");
+ 
+          if (image->planes[p].aux_surface.memory_range.size > 0) {
+             assert(image->planes[p].aux_usage == ISL_AUX_USAGE_HIZ_CCS ||
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 36b70ada8f8..f824d29668f 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -40,6 +40,7 @@
+ #define VG(x) ((void)0)
+ #endif
+ 
++#include "common/intel_aux_map.h"
+ #include "common/intel_decoder.h"
+ #include "common/intel_engine.h"
+ #include "common/intel_gem.h"
+@@ -4915,6 +4916,21 @@ anv_image_plane_uses_aux_map(const struct anv_device *device,
+       isl_aux_usage_has_ccs(image->planes[plane].aux_usage);
+ }
+ 
++static inline bool
++anv_bo_allows_aux_map(const struct anv_device *device,
++                      const struct anv_bo *bo)
++{
++   if (device->aux_map_ctx == NULL)
++      return false;
++
++   if (bo->has_implicit_ccs == false)
++      return false;
++
++   assert(bo->offset % intel_aux_map_get_alignment(device->aux_map_ctx) == 0);
++
++   return true;
++}
++
+ void
+ anv_cmd_buffer_mark_image_written(struct anv_cmd_buffer *cmd_buffer,
+                                   const struct anv_image *image,
+-- 
+2.42.0
+

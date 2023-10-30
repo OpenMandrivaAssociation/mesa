@@ -1,0 +1,484 @@
+From db335d9b7385e75442e6d5de70a1e9abf9165150 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sun, 17 Sep 2023 13:39:46 +0300
+Subject: [PATCH 636/834] anv: factor out host/gpu internal shaders interfaces
+
+This will prevent host/gpu structure definitions to go out of sync.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/anv_internal_kernels.h       |  72 +-----------
+ .../shaders/common_generated_draws.glsl       |  24 +---
+ .../vulkan/shaders/common_query_copy.glsl     |  33 ++----
+ .../vulkan/shaders/gfx11_generated_draws.glsl |  14 +--
+ .../vulkan/shaders/gfx9_generated_draws.glsl  |  28 ++---
+ src/intel/vulkan/shaders/interface.h          | 103 ++++++++++++++++++
+ src/intel/vulkan/shaders/meson.build          |   1 +
+ 7 files changed, 143 insertions(+), 132 deletions(-)
+ create mode 100644 src/intel/vulkan/shaders/interface.h
+
+diff --git a/src/intel/vulkan/anv_internal_kernels.h b/src/intel/vulkan/anv_internal_kernels.h
+index c85b2999187..ce1196246ea 100644
+--- a/src/intel/vulkan/anv_internal_kernels.h
++++ b/src/intel/vulkan/anv_internal_kernels.h
+@@ -24,40 +24,7 @@
+ #ifndef ANV_GENERATED_INDIRECT_DRAWS_H
+ #define ANV_GENERATED_INDIRECT_DRAWS_H
+ 
+-#include <stdint.h>
+-
+-#define ANV_GENERATED_FLAG_INDEXED    BITFIELD_BIT(0)
+-#define ANV_GENERATED_FLAG_PREDICATED BITFIELD_BIT(1)
+-#define ANV_GENERATED_FLAG_DRAWID     BITFIELD_BIT(2)
+-#define ANV_GENERATED_FLAG_BASE       BITFIELD_BIT(3)
+-
+-/* This needs to match common_generated_draws.glsl :
+- *
+- *    layout(set = 0, binding = 4) uniform block
+- */
+-struct anv_generated_indirect_draw_params {
+-   /* Draw ID buffer address (only used on Gfx9) */
+-   uint64_t draw_id_addr;
+-   /* Indirect data buffer address (only used on Gfx9) */
+-   uint64_t indirect_data_addr;
+-   /* Stride between each elements of the indirect data buffer */
+-   uint32_t indirect_data_stride;
+-   uint32_t flags; /* 0-7: bits, 8-15: mocs, 16-23: cmd_dws */
+-   /* Base number of the draw ID, it is added to the index computed from the
+-    * gl_FragCoord
+-    */
+-   uint32_t draw_base;
+-   /* Maximum number of draws (equals to draw_count for indirect draws without
+-    * an indirect count)
+-    */
+-   uint32_t max_draw_count;
+-   /* Instance multiplier for multi view */
+-   uint32_t instance_multiplier;
+-   /* Address where to jump at after the generated draw (only used with
+-    * indirect draw count variants)
+-    */
+-   uint64_t end_addr;
+-};
++#include "shaders/interface.h"
+ 
+ struct anv_generated_indirect_params {
+    struct anv_generated_indirect_draw_params draw;
+@@ -84,43 +51,6 @@ struct anv_generated_indirect_params {
+    struct anv_generated_indirect_params *prev;
+ };
+ 
+-#define ANV_COPY_QUERY_FLAG_RESULT64  BITFIELD_BIT(0)
+-#define ANV_COPY_QUERY_FLAG_AVAILABLE BITFIELD_BIT(1)
+-#define ANV_COPY_QUERY_FLAG_DELTA     BITFIELD_BIT(2)
+-#define ANV_COPY_QUERY_FLAG_PARTIAL   BITFIELD_BIT(3)
+-
+-/* This needs to match common_query_copy.glsl :
+- *
+- *    layout(set = 0, binding = 2) uniform block
+- */
+-struct anv_query_copy_shader_params {
+-   /* ANV_COPY_QUERY_FLAG_* flags */
+-   uint32_t flags;
+-
+-   /* Number of queries to copy */
+-   uint32_t num_queries;
+-
+-   /* Number of items to write back in the results per query */
+-   uint32_t num_items;
+-
+-   /* First query to copy result from */
+-   uint32_t query_base;
+-
+-   /* Query stride in bytes */
+-   uint32_t query_stride;
+-
+-   /* Offset at which the data should be read from */
+-   uint32_t query_data_offset;
+-
+-   /* Stride of destination writes */
+-   uint32_t destination_stride;
+-
+-   /* We need to be 64 bit aligned, or 32 bit builds get
+-    * very unhappy.
+-    */
+-   uint32_t padding;
+-};
+-
+ struct anv_query_copy_params {
+    struct anv_query_copy_shader_params copy;
+ 
+diff --git a/src/intel/vulkan/shaders/common_generated_draws.glsl b/src/intel/vulkan/shaders/common_generated_draws.glsl
+index 9cdd7c2dd44..8a68a87728e 100644
+--- a/src/intel/vulkan/shaders/common_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/common_generated_draws.glsl
+@@ -21,12 +21,7 @@
+  * IN THE SOFTWARE.
+  */
+ 
+-#define BITFIELD_BIT(i) (1u << i)
+-
+-#define ANV_GENERATED_FLAG_INDEXED    BITFIELD_BIT(0)
+-#define ANV_GENERATED_FLAG_PREDICATED BITFIELD_BIT(1)
+-#define ANV_GENERATED_FLAG_DRAWID     BITFIELD_BIT(2)
+-#define ANV_GENERATED_FLAG_BASE       BITFIELD_BIT(3)
++#include "interface.h"
+ 
+ /* These 3 bindings will be accessed through A64 messages */
+ layout(set = 0, binding = 0, std430) buffer Storage0 {
+@@ -56,14 +51,7 @@ layout(set = 0, binding = 3) buffer Storage3 {
+ 
+ /* This data will be provided through push constants. */
+ layout(set = 0, binding = 4) uniform block {
+-   uint64_t draw_id_addr;
+-   uint64_t indirect_data_addr;
+-   uint indirect_data_stride;
+-   uint flags;
+-   uint draw_base;
+-   uint max_draw_count;
+-   uint instance_multiplier;
+-   uint64_t end_addr;
++   anv_generated_indirect_draw_params params;
+ };
+ 
+ void write_VERTEX_BUFFER_STATE(uint write_offset,
+@@ -146,15 +134,15 @@ void write_MI_BATCH_BUFFER_START(uint write_offset,
+ 
+ void end_generated_draws(uint cmd_idx, uint draw_id, uint draw_count)
+ {
+-   uint _3dprim_dw_size = (flags >> 16) & 0xff;
++   uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
+    /* We can have an indirect draw count = 0. */
+-   uint last_draw_id = draw_count == 0 ? 0 : (min(draw_count, max_draw_count) - 1);
++   uint last_draw_id = draw_count == 0 ? 0 : (min(draw_count, params.max_draw_count) - 1);
+    uint jump_offset = draw_count == 0 ? 0 : _3dprim_dw_size;
+ 
+-   if (draw_id == last_draw_id && draw_count < max_draw_count) {
++   if (draw_id == last_draw_id && draw_count < params.max_draw_count) {
+       /* Only write a jump forward in the batch if we have fewer elements than
+        * the max draw count.
+        */
+-      write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, end_addr);
++      write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.end_addr);
+    }
+ }
+diff --git a/src/intel/vulkan/shaders/common_query_copy.glsl b/src/intel/vulkan/shaders/common_query_copy.glsl
+index a8425db99d3..9e480ba0be8 100644
+--- a/src/intel/vulkan/shaders/common_query_copy.glsl
++++ b/src/intel/vulkan/shaders/common_query_copy.glsl
+@@ -21,12 +21,7 @@
+  * IN THE SOFTWARE.
+  */
+ 
+-#define BITFIELD_BIT(i) (1u << i)
+-
+-#define ANV_COPY_QUERY_FLAG_RESULT64  BITFIELD_BIT(0)
+-#define ANV_COPY_QUERY_FLAG_AVAILABLE BITFIELD_BIT(1)
+-#define ANV_COPY_QUERY_FLAG_DELTA     BITFIELD_BIT(2)
+-#define ANV_COPY_QUERY_FLAG_PARTIAL   BITFIELD_BIT(3)
++#include "interface.h"
+ 
+ /* These 3 bindings will be accessed through A64 messages */
+ layout(set = 0, binding = 0, std430) buffer Storage0 {
+@@ -39,34 +34,28 @@ layout(set = 0, binding = 1, std430) buffer Storage1 {
+ 
+ /* This data will be provided through push constants. */
+ layout(set = 0, binding = 2) uniform block {
+-   uint flags;
+-   uint num_queries;
+-   uint num_items;
+-   uint query_base;
+-   uint query_stride;
+-   uint query_data_offset;
+-   uint destination_stride;
++   anv_query_copy_shader_params params;
+ };
+ 
+ void query_copy(uint item_idx)
+ {
+-   if (item_idx >= num_queries)
++   if (item_idx >= params.num_queries)
+       return;
+ 
+-   bool is_result64 = (flags & ANV_COPY_QUERY_FLAG_RESULT64) != 0;
+-   bool write_available = (flags & ANV_COPY_QUERY_FLAG_AVAILABLE) != 0;
+-   bool compute_delta = (flags & ANV_COPY_QUERY_FLAG_DELTA) != 0;
+-   bool partial_result = (flags & ANV_COPY_QUERY_FLAG_PARTIAL) != 0;
++   bool is_result64 = (params.flags & ANV_COPY_QUERY_FLAG_RESULT64) != 0;
++   bool write_available = (params.flags & ANV_COPY_QUERY_FLAG_AVAILABLE) != 0;
++   bool compute_delta = (params.flags & ANV_COPY_QUERY_FLAG_DELTA) != 0;
++   bool partial_result = (params.flags & ANV_COPY_QUERY_FLAG_PARTIAL) != 0;
+ 
+-   uint query_byte = (query_base + item_idx) * query_stride;
+-   uint query_data_byte = query_byte + query_data_offset;
+-   uint destination_byte = item_idx * destination_stride;
++   uint query_byte = (params.query_base + item_idx) * params.query_stride;
++   uint query_data_byte = query_byte + params.query_data_offset;
++   uint destination_byte = item_idx * params.destination_stride;
+ 
+    uint64_t availability = query_data[query_byte / 4];
+ 
+    uint query_data_dword = query_data_byte / 4;
+    uint dest_dword = destination_byte / 4;
+-   for (uint i = 0; i < num_items; i++) {
++   for (uint i = 0; i < params.num_items; i++) {
+       uint item_data_dword = query_data_dword + i * 2 * (compute_delta ? 2 : 1);
+ 
+       uint64_t v;
+diff --git a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+index 4b8f2e531d0..099d4a2685f 100644
+--- a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+@@ -29,14 +29,14 @@
+ 
+ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ {
+-   bool is_indexed = (flags & ANV_GENERATED_FLAG_INDEXED) != 0;
+-   bool is_predicated = (flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
+-   uint indirect_data_offset = item_idx * indirect_data_stride / 4;
++   bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
++   bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
++   uint indirect_data_offset = item_idx * params.indirect_data_stride / 4;
+ 
+    if (is_indexed) {
+       /* Loading a VkDrawIndexedIndirectCommand */
+       uint index_count    = indirect_data[indirect_data_offset + 0];
+-      uint instance_count = indirect_data[indirect_data_offset + 1] * instance_multiplier;
++      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
+       uint first_index    = indirect_data[indirect_data_offset + 2];
+       uint vertex_offset  = indirect_data[indirect_data_offset + 3];
+       uint first_instance = indirect_data[indirect_data_offset + 4];
+@@ -55,7 +55,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+    } else {
+       /* Loading a VkDrawIndirectCommand structure */
+       uint vertex_count   = indirect_data[indirect_data_offset + 0];
+-      uint instance_count = indirect_data[indirect_data_offset + 1] * instance_multiplier;
++      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
+       uint first_vertex   = indirect_data[indirect_data_offset + 2];
+       uint first_instance = indirect_data[indirect_data_offset + 3];
+ 
+@@ -76,10 +76,10 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ 
+ void main()
+ {
+-   uint _3dprim_dw_size = (flags >> 16) & 0xff;
++   uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
+    uint item_idx = uint(gl_FragCoord.y) * 8192 + uint(gl_FragCoord.x);
+    uint cmd_idx = item_idx * _3dprim_dw_size;
+-   uint draw_id = draw_base + item_idx;
++   uint draw_id = params.draw_base + item_idx;
+    uint draw_count = _draw_count;
+ 
+    if (draw_id < draw_count)
+diff --git a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+index d7fbd7ebf03..4fa72eca2fe 100644
+--- a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+@@ -29,17 +29,17 @@
+ 
+ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ {
+-   bool is_indexed = (flags & ANV_GENERATED_FLAG_INDEXED) != 0;
+-   bool is_predicated = (flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
+-   bool uses_base = (flags & ANV_GENERATED_FLAG_BASE) != 0;
+-   bool uses_drawid = (flags & ANV_GENERATED_FLAG_DRAWID) != 0;
+-   uint mocs = (flags >> 8) & 0xff;
+-   uint indirect_data_offset = item_idx * indirect_data_stride / 4;
++   bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
++   bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
++   bool uses_base = (params.flags & ANV_GENERATED_FLAG_BASE) != 0;
++   bool uses_drawid = (params.flags & ANV_GENERATED_FLAG_DRAWID) != 0;
++   uint mocs = (params.flags >> 8) & 0xff;
++   uint indirect_data_offset = item_idx * params.indirect_data_stride / 4;
+ 
+    if (is_indexed) {
+       /* Loading a VkDrawIndexedIndirectCommand */
+       uint index_count    = indirect_data[indirect_data_offset + 0];
+-      uint instance_count = indirect_data[indirect_data_offset + 1] * instance_multiplier;
++      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
+       uint first_index    = indirect_data[indirect_data_offset + 2];
+       uint vertex_offset  = indirect_data[indirect_data_offset + 3];
+       uint first_instance = indirect_data[indirect_data_offset + 4];
+@@ -56,7 +56,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+          cmd_idx += 1;
+          if (uses_base) {
+             uint64_t indirect_draw_data_addr =
+-               indirect_data_addr + item_idx * indirect_data_stride + 12;
++               params.indirect_data_addr + item_idx * params.indirect_data_stride + 12;
+             write_VERTEX_BUFFER_STATE(cmd_idx,
+                                       mocs,
+                                       31,
+@@ -65,7 +65,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+             cmd_idx += 4;
+          }
+          if (uses_drawid) {
+-            uint64_t draw_idx_addr = draw_id_addr + 4 * item_idx;
++            uint64_t draw_idx_addr = params.draw_id_addr + 4 * item_idx;
+             draw_ids[item_idx] = draw_id;
+             write_VERTEX_BUFFER_STATE(cmd_idx,
+                                       mocs,
+@@ -86,7 +86,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+    } else {
+       /* Loading a VkDrawIndirectCommand structure */
+       uint vertex_count   = indirect_data[indirect_data_offset + 0];
+-      uint instance_count = indirect_data[indirect_data_offset + 1] * instance_multiplier;
++      uint instance_count = indirect_data[indirect_data_offset + 1] * params.instance_multiplier;
+       uint first_vertex   = indirect_data[indirect_data_offset + 2];
+       uint first_instance = indirect_data[indirect_data_offset + 3];
+ 
+@@ -102,7 +102,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+          cmd_idx += 1;
+          if (uses_base) {
+             uint64_t indirect_draw_data_addr =
+-               indirect_data_addr + item_idx * indirect_data_stride + 8;
++               params.indirect_data_addr + item_idx * params.indirect_data_stride + 8;
+             write_VERTEX_BUFFER_STATE(cmd_idx,
+                                       mocs,
+                                       31,
+@@ -111,7 +111,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+             cmd_idx += 4;
+          }
+          if (uses_drawid) {
+-            uint64_t draw_idx_addr = draw_id_addr + 4 * item_idx;
++            uint64_t draw_idx_addr = params.draw_id_addr + 4 * item_idx;
+             draw_ids[item_idx] = draw_id;
+             write_VERTEX_BUFFER_STATE(cmd_idx,
+                                       mocs,
+@@ -134,10 +134,10 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ 
+ void main()
+ {
+-   uint _3dprim_dw_size = (flags >> 16) & 0xff;
++   uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
+    uint item_idx = uint(gl_FragCoord.y) * 8192 + uint(gl_FragCoord.x);
+    uint cmd_idx = item_idx * _3dprim_dw_size;
+-   uint draw_id = draw_base + item_idx;
++   uint draw_id = params.draw_base + item_idx;
+    uint draw_count = _draw_count;
+ 
+    if (draw_id < draw_count)
+diff --git a/src/intel/vulkan/shaders/interface.h b/src/intel/vulkan/shaders/interface.h
+new file mode 100644
+index 00000000000..2148fbb1dbd
+--- /dev/null
++++ b/src/intel/vulkan/shaders/interface.h
+@@ -0,0 +1,103 @@
++/*
++ * Copyright © 2023 Intel Corporation
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a
++ * copy of this software and associated documentation files (the "Software"),
++ * to deal in the Software without restriction, including without limitation
++ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
++ * and/or sell copies of the Software, and to permit persons to whom the
++ * Software is furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice (including the next
++ * paragraph) shall be included in all copies or substantial portions of the
++ * Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
++ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
++ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ * IN THE SOFTWARE.
++ */
++
++#ifndef _SHADERS_INTERFACE_H_
++#define _SHADERS_INTERFACE_H_
++
++#ifdef _IN_SHADER_
++#define BITFIELD_BIT(i) (1u << i)
++
++#define uint32_t uint
++#else
++#include "util/macros.h"
++
++#include <stdint.h>
++#endif
++
++#define ANV_GENERATED_FLAG_INDEXED    BITFIELD_BIT(0)
++#define ANV_GENERATED_FLAG_PREDICATED BITFIELD_BIT(1)
++#define ANV_GENERATED_FLAG_DRAWID     BITFIELD_BIT(2)
++#define ANV_GENERATED_FLAG_BASE       BITFIELD_BIT(3)
++
++struct anv_generated_indirect_draw_params {
++   /* Draw ID buffer address (only used on Gfx9) */
++   uint64_t draw_id_addr;
++   /* Indirect data buffer address (only used on Gfx9) */
++   uint64_t indirect_data_addr;
++   /* Stride between each elements of the indirect data buffer */
++   uint32_t indirect_data_stride;
++   uint32_t flags; /* 0-7: bits, 8-15: mocs, 16-23: cmd_dws */
++   /* Base number of the draw ID, it is added to the index computed from the
++    * gl_FragCoord
++    */
++   uint32_t draw_base;
++   /* Maximum number of draws (equals to draw_count for indirect draws without
++    * an indirect count)
++    */
++   uint32_t max_draw_count;
++   /* Instance multiplier for multi view */
++   uint32_t instance_multiplier;
++   /* Address where to jump at after the generated draw (only used with
++    * indirect draw count variants)
++    */
++   uint64_t end_addr;
++};
++
++#define ANV_COPY_QUERY_FLAG_RESULT64  BITFIELD_BIT(0)
++#define ANV_COPY_QUERY_FLAG_AVAILABLE BITFIELD_BIT(1)
++#define ANV_COPY_QUERY_FLAG_DELTA     BITFIELD_BIT(2)
++#define ANV_COPY_QUERY_FLAG_PARTIAL   BITFIELD_BIT(3)
++
++/* This needs to match common_query_copy.glsl :
++ *
++ *    layout(set = 0, binding = 2) uniform block
++ */
++struct anv_query_copy_shader_params {
++   /* ANV_COPY_QUERY_FLAG_* flags */
++   uint32_t flags;
++
++   /* Number of queries to copy */
++   uint32_t num_queries;
++
++   /* Number of items to write back in the results per query */
++   uint32_t num_items;
++
++   /* First query to copy result from */
++   uint32_t query_base;
++
++   /* Query stride in bytes */
++   uint32_t query_stride;
++
++   /* Offset at which the data should be read from */
++   uint32_t query_data_offset;
++
++   /* Stride of destination writes */
++   uint32_t destination_stride;
++
++   /* We need to be 64 bit aligned, or 32 bit builds get
++    * very unhappy.
++    */
++   uint32_t padding;
++};
++
++#endif /* _SHADERS_INTERFACE_H_ */
+diff --git a/src/intel/vulkan/shaders/meson.build b/src/intel/vulkan/shaders/meson.build
+index d63c8af3fc5..2275ff3b6d6 100644
+--- a/src/intel/vulkan/shaders/meson.build
++++ b/src/intel/vulkan/shaders/meson.build
+@@ -58,5 +58,6 @@ foreach item : anv_internal_shaders
+       '--glsl-version', '450',
+       '--stage', stage,
+       '-I' + meson.current_source_dir(),
++      '-D_IN_SHADER_=1',
+     ])
+ endforeach
+-- 
+2.42.0
+

@@ -1,0 +1,215 @@
+From f3886e9c02a57f87db14aaf761aa0c979858d063 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Wed, 20 Sep 2023 14:44:28 -0400
+Subject: [PATCH 497/834] nir: split
+ FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP* flags
+
+GLSL doesn't preserve NaNs, but it optionally preserves Infs.
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25392>
+---
+ src/compiler/nir/nir.h                        | 24 +++++++++
+ src/compiler/nir/nir_opcodes.py               |  9 ++--
+ src/compiler/nir/nir_print.c                  |  2 +-
+ src/compiler/shader_enums.h                   | 53 +++++++++++++------
+ src/compiler/shader_info.h                    |  2 +-
+ src/compiler/spirv/nir_spirv.h                |  2 +-
+ .../rusticl/mesa/compiler/clc/spirv.rs        |  2 +-
+ .../frontends/rusticl/mesa/compiler/nir.rs    |  2 +-
+ 8 files changed, 70 insertions(+), 26 deletions(-)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index dbab63aa32b..5c4c4ada70c 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -1322,6 +1322,30 @@ nir_op_is_vec_or_mov(nir_op op)
+    return op == nir_op_mov || nir_op_is_vec(op);
+ }
+ 
++static inline bool
++nir_is_float_control_signed_zero_preserve(unsigned execution_mode, unsigned bit_size)
++{
++   return (16 == bit_size && execution_mode & FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP16) ||
++          (32 == bit_size && execution_mode & FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP32) ||
++          (64 == bit_size && execution_mode & FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP64);
++}
++
++static inline bool
++nir_is_float_control_inf_preserve(unsigned execution_mode, unsigned bit_size)
++{
++   return (16 == bit_size && execution_mode & FLOAT_CONTROLS_INF_PRESERVE_FP16) ||
++          (32 == bit_size && execution_mode & FLOAT_CONTROLS_INF_PRESERVE_FP32) ||
++          (64 == bit_size && execution_mode & FLOAT_CONTROLS_INF_PRESERVE_FP64);
++}
++
++static inline bool
++nir_is_float_control_nan_preserve(unsigned execution_mode, unsigned bit_size)
++{
++   return (16 == bit_size && execution_mode & FLOAT_CONTROLS_NAN_PRESERVE_FP16) ||
++          (32 == bit_size && execution_mode & FLOAT_CONTROLS_NAN_PRESERVE_FP32) ||
++          (64 == bit_size && execution_mode & FLOAT_CONTROLS_NAN_PRESERVE_FP64);
++}
++
+ static inline bool
+ nir_is_float_control_signed_zero_inf_nan_preserve(unsigned execution_mode, unsigned bit_size)
+ {
+diff --git a/src/compiler/nir/nir_opcodes.py b/src/compiler/nir/nir_opcodes.py
+index 4e7283dcb25..0f81328f441 100644
+--- a/src/compiler/nir/nir_opcodes.py
++++ b/src/compiler/nir/nir_opcodes.py
+@@ -692,9 +692,8 @@ else
+ """, description = """
+ Unlike :nir:alu-op:`fmul`, anything (even infinity or NaN) multiplied by zero is
+ always zero. ``fmulz(0.0, inf)`` and ``fmulz(0.0, nan)`` must be +/-0.0, even
+-if ``SIGNED_ZERO_INF_NAN_PRESERVE`` is not used. If
+-``SIGNED_ZERO_INF_NAN_PRESERVE`` is used, then the result must be a positive
+-zero if either operand is zero.
++if ``INF_PRESERVE/NAN_PRESERVE`` is not used. If ``SIGNED_ZERO_PRESERVE`` is
++used, then the result must be a positive zero if either operand is zero.
+ """)
+ 
+ 
+@@ -1020,8 +1019,8 @@ Floating-point multiply-add with modified zero handling.
+ 
+ Unlike :nir:alu-op:`ffma`, anything (even infinity or NaN) multiplied by zero is
+ always zero. ``ffmaz(0.0, inf, src2)`` and ``ffmaz(0.0, nan, src2)`` must be
+-``+/-0.0 + src2``, even if ``SIGNED_ZERO_INF_NAN_PRESERVE`` is not used. If
+-``SIGNED_ZERO_INF_NAN_PRESERVE`` is used, then the result must be a positive
++``+/-0.0 + src2``, even if ``INF_PRESERVE/NAN_PRESERVE`` is not used. If
++``SIGNED_ZERO_PRESERVE`` is used, then the result must be a positive
+ zero plus src2 if either src0 or src1 is zero.
+ """)
+ 
+diff --git a/src/compiler/nir/nir_print.c b/src/compiler/nir/nir_print.c
+index 29546d03d36..6ca711b1dc8 100644
+--- a/src/compiler/nir/nir_print.c
++++ b/src/compiler/nir/nir_print.c
+@@ -2438,7 +2438,7 @@ print_shader_info(const struct shader_info *info, FILE *fp)
+    print_nz_bitset(fp, "image_buffers", info->image_buffers, ARRAY_SIZE(info->image_buffers));
+    print_nz_bitset(fp, "msaa_images", info->msaa_images, ARRAY_SIZE(info->msaa_images));
+ 
+-   print_nz_x16(fp, "float_controls_execution_mode", info->float_controls_execution_mode);
++   print_nz_x32(fp, "float_controls_execution_mode", info->float_controls_execution_mode);
+ 
+    print_nz_unsigned(fp, "shared_size", info->shared_size);
+ 
+diff --git a/src/compiler/shader_enums.h b/src/compiler/shader_enums.h
+index a49f4be992a..96d75805488 100644
+--- a/src/compiler/shader_enums.h
++++ b/src/compiler/shader_enums.h
+@@ -1253,22 +1253,43 @@ enum gl_derivative_group {
+ 
+ enum float_controls
+ {
+-   FLOAT_CONTROLS_DEFAULT_FLOAT_CONTROL_MODE        = 0x0000,
+-   FLOAT_CONTROLS_DENORM_PRESERVE_FP16              = 0x0001,
+-   FLOAT_CONTROLS_DENORM_PRESERVE_FP32              = 0x0002,
+-   FLOAT_CONTROLS_DENORM_PRESERVE_FP64              = 0x0004,
+-   FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP16         = 0x0008,
+-   FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32         = 0x0010,
+-   FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP64         = 0x0020,
+-   FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP16 = 0x0040,
+-   FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP32 = 0x0080,
+-   FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP64 = 0x0100,
+-   FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP16            = 0x0200,
+-   FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32            = 0x0400,
+-   FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP64            = 0x0800,
+-   FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP16            = 0x1000,
+-   FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP32            = 0x2000,
+-   FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP64            = 0x4000,
++   FLOAT_CONTROLS_DEFAULT_FLOAT_CONTROL_MODE = 0,
++   FLOAT_CONTROLS_DENORM_PRESERVE_FP16       = BITFIELD_BIT(0),
++   FLOAT_CONTROLS_DENORM_PRESERVE_FP32       = BITFIELD_BIT(1),
++   FLOAT_CONTROLS_DENORM_PRESERVE_FP64       = BITFIELD_BIT(2),
++   FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP16  = BITFIELD_BIT(3),
++   FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32  = BITFIELD_BIT(4),
++   FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP64  = BITFIELD_BIT(5),
++   FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP16  = BITFIELD_BIT(6),
++   FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP32  = BITFIELD_BIT(7),
++   FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP64  = BITFIELD_BIT(8),
++   FLOAT_CONTROLS_INF_PRESERVE_FP16          = BITFIELD_BIT(9),
++   FLOAT_CONTROLS_INF_PRESERVE_FP32          = BITFIELD_BIT(10),
++   FLOAT_CONTROLS_INF_PRESERVE_FP64          = BITFIELD_BIT(11),
++   FLOAT_CONTROLS_NAN_PRESERVE_FP16          = BITFIELD_BIT(12),
++   FLOAT_CONTROLS_NAN_PRESERVE_FP32          = BITFIELD_BIT(13),
++   FLOAT_CONTROLS_NAN_PRESERVE_FP64          = BITFIELD_BIT(14),
++   FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP16     = BITFIELD_BIT(15),
++   FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32     = BITFIELD_BIT(16),
++   FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP64     = BITFIELD_BIT(17),
++   FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP16     = BITFIELD_BIT(18),
++   FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP32     = BITFIELD_BIT(19),
++   FLOAT_CONTROLS_ROUNDING_MODE_RTZ_FP64     = BITFIELD_BIT(20),
++
++   FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP16 =
++      FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP16 |
++      FLOAT_CONTROLS_INF_PRESERVE_FP16 |
++      FLOAT_CONTROLS_NAN_PRESERVE_FP16,
++
++   FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP32 =
++      FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP32 |
++      FLOAT_CONTROLS_INF_PRESERVE_FP32 |
++      FLOAT_CONTROLS_NAN_PRESERVE_FP32,
++
++   FLOAT_CONTROLS_SIGNED_ZERO_INF_NAN_PRESERVE_FP64 =
++      FLOAT_CONTROLS_SIGNED_ZERO_PRESERVE_FP64 |
++      FLOAT_CONTROLS_INF_PRESERVE_FP64 |
++      FLOAT_CONTROLS_NAN_PRESERVE_FP64,
+ };
+ 
+ /**
+diff --git a/src/compiler/shader_info.h b/src/compiler/shader_info.h
+index 052ef6ab5b2..e46927ba88b 100644
+--- a/src/compiler/shader_info.h
++++ b/src/compiler/shader_info.h
+@@ -227,7 +227,7 @@ typedef struct shader_info {
+    BITSET_DECLARE(msaa_images, 64);
+ 
+    /* SPV_KHR_float_controls: execution mode for floating point ops */
+-   uint16_t float_controls_execution_mode;
++   uint32_t float_controls_execution_mode;
+ 
+    /**
+     * Size of shared variables accessed by compute/task/mesh shaders.
+diff --git a/src/compiler/spirv/nir_spirv.h b/src/compiler/spirv/nir_spirv.h
+index 85eeccc2e2c..1369a0e6b47 100644
+--- a/src/compiler/spirv/nir_spirv.h
++++ b/src/compiler/spirv/nir_spirv.h
+@@ -64,7 +64,7 @@ struct spirv_to_nir_options {
+    /* Initial value for shader_info::float_controls_execution_mode,
+     * indicates hardware requirements rather than shader author intent
+     */
+-   uint16_t float_controls_execution_mode;
++   uint32_t float_controls_execution_mode;
+ 
+    /* Initial subgroup size.  This may be overwritten for CL kernels */
+    enum gl_subgroup_size subgroup_size;
+diff --git a/src/gallium/frontends/rusticl/mesa/compiler/clc/spirv.rs b/src/gallium/frontends/rusticl/mesa/compiler/clc/spirv.rs
+index 59e00617300..b9b3b725a73 100644
+--- a/src/gallium/frontends/rusticl/mesa/compiler/clc/spirv.rs
++++ b/src/gallium/frontends/rusticl/mesa/compiler/clc/spirv.rs
+@@ -325,7 +325,7 @@ impl SPIRVBin {
+             environment: nir_spirv_execution_environment::NIR_SPIRV_OPENCL,
+             clc_shader: clc_shader,
+             float_controls_execution_mode: float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32
+-                as u16,
++                as u32,
+ 
+             caps: spirv_supported_capabilities {
+                 address: true,
+diff --git a/src/gallium/frontends/rusticl/mesa/compiler/nir.rs b/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
+index eb563ca714b..bb5fafdc261 100644
+--- a/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
++++ b/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
+@@ -442,7 +442,7 @@ impl NirShader {
+     pub fn preserve_fp16_denorms(&mut self) {
+         unsafe {
+             self.nir.as_mut().info.float_controls_execution_mode |=
+-                float_controls::FLOAT_CONTROLS_DENORM_PRESERVE_FP16 as u16;
++                float_controls::FLOAT_CONTROLS_DENORM_PRESERVE_FP16 as u32;
+         }
+     }
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,101 @@
+From 9a51185d45d46320a584538740451209b0f94eaf Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 10 Oct 2023 10:39:51 -0500
+Subject: [PATCH 134/834] nvk: Set max descriptors to 2^20 for most descriptor
+ types
+
+Dynamic is the exception here.  Those have much stricter limits.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25653>
+---
+ src/nouveau/vulkan/nvk_physical_device.c | 48 ++++++++++++------------
+ src/nouveau/vulkan/nvk_private.h         |  1 +
+ 2 files changed, 25 insertions(+), 24 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index 09c94bc62ac..72dbba01120 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -398,21 +398,21 @@ nvk_get_device_properties(const struct nvk_instance *instance,
+       .bufferImageGranularity = info->chipset >= 0x120 ? 0x400 : 0x10000,
+       .sparseAddressSpaceSize = UINT32_MAX,
+       .maxBoundDescriptorSets = NVK_MAX_SETS,
+-      .maxPerStageDescriptorSamplers = UINT32_MAX,
+-      .maxPerStageDescriptorUniformBuffers = UINT32_MAX,
+-      .maxPerStageDescriptorStorageBuffers = UINT32_MAX,
+-      .maxPerStageDescriptorSampledImages = UINT32_MAX,
+-      .maxPerStageDescriptorStorageImages = UINT32_MAX,
+-      .maxPerStageDescriptorInputAttachments = UINT32_MAX,
++      .maxPerStageDescriptorSamplers = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorUniformBuffers = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorStorageBuffers = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorSampledImages = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorStorageImages = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorInputAttachments = NVK_MAX_DESCRIPTORS,
+       .maxPerStageResources = UINT32_MAX,
+-      .maxDescriptorSetSamplers = UINT32_MAX,
+-      .maxDescriptorSetUniformBuffers = UINT32_MAX,
++      .maxDescriptorSetSamplers = NVK_MAX_DESCRIPTORS,
++      .maxDescriptorSetUniformBuffers = NVK_MAX_DESCRIPTORS,
+       .maxDescriptorSetUniformBuffersDynamic = NVK_MAX_DYNAMIC_BUFFERS / 2,
+-      .maxDescriptorSetStorageBuffers = UINT32_MAX,
++      .maxDescriptorSetStorageBuffers = NVK_MAX_DESCRIPTORS,
+       .maxDescriptorSetStorageBuffersDynamic = NVK_MAX_DYNAMIC_BUFFERS / 2,
+-      .maxDescriptorSetSampledImages = UINT32_MAX,
+-      .maxDescriptorSetStorageImages = UINT32_MAX,
+-      .maxDescriptorSetInputAttachments = UINT32_MAX,
++      .maxDescriptorSetSampledImages = NVK_MAX_DESCRIPTORS,
++      .maxDescriptorSetStorageImages = NVK_MAX_DESCRIPTORS,
++      .maxDescriptorSetInputAttachments = NVK_MAX_DESCRIPTORS,
+       .maxVertexInputAttributes = 32,
+       .maxVertexInputBindings = 32,
+       .maxVertexInputAttributeOffset = 2047,
+@@ -531,21 +531,21 @@ nvk_get_device_properties(const struct nvk_instance *instance,
+       .shaderInputAttachmentArrayNonUniformIndexingNative = false,
+       .robustBufferAccessUpdateAfterBind = true,
+       .quadDivergentImplicitLod = info->cls_eng3d >= TURING_A,
+-      .maxPerStageDescriptorUpdateAfterBindSamplers = UINT32_MAX,
+-      .maxPerStageDescriptorUpdateAfterBindUniformBuffers = UINT32_MAX,
+-      .maxPerStageDescriptorUpdateAfterBindStorageBuffers = UINT32_MAX,
+-      .maxPerStageDescriptorUpdateAfterBindSampledImages = UINT32_MAX,
+-      .maxPerStageDescriptorUpdateAfterBindStorageImages = UINT32_MAX,
+-      .maxPerStageDescriptorUpdateAfterBindInputAttachments = UINT32_MAX,
++      .maxPerStageDescriptorUpdateAfterBindSamplers = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorUpdateAfterBindUniformBuffers = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorUpdateAfterBindStorageBuffers = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorUpdateAfterBindSampledImages = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorUpdateAfterBindStorageImages = NVK_MAX_DESCRIPTORS,
++      .maxPerStageDescriptorUpdateAfterBindInputAttachments = NVK_MAX_DESCRIPTORS,
+       .maxPerStageUpdateAfterBindResources = UINT32_MAX,
+-      .maxDescriptorSetUpdateAfterBindSamplers = UINT32_MAX,
+-      .maxDescriptorSetUpdateAfterBindUniformBuffers = UINT32_MAX,
++      .maxDescriptorSetUpdateAfterBindSamplers = NVK_MAX_DESCRIPTORS,
++      .maxDescriptorSetUpdateAfterBindUniformBuffers = NVK_MAX_DESCRIPTORS,
+       .maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = NVK_MAX_DYNAMIC_BUFFERS / 2,
+-      .maxDescriptorSetUpdateAfterBindStorageBuffers = UINT32_MAX,
++      .maxDescriptorSetUpdateAfterBindStorageBuffers = NVK_MAX_DESCRIPTORS,
+       .maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = NVK_MAX_DYNAMIC_BUFFERS / 2,
+-      .maxDescriptorSetUpdateAfterBindSampledImages = UINT32_MAX,
+-      .maxDescriptorSetUpdateAfterBindStorageImages = UINT32_MAX,
+-      .maxDescriptorSetUpdateAfterBindInputAttachments = UINT32_MAX,
++      .maxDescriptorSetUpdateAfterBindSampledImages = NVK_MAX_DESCRIPTORS,
++      .maxDescriptorSetUpdateAfterBindStorageImages = NVK_MAX_DESCRIPTORS,
++      .maxDescriptorSetUpdateAfterBindInputAttachments = NVK_MAX_DESCRIPTORS,
+       .filterMinmaxSingleComponentFormats = true,
+       .filterMinmaxImageComponentMapping = true,
+       .maxTimelineSemaphoreValueDifference = UINT64_MAX,
+diff --git a/src/nouveau/vulkan/nvk_private.h b/src/nouveau/vulkan/nvk_private.h
+index ba6e6c6876b..df657a2c2a7 100644
+--- a/src/nouveau/vulkan/nvk_private.h
++++ b/src/nouveau/vulkan/nvk_private.h
+@@ -20,6 +20,7 @@
+ #define NVK_MAX_DESCRIPTOR_SIZE 16
+ #define NVK_MAX_PUSH_DESCRIPTORS 32
+ #define NVK_MAX_DESCRIPTOR_SET_SIZE (1u << 30)
++#define NVK_MAX_DESCRIPTORS (1 << 20)
+ #define NVK_PUSH_DESCRIPTOR_SET_SIZE \
+    (NVK_MAX_PUSH_DESCRIPTORS * NVK_MAX_DESCRIPTOR_SIZE)
+ #define NVK_SSBO_BOUNDS_CHECK_ALIGNMENT 4
+-- 
+2.42.0
+

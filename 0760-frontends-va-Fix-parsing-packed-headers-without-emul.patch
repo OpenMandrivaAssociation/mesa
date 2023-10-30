@@ -1,0 +1,94 @@
+From 3c5d82142d403acddfa366905114fb4e4cd3946f Mon Sep 17 00:00:00 2001
+From: David Rosca <nowrep@gmail.com>
+Date: Thu, 5 Oct 2023 16:47:21 +0200
+Subject: [PATCH 760/834] frontends/va: Fix parsing packed headers without
+ emulation bytes
+
+Don't try to handle emulation bytes and only parse first NAL unit
+if the packed header has no emulation bytes.
+
+This fixes parsing packed headers from gstreamer.
+
+Reviewed-by: Ruijing Dong <ruijing.dong@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25565>
+---
+ src/gallium/frontends/va/picture.c          | 2 ++
+ src/gallium/frontends/va/picture_h264_enc.c | 5 ++++-
+ src/gallium/frontends/va/picture_hevc_enc.c | 5 ++++-
+ src/gallium/frontends/va/va_private.h       | 1 +
+ 4 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/frontends/va/picture.c b/src/gallium/frontends/va/picture.c
+index cc83f05c062..4c9339ff481 100644
+--- a/src/gallium/frontends/va/picture.c
++++ b/src/gallium/frontends/va/picture.c
+@@ -742,6 +742,8 @@ handleVAEncPackedHeaderParameterBufferType(vlVaContext *context, vlVaBuffer *buf
+    VAStatus status = VA_STATUS_SUCCESS;
+    VAEncPackedHeaderParameterBuffer *param = buf->data;
+ 
++   context->packed_header_emulation_bytes = param->has_emulation_bytes;
++
+    switch (u_reduce_video_profile(context->templat.profile)) {
+    case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+       if (param->type == VAEncPackedHeaderSequence)
+diff --git a/src/gallium/frontends/va/picture_h264_enc.c b/src/gallium/frontends/va/picture_h264_enc.c
+index c12ee99a369..56c600613dc 100644
+--- a/src/gallium/frontends/va/picture_h264_enc.c
++++ b/src/gallium/frontends/va/picture_h264_enc.c
+@@ -486,7 +486,7 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeH264(vlVaContext *context, vlVaBuffer *
+       unsigned nal_unit_type = vl_vlc_get_uimsbf(&vlc, 5);
+ 
+       struct vl_rbsp rbsp;
+-      vl_rbsp_init(&rbsp, &vlc, ~0, true);
++      vl_rbsp_init(&rbsp, &vlc, ~0, context->packed_header_emulation_bytes);
+ 
+       switch(nal_unit_type) {
+       case H264_NAL_SPS:
+@@ -496,6 +496,9 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeH264(vlVaContext *context, vlVaBuffer *
+       default:
+          break;
+       }
++
++      if (!context->packed_header_emulation_bytes)
++         break;
+    }
+ 
+    return VA_STATUS_SUCCESS;
+diff --git a/src/gallium/frontends/va/picture_hevc_enc.c b/src/gallium/frontends/va/picture_hevc_enc.c
+index 860404c925b..b0aa1b946b0 100644
+--- a/src/gallium/frontends/va/picture_hevc_enc.c
++++ b/src/gallium/frontends/va/picture_hevc_enc.c
+@@ -465,7 +465,7 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeHEVC(vlVaContext *context, vlVaBuffer *
+       vl_vlc_eatbits(&vlc, 3);
+ 
+       struct vl_rbsp rbsp;
+-      vl_rbsp_init(&rbsp, &vlc, ~0, true);
++      vl_rbsp_init(&rbsp, &vlc, ~0, context->packed_header_emulation_bytes);
+ 
+       switch(nal_unit_type) {
+       case HEVC_NAL_SPS:
+@@ -476,6 +476,9 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeHEVC(vlVaContext *context, vlVaBuffer *
+       default:
+          break;
+       }
++
++      if (!context->packed_header_emulation_bytes)
++         break;
+    }
+ 
+    return VA_STATUS_SUCCESS;
+diff --git a/src/gallium/frontends/va/va_private.h b/src/gallium/frontends/va/va_private.h
+index 37c0aec7ec0..5df1bdb6d70 100644
+--- a/src/gallium/frontends/va/va_private.h
++++ b/src/gallium/frontends/va/va_private.h
+@@ -373,6 +373,7 @@ typedef struct {
+    bool needs_begin_frame;
+    void *blit_cs;
+    int packed_header_type;
++   bool packed_header_emulation_bytes;
+    struct set *surfaces;
+ } vlVaContext;
+ 
+-- 
+2.42.0
+

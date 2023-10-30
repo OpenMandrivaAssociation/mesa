@@ -1,0 +1,39 @@
+From 052d12492dc7687732d56da17e9cd014925a53f7 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Mon, 9 Oct 2023 13:50:57 +0200
+Subject: [PATCH 114/834] ac/nir: only consider overflow for valid feedback
+ buffers
+
+Otherwise the ordered operation above (ie. a GDS atomic return) might
+return non-zero offsets for invalid buffers.
+
+Fixes: f7076d129db ("amd: add nir_intrinsic_xfb_counter_sub_amd and fix overflowed streamout offsets")
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25613>
+---
+ src/amd/common/ac_nir_lower_ngg.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/amd/common/ac_nir_lower_ngg.c b/src/amd/common/ac_nir_lower_ngg.c
+index 0872c1e2f15..72fcb9c9b66 100644
+--- a/src/amd/common/ac_nir_lower_ngg.c
++++ b/src/amd/common/ac_nir_lower_ngg.c
+@@ -1893,7 +1893,15 @@ ngg_build_streamout_buffer_info(nir_builder *b,
+             continue;
+ 
+          nir_def *buffer_size = nir_channel(b, so_buffer_ret[buffer], 2);
++
++         /* Only consider overflow for valid feedback buffers because
++          * otherwise the ordered operation above (GDS atomic return) might
++          * return non-zero offsets for invalid buffers.
++          */
++         nir_def *buffer_valid = nir_ine_imm(b, buffer_size, 0);
+          nir_def *buffer_offset = nir_channel(b, buffer_offsets, buffer);
++         buffer_offset = nir_bcsel(b, buffer_valid, buffer_offset, nir_imm_int(b, 0));
++
+          nir_def *remain_size = nir_isub(b, buffer_size, buffer_offset);
+          nir_def *remain_prim = nir_idiv(b, remain_size, prim_stride_ret[buffer]);
+          nir_def *overflow = nir_ilt(b, buffer_size, buffer_offset);
+-- 
+2.42.0
+

@@ -1,0 +1,39 @@
+From a740a9f1dc49702916a1bb53a0023ef041316ecf Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 13 Oct 2023 09:30:33 +0200
+Subject: [PATCH 231/834] ci/etnaviv: move failure to flake
+
+Turns out, this passes sometimes... So let's mark it as a flake
+instead.
+
+Fixes: 7368a897528 ("ci/etnaviv: update ci expectation")
+Reviewed-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25699>
+---
+ src/etnaviv/ci/etnaviv-gc2000-fails.txt  | 2 --
+ src/etnaviv/ci/etnaviv-gc2000-flakes.txt | 2 ++
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/etnaviv/ci/etnaviv-gc2000-fails.txt b/src/etnaviv/ci/etnaviv-gc2000-fails.txt
+index b9f99903a16..ada8e01600a 100644
+--- a/src/etnaviv/ci/etnaviv-gc2000-fails.txt
++++ b/src/etnaviv/ci/etnaviv-gc2000-fails.txt
+@@ -2017,5 +2017,3 @@ spec@!opengl 2.1@pbo,Fail
+ spec@!opengl 2.1@pbo@test_polygon_stip,Fail
+ spec@!opengl 2.1@polygon-stipple-fs,Fail
+ spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
+-
+-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410,Fail
+diff --git a/src/etnaviv/ci/etnaviv-gc2000-flakes.txt b/src/etnaviv/ci/etnaviv-gc2000-flakes.txt
+index 777a8161772..ceb8c5c3fde 100644
+--- a/src/etnaviv/ci/etnaviv-gc2000-flakes.txt
++++ b/src/etnaviv/ci/etnaviv-gc2000-flakes.txt
+@@ -215,3 +215,5 @@ spec@ext_texture_srgb@texwrap formats@GL_SRGB8_ALPHA8- swizzled
+ spec@amd_shader_trinary_minmax@execution@built-in-functions@vs-min3-vec2-vec2-vec2
+ spec@arb_fragment_program@texturing@txp-2d
+ spec@arb_vertex_program@instructions@xpd
++
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410
+-- 
+2.42.0
+

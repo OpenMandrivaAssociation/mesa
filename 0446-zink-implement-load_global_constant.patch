@@ -1,0 +1,29 @@
+From 74363973ffcff9859abd114ef922a225cffec139 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 15 Oct 2023 13:09:48 +0200
+Subject: [PATCH 446/834] zink: implement load_global_constant
+
+This is just like load_global, just that the memory pointed to won't
+change.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25736>
+---
+ src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index 6f2f5c98be2..401e1d8f242 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -3235,6 +3235,7 @@ emit_intrinsic(struct ntv_context *ctx, nir_intrinsic_instr *intr)
+       break;
+ 
+    case nir_intrinsic_load_global:
++   case nir_intrinsic_load_global_constant:
+       emit_load_global(ctx, intr);
+       break;
+ 
+-- 
+2.42.0
+

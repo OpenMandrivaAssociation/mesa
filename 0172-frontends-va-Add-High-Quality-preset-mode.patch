@@ -1,0 +1,42 @@
+From 75fe0ad8e7dc3cb2b37790ff7c6ecf8c4568be25 Mon Sep 17 00:00:00 2001
+From: David Rosca <nowrep@gmail.com>
+Date: Tue, 3 Oct 2023 17:48:24 +0200
+Subject: [PATCH 172/834] frontends/va: Add High Quality preset mode
+
+Reviewed-by: Boyuan Zhang <Boyuan.Zhang@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25564>
+---
+ src/gallium/frontends/va/picture.c    | 4 ++--
+ src/gallium/frontends/va/va_private.h | 1 +
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/frontends/va/picture.c b/src/gallium/frontends/va/picture.c
+index 6bd799e606c..0a4b5ffc8c3 100644
+--- a/src/gallium/frontends/va/picture.c
++++ b/src/gallium/frontends/va/picture.c
+@@ -183,8 +183,8 @@ vlVaHandleVAEncMiscParameterTypeQualityLevel(struct pipe_enc_quality_modes *p, v
+          p->pre_encode_mode = PREENCODING_MODE_DEFAULT;
+          p->vbaq_mode = VBAQ_AUTO;
+       } else {
+-         p->preset_mode = in->preset_mode > PRESET_MODE_QUALITY
+-            ? PRESET_MODE_QUALITY : in->preset_mode;
++         p->preset_mode = in->preset_mode > PRESET_MODE_HIGH_QUALITY
++            ? PRESET_MODE_HIGH_QUALITY : in->preset_mode;
+          p->pre_encode_mode = in->pre_encode_mode;
+          p->vbaq_mode = in->vbaq_mode;
+       }
+diff --git a/src/gallium/frontends/va/va_private.h b/src/gallium/frontends/va/va_private.h
+index ad2dc4da203..54abc4c5d8a 100644
+--- a/src/gallium/frontends/va/va_private.h
++++ b/src/gallium/frontends/va/va_private.h
+@@ -77,6 +77,7 @@
+ #define PRESET_MODE_SPEED   (0)
+ #define PRESET_MODE_BALANCE (1)
+ #define PRESET_MODE_QUALITY (2)
++#define PRESET_MODE_HIGH_QUALITY (3)
+ 
+ #define PREENCODING_MODE_DISABLE (0)
+ #define PREENCODING_MODE_DEFAULT (1)
+-- 
+2.42.0
+

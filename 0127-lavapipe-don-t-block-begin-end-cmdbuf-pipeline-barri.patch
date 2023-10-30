@@ -1,0 +1,52 @@
+From e8a76adde8e4015701edfdd5deaa6cafa461bbe8 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 10 Oct 2023 21:17:59 -0400
+Subject: [PATCH 127/834] lavapipe: don't block begin/end cmdbuf pipeline
+ barriers
+
+these are now useful
+
+fixes #9972
+
+Fixes: 3b547a9b581 ("lavapipe: Switch to the common sync framework")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25652>
+---
+ src/gallium/frontends/lavapipe/lvp_execute.c | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/frontends/lavapipe/lvp_execute.c b/src/gallium/frontends/lavapipe/lvp_execute.c
+index abac8a6b47a..cdbaf64ce3a 100644
+--- a/src/gallium/frontends/lavapipe/lvp_execute.c
++++ b/src/gallium/frontends/lavapipe/lvp_execute.c
+@@ -4405,7 +4405,6 @@ static void lvp_execute_cmd_buffer(struct list_head *cmds,
+                                    struct rendering_state *state, bool print_cmds)
+ {
+    struct vk_cmd_queue_entry *cmd;
+-   bool first = true;
+    bool did_flush = false;
+ 
+    LIST_FOR_EACH_ENTRY(cmd, cmds, cmd_link) {
+@@ -4530,10 +4529,8 @@ static void lvp_execute_cmd_buffer(struct list_head *cmds,
+          handle_resolve_image(cmd, state);
+          break;
+       case VK_CMD_PIPELINE_BARRIER2:
+-         /* skip flushes since every cmdbuf does a flush
+-            after iterating its cmds and so this is redundant
+-          */
+-         if (first || did_flush || cmd->cmd_link.next == cmds)
++         /* flushes are actually stalls, so multiple flushes are redundant */
++         if (did_flush)
+             continue;
+          handle_pipeline_barrier(cmd, state);
+          did_flush = true;
+@@ -4766,7 +4763,6 @@ static void lvp_execute_cmd_buffer(struct list_head *cmds,
+          unreachable("Unsupported command");
+          break;
+       }
+-      first = false;
+       did_flush = false;
+       if (!cmd->cmd_link.next)
+          break;
+-- 
+2.42.0
+

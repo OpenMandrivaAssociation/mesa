@@ -1,0 +1,25 @@
+From 3510575655555b18657915871f2b57d42f6f6b19 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Fri, 13 Oct 2023 22:25:24 +0200
+Subject: [PATCH 370/834] ci: add half-life 2 freedreno flake
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25722>
+---
+ src/freedreno/ci/traces-freedreno.yml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/freedreno/ci/traces-freedreno.yml b/src/freedreno/ci/traces-freedreno.yml
+index 0824c87e694..6887ae78ef0 100644
+--- a/src/freedreno/ci/traces-freedreno.yml
++++ b/src/freedreno/ci/traces-freedreno.yml
+@@ -30,6 +30,7 @@ traces:
+       checksum: 6aef509acd1257cc56612141e24dc11c
+     freedreno-a630:
+       checksum: 6aef509acd1257cc56612141e24dc11c
++      label: [skip, flakes]
+     zink-a618:
+       checksum: 45bdbb33bf87ed114bd548248be13408
+       label: [skip, broken]
+-- 
+2.42.0
+

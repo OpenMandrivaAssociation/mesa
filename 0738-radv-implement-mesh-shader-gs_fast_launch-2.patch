@@ -1,0 +1,298 @@
+From 23cb0b00db9200733a68cae3678556e8cdbc0042 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 1 Sep 2023 11:25:00 +0100
+Subject: [PATCH 738/834] radv: implement mesh shader gs_fast_launch=2
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25040>
+---
+ src/amd/common/ac_nir.c                 | 16 +++++++++++
+ src/amd/common/sid.h                    |  1 +
+ src/amd/vulkan/radv_cmd_buffer.c        | 35 ++++++++++++++++++++-----
+ src/amd/vulkan/radv_device.c            |  2 ++
+ src/amd/vulkan/radv_pipeline_graphics.c | 19 +++++++++++---
+ src/amd/vulkan/radv_private.h           |  3 +++
+ src/amd/vulkan/radv_shader.c            |  6 ++---
+ src/amd/vulkan/radv_shader_args.c       | 28 ++++++++++++--------
+ src/amd/vulkan/radv_shader_info.c       |  3 ++-
+ 9 files changed, 88 insertions(+), 25 deletions(-)
+
+diff --git a/src/amd/common/ac_nir.c b/src/amd/common/ac_nir.c
+index 918105de865..3afc33e555b 100644
+--- a/src/amd/common/ac_nir.c
++++ b/src/amd/common/ac_nir.c
+@@ -129,6 +129,22 @@ lower_intrinsic_to_arg(nir_builder *b, nir_instr *instr, void *state)
+ 
+       break;
+    }
++   case nir_intrinsic_load_workgroup_id:
++      if (b->shader->info.stage == MESA_SHADER_MESH) {
++         /* This lowering is only valid with fast_launch = 2, otherwise we assume that
++          * lower_workgroup_id_to_index removed any uses of the workgroup id by this point.
++          */
++         assert(s->gfx_level >= GFX11);
++         nir_def *xy = ac_nir_load_arg(b, s->args, s->args->tess_offchip_offset);
++         nir_def *z = ac_nir_load_arg(b, s->args, s->args->gs_attr_offset);
++         replacement = nir_vec3(b, nir_extract_u16(b, xy, nir_imm_int(b, 0)),
++                                nir_extract_u16(b, xy, nir_imm_int(b, 1)),
++                                nir_extract_u16(b, z, nir_imm_int(b, 1)));
++      } else {
++         return false;
++      }
++
++      break;
+    default:
+       return false;
+    }
+diff --git a/src/amd/common/sid.h b/src/amd/common/sid.h
+index 03d4793fabb..dff4eb1d338 100644
+--- a/src/amd/common/sid.h
++++ b/src/amd/common/sid.h
+@@ -222,6 +222,7 @@
+ #define   S_4D1_XYZ_DIM_ENABLE(x)                     ((x & 1) << 30) /* GFX11+ */
+ #define   S_4D1_MODE1_ENABLE(x)                       ((x & 1) << 29) /* GFX11+ */
+ #define   S_4D1_LINEAR_DISPATCH_ENABLE(x)             ((x & 1) << 28) /* GFX11+ */
++#define PKT3_DISPATCH_MESH_DIRECT                  0x4E /* Direct mesh shader only dispatch [GFX only], GFX11+ */
+ #define PKT3_DMA_DATA                              0x50 /* GFX7+ */
+ #define PKT3_CONTEXT_REG_RMW                       0x51 /* older firmware versions on older chips don't have this */
+ #define PKT3_ONE_REG_WRITE                         0x57 /* GFX6 only */
+diff --git a/src/amd/vulkan/radv_cmd_buffer.c b/src/amd/vulkan/radv_cmd_buffer.c
+index 4fcdf44d7c2..7315cf12eb9 100644
+--- a/src/amd/vulkan/radv_cmd_buffer.c
++++ b/src/amd/vulkan/radv_cmd_buffer.c
+@@ -8064,7 +8064,7 @@ radv_cs_emit_indirect_mesh_draw_packet(struct radv_cmd_buffer *cmd_buffer, uint3
+    uint32_t draw_id_reg = xyz_dim_reg + (xyz_dim_enable ? 3 : 0);
+ 
+    uint32_t draw_id_enable = !!cmd_buffer->state.uses_drawid;
+-   uint32_t mode1_enable = 1; /* legacy fast launch mode */
++   uint32_t mode1_enable = !cmd_buffer->device->mesh_fast_launch_2;
+    const bool sqtt_en = !!cmd_buffer->device->sqtt.bo;
+ 
+    radeon_emit(cs, PKT3(PKT3_DISPATCH_MESH_INDIRECT_MULTI, 7, predicating) | PKT3_RESET_FILTER_CAM_S(1));
+@@ -8166,7 +8166,7 @@ radv_cs_emit_dispatch_taskmesh_gfx_packet(struct radv_cmd_buffer *cmd_buffer)
+    uint32_t xyz_dim_reg = (cmd_buffer->state.vtx_base_sgpr - SI_SH_REG_OFFSET) >> 2;
+    uint32_t ring_entry_reg = ((mesh_shader->info.user_data_0 - SI_SH_REG_OFFSET) >> 2) + ring_entry_loc->sgpr_idx;
+    uint32_t xyz_dim_en = mesh_shader->info.cs.uses_grid_size;
+-   uint32_t mode1_en = 1; /* legacy fast launch mode */
++   uint32_t mode1_en = !cmd_buffer->device->mesh_fast_launch_2;
+    uint32_t linear_dispatch_en = cmd_buffer->state.shaders[MESA_SHADER_TASK]->info.cs.linear_taskmesh_dispatch;
+    const bool sqtt_en = !!cmd_buffer->device->sqtt.bo;
+ 
+@@ -8471,20 +8471,41 @@ radv_emit_direct_draw_packets(struct radv_cmd_buffer *cmd_buffer, const struct r
+    }
+ }
+ 
++static void
++radv_cs_emit_mesh_dispatch_packet(struct radv_cmd_buffer *cmd_buffer, uint32_t x, uint32_t y, uint32_t z)
++{
++   radeon_emit(cmd_buffer->cs, PKT3(PKT3_DISPATCH_MESH_DIRECT, 3, cmd_buffer->state.predicating));
++   radeon_emit(cmd_buffer->cs, x);
++   radeon_emit(cmd_buffer->cs, y);
++   radeon_emit(cmd_buffer->cs, z);
++   radeon_emit(cmd_buffer->cs, S_0287F0_SOURCE_SELECT(V_0287F0_DI_SRC_SEL_AUTO_INDEX));
++}
++
+ ALWAYS_INLINE static void
+ radv_emit_direct_mesh_draw_packet(struct radv_cmd_buffer *cmd_buffer, uint32_t x, uint32_t y, uint32_t z)
+ {
+    const uint32_t view_mask = cmd_buffer->state.render.view_mask;
+-   const uint32_t count = x * y * z;
+ 
+    radv_emit_userdata_mesh(cmd_buffer, x, y, z);
+ 
+-   if (!view_mask) {
+-      radv_cs_emit_draw_packet(cmd_buffer, count, 0);
++   if (cmd_buffer->device->mesh_fast_launch_2) {
++      if (!view_mask) {
++         radv_cs_emit_mesh_dispatch_packet(cmd_buffer, x, y, z);
++      } else {
++         u_foreach_bit (view, view_mask) {
++            radv_emit_view_index(cmd_buffer, view);
++            radv_cs_emit_mesh_dispatch_packet(cmd_buffer, x, y, z);
++         }
++      }
+    } else {
+-      u_foreach_bit (view, view_mask) {
+-         radv_emit_view_index(cmd_buffer, view);
++      const uint32_t count = x * y * z;
++      if (!view_mask) {
+          radv_cs_emit_draw_packet(cmd_buffer, count, 0);
++      } else {
++         u_foreach_bit (view, view_mask) {
++            radv_emit_view_index(cmd_buffer, view);
++            radv_cs_emit_draw_packet(cmd_buffer, count, 0);
++         }
+       }
+    }
+ }
+diff --git a/src/amd/vulkan/radv_device.c b/src/amd/vulkan/radv_device.c
+index a22c6e55a6c..436e06cbc3a 100644
+--- a/src/amd/vulkan/radv_device.c
++++ b/src/amd/vulkan/radv_device.c
+@@ -924,6 +924,8 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
+    device->pbb_allowed =
+       device->physical_device->rad_info.gfx_level >= GFX9 && !(device->instance->debug_flags & RADV_DEBUG_NOBINNING);
+ 
++   device->mesh_fast_launch_2 = false;
++
+    /* The maximum number of scratch waves. Scratch space isn't divided
+     * evenly between CUs. The number is only a function of the number of CUs.
+     * We can decrease the constant to decrease the scratch buffer size.
+diff --git a/src/amd/vulkan/radv_pipeline_graphics.c b/src/amd/vulkan/radv_pipeline_graphics.c
+index 8e6f0c81488..d02c53f778c 100644
+--- a/src/amd/vulkan/radv_pipeline_graphics.c
++++ b/src/amd/vulkan/radv_pipeline_graphics.c
+@@ -2530,7 +2530,7 @@ radv_graphics_shaders_compile(struct radv_device *device, struct vk_pipeline_cac
+ 
+    bool optimize_conservatively = pipeline_key->optimisations_disabled;
+ 
+-   if (stages[MESA_SHADER_MESH].nir &&
++   if (!device->mesh_fast_launch_2 && stages[MESA_SHADER_MESH].nir &&
+        BITSET_TEST(stages[MESA_SHADER_MESH].nir->info.system_values_read, SYSTEM_VALUE_WORKGROUP_ID)) {
+       nir_shader *mesh = stages[MESA_SHADER_MESH].nir;
+       nir_shader *task = stages[MESA_SHADER_TASK].nir;
+@@ -3261,8 +3261,19 @@ radv_emit_mesh_shader(const struct radv_device *device, struct radeon_cmdbuf *ct
+    const struct radv_physical_device *pdevice = device->physical_device;
+ 
+    radv_emit_hw_ngg(device, ctx_cs, cs, NULL, ms);
+-   radeon_set_context_reg(ctx_cs, R_028B38_VGT_GS_MAX_VERT_OUT, ms->info.workgroup_size);
++   radeon_set_context_reg(ctx_cs, R_028B38_VGT_GS_MAX_VERT_OUT,
++                          device->mesh_fast_launch_2 ? ms->info.ngg_info.max_out_verts : ms->info.workgroup_size);
+    radeon_set_uconfig_reg_idx(pdevice, ctx_cs, R_030908_VGT_PRIMITIVE_TYPE, 1, V_008958_DI_PT_POINTLIST);
++
++   if (device->mesh_fast_launch_2) {
++      radeon_set_sh_reg_seq(cs, R_00B2B0_SPI_SHADER_GS_MESHLET_DIM, 2);
++      radeon_emit(cs, S_00B2B0_MESHLET_NUM_THREAD_X(ms->info.cs.block_size[0] - 1) |
++                         S_00B2B0_MESHLET_NUM_THREAD_Y(ms->info.cs.block_size[1] - 1) |
++                         S_00B2B0_MESHLET_NUM_THREAD_Z(ms->info.cs.block_size[2] - 1) |
++                         S_00B2B0_MESHLET_THREADGROUP_SIZE(ms->info.workgroup_size - 1));
++      radeon_emit(cs, S_00B2B4_MAX_EXP_VERTS(ms->info.ngg_info.max_out_verts) |
++                         S_00B2B4_MAX_EXP_PRIMS(ms->info.ngg_info.prim_amp_factor));
++   }
+ }
+ 
+ static uint32_t
+@@ -3505,7 +3516,9 @@ radv_emit_vgt_shader_config(const struct radv_device *device, struct radeon_cmdb
+       stages |= S_028B54_ES_EN(V_028B54_ES_STAGE_REAL) | S_028B54_GS_EN(1);
+    } else if (key->mesh) {
+       assert(!key->ngg_passthrough);
+-      stages |= S_028B54_GS_EN(1) | S_028B54_GS_FAST_LAUNCH(1) | S_028B54_NGG_WAVE_ID_EN(key->mesh_scratch_ring);
++      unsigned gs_fast_launch = device->mesh_fast_launch_2 ? 2 : 1;
++      stages |=
++         S_028B54_GS_EN(1) | S_028B54_GS_FAST_LAUNCH(gs_fast_launch) | S_028B54_NGG_WAVE_ID_EN(key->mesh_scratch_ring);
+    } else if (key->ngg) {
+       stages |= S_028B54_ES_EN(V_028B54_ES_STAGE_REAL);
+    }
+diff --git a/src/amd/vulkan/radv_private.h b/src/amd/vulkan/radv_private.h
+index b241c17f0c9..b4ac91a392f 100644
+--- a/src/amd/vulkan/radv_private.h
++++ b/src/amd/vulkan/radv_private.h
+@@ -1039,6 +1039,9 @@ struct radv_device {
+    /* Whether primitives generated query features are enabled. */
+    bool primitives_generated_query;
+ 
++   /* Whether to use GS_FAST_LAUNCH(2) for mesh shaders. */
++   bool mesh_fast_launch_2;
++
+    /* Whether anisotropy is forced with RADV_TEX_ANISO (-1 is disabled). */
+    int force_aniso;
+ 
+diff --git a/src/amd/vulkan/radv_shader.c b/src/amd/vulkan/radv_shader.c
+index 5aac387cac9..11bfd5f8fa3 100644
+--- a/src/amd/vulkan/radv_shader.c
++++ b/src/amd/vulkan/radv_shader.c
+@@ -567,9 +567,9 @@ radv_shader_spirv_to_nir(struct radv_device *device, const struct radv_shader_st
+    NIR_PASS(_, nir, nir_lower_system_values);
+    nir_lower_compute_system_values_options csv_options = {
+       /* Mesh shaders run as NGG which can implement local_invocation_index from
+-       * the wave ID in merged_wave_info, but they don't have local_invocation_ids.
++       * the wave ID in merged_wave_info, but they don't have local_invocation_ids on GFX10.3.
+        */
+-      .lower_cs_local_id_to_index = nir->info.stage == MESA_SHADER_MESH,
++      .lower_cs_local_id_to_index = nir->info.stage == MESA_SHADER_MESH && !device->mesh_fast_launch_2,
+       .lower_local_invocation_index = nir->info.stage == MESA_SHADER_COMPUTE &&
+                                       ((nir->info.workgroup_size[0] == 1) + (nir->info.workgroup_size[1] == 1) +
+                                        (nir->info.workgroup_size[2] == 1)) == 2,
+@@ -916,7 +916,7 @@ radv_lower_ngg(struct radv_device *device, struct radv_shader_stage *ngg_stage,
+       bool scratch_ring = false;
+       NIR_PASS_V(nir, ac_nir_lower_ngg_ms, options.gfx_level, options.clipdist_enable_mask,
+                  options.vs_output_param_offset, options.has_param_exports, &scratch_ring, info->wave_size,
+-                 pl_key->has_multiview_view_index, info->ms.has_query, false);
++                 pl_key->has_multiview_view_index, info->ms.has_query, device->mesh_fast_launch_2);
+       ngg_stage->info.ms.needs_ms_scratch_ring = scratch_ring;
+    } else {
+       unreachable("invalid SW stage passed to radv_lower_ngg");
+diff --git a/src/amd/vulkan/radv_shader_args.c b/src/amd/vulkan/radv_shader_args.c
+index e754123a8c9..16d9406a171 100644
+--- a/src/amd/vulkan/radv_shader_args.c
++++ b/src/amd/vulkan/radv_shader_args.c
+@@ -254,12 +254,16 @@ declare_ms_input_sgprs(const struct radv_shader_info *info, struct radv_shader_a
+ }
+ 
+ static void
+-declare_ms_input_vgprs(struct radv_shader_args *args)
++declare_ms_input_vgprs(const struct radv_device *device, struct radv_shader_args *args)
+ {
+-   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.vertex_id);
+-   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* user vgpr */
+-   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* user vgpr */
+-   ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* instance_id */
++   if (device->mesh_fast_launch_2) {
++      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.local_invocation_ids);
++   } else {
++      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.vertex_id);
++      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* user vgpr */
++      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* user vgpr */
++      ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, NULL); /* instance_id */
++   }
+ }
+ 
+ static void
+@@ -674,18 +678,20 @@ declare_shader_args(const struct radv_device *device, const struct radv_pipeline
+          if (info->merged_shader_compiled_separately)
+             add_ud_arg(args, 1, AC_ARG_INT, &args->next_stage_pc, AC_UD_NEXT_STAGE_PC);
+ 
+-         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_vtx_offset[0]);
+-         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_vtx_offset[1]);
+-         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_prim_id);
+-         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_invocation_id);
+-         ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_vtx_offset[2]);
++         if (previous_stage != MESA_SHADER_MESH || !device->mesh_fast_launch_2) {
++            ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_vtx_offset[0]);
++            ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_vtx_offset[1]);
++            ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_prim_id);
++            ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_invocation_id);
++            ac_add_arg(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.gs_vtx_offset[2]);
++         }
+ 
+          if (previous_stage == MESA_SHADER_VERTEX) {
+             declare_vs_input_vgprs(gfx_level, info, args, false);
+          } else if (previous_stage == MESA_SHADER_TESS_EVAL) {
+             declare_tes_input_vgprs(args);
+          } else if (previous_stage == MESA_SHADER_MESH) {
+-            declare_ms_input_vgprs(args);
++            declare_ms_input_vgprs(device, args);
+          }
+ 
+          if (info->merged_shader_compiled_separately) {
+diff --git a/src/amd/vulkan/radv_shader_info.c b/src/amd/vulkan/radv_shader_info.c
+index c87f401f60b..9bc5b88f77f 100644
+--- a/src/amd/vulkan/radv_shader_info.c
++++ b/src/amd/vulkan/radv_shader_info.c
+@@ -1163,7 +1163,8 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
+                                         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SUBGROUP_ID) |
+                                         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_NUM_SUBGROUPS);
+ 
+-   if (nir->info.stage == MESA_SHADER_COMPUTE || nir->info.stage == MESA_SHADER_TASK) {
++   if (nir->info.stage == MESA_SHADER_COMPUTE || nir->info.stage == MESA_SHADER_TASK ||
++       nir->info.stage == MESA_SHADER_MESH) {
+       for (int i = 0; i < 3; ++i)
+          info->cs.block_size[i] = nir->info.workgroup_size[i];
+    }
+-- 
+2.42.0
+

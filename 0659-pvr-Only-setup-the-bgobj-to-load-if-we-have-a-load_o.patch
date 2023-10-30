@@ -1,0 +1,34 @@
+From 2c62fdc8a7de2f55f89d085589ac30dcd0f0165d Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Tue, 3 Oct 2023 14:15:43 +0100
+Subject: [PATCH 659/834] pvr: Only setup the bgobj to load if we have a
+ load_op
+
+We only need to setup the background object if we have a load_op,
+to perform the loads/clears.
+
+This fixes segfaults for cases where we don't have a load_op.
+
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25703>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index c1690e783a9..2bdc2f740ff 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -1458,7 +1458,7 @@ static VkResult pvr_sub_cmd_gfx_job_init(const struct pvr_device_info *dev_info,
+       typed_memcpy(job->pds_bgnd_reg_values,
+                    spm_bgobj_state->pds_reg_values,
+                    ARRAY_SIZE(spm_bgobj_state->pds_reg_values));
+-   } else if (render_pass_info->enable_bg_tag) {
++   } else if (hw_render->load_op) {
+       const struct pvr_load_op *load_op = hw_render->load_op;
+       struct pvr_pds_upload load_op_program;
+ 
+-- 
+2.42.0
+

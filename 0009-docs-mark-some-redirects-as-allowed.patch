@@ -1,0 +1,50 @@
+From d01ca323dd0dbc470d76ebcb0c3a2b58c7e2b17b Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 11:33:34 +0200
+Subject: [PATCH 009/834] docs: mark some redirects as allowed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+These redirects are all fine. I don't think we want to apply them,
+because they are more about implementation details on the target site.
+
+So let's just mark them as OK. They cause no harm.
+
+There's also some redirects that are all about authentication. We also
+don't want to apply these, because they would break the links.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/conf.py | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/docs/conf.py b/docs/conf.py
+index 75c28920494..dece7a6fb9e 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -139,6 +139,20 @@ linkcheck_ignore = [
+ ]
+ linkcheck_exclude_documents = [r'relnotes/.*']
+ 
++linkcheck_allowed_redirects = {
++    # Pages that forward the front-page to a wiki or some explore-page
++    'https://www.freedesktop.org': 'https://www.freedesktop.org/wiki/',
++    'https://x.org': 'https://x.org/wiki/',
++    'https://perf.wiki.kernel.org/': 'https://perf.wiki.kernel.org/index.php/Main_Page',
++    'https://dri.freedesktop.org/': 'https://dri.freedesktop.org/wiki/',
++    'https://gitlab.freedesktop.org/': 'https://gitlab.freedesktop.org/explore/groups',
++    'https://www.sphinx-doc.org/': 'https://www.sphinx-doc.org/en/master/',
++
++    # Pages that requires authentication
++    'https://gitlab.freedesktop.org/admin/runners': 'https://gitlab.freedesktop.org/users/sign_in',
++    'https://gitlab.freedesktop.org/profile/personal_access_tokens': 'https://gitlab.freedesktop.org/users/sign_in',
++}
++
+ 
+ # -- Options for HTMLHelp output ------------------------------------------
+ 
+-- 
+2.42.0
+

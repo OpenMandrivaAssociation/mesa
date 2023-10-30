@@ -1,0 +1,137 @@
+From 09b36aea5613ab202d1e118012a5a9afa36632d8 Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Thu, 7 Sep 2023 19:11:38 -0400
+Subject: [PATCH 609/834] d3d12: Fixes AV1 tx_mode_support reporting and
+ unsupported tx_mode overriding
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ .../drivers/d3d12/d3d12_video_enc_av1.cpp     | 16 +++++++++
+ .../drivers/d3d12/d3d12_video_screen.cpp      | 34 ++++++++++++++-----
+ 2 files changed, 41 insertions(+), 9 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp b/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp
+index 85e5d9be4cd..b99f4814873 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp
+@@ -1343,6 +1343,22 @@ d3d12_video_encoder_update_current_frame_pic_params_info_av1(struct d3d12_video_
+    // AV1 spec matches w/D3D12 enum definition
+    picParams.pAV1PicData->TxMode = static_cast<D3D12_VIDEO_ENCODER_AV1_TX_MODE>(pAV1Pic->tx_mode);
+ 
++   // Workaround for mismatch between VAAPI/D3D12 and TxMode support for all/some frame types
++   // If D3D12 driver doesn't support requested TxMode, fallback to the first supported by D3D12
++   // driver for the requested frame type
++   if (((pD3D12Enc->m_currentEncodeCapabilities.m_encoderCodecSpecificConfigCaps.m_AV1CodecCaps.SupportedTxModes[picParams.pAV1PicData->FrameType] &
++      (1 << picParams.pAV1PicData->TxMode)) == 0) /* See definition of D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAGS */ == 0) {
++      debug_printf("[d3d12_video_encoder_update_current_frame_pic_params_info_av1] Requested tx_mode not supported"
++                     ", auto selecting from D3D12 SupportedTxModes for current frame type...");
++      for(uint8_t i = D3D12_VIDEO_ENCODER_AV1_TX_MODE_ONLY4x4; i <= D3D12_VIDEO_ENCODER_AV1_TX_MODE_SELECT; i++) {
++         if ((pD3D12Enc->m_currentEncodeCapabilities.m_encoderCodecSpecificConfigCaps.m_AV1CodecCaps.SupportedTxModes[picParams.pAV1PicData->FrameType] &
++             (1 << i)) /* See definition of D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAGS */ != 0) {
++            picParams.pAV1PicData->TxMode = static_cast<D3D12_VIDEO_ENCODER_AV1_TX_MODE>(i);
++            break;
++         }
++      }
++   }
++
+    // UINT SuperResDenominator;
+    picParams.pAV1PicData->SuperResDenominator = pAV1Pic->superres_scale_denominator;
+ 
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_screen.cpp b/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
+index 6403ae5e197..195bff6460d 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
+@@ -48,6 +48,7 @@ struct d3d12_encode_codec_support {
+          union pipe_av1_enc_cap_features_ext2 features_ext2;
+ #if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+          D3D12_VIDEO_ENCODER_AV1_CODEC_CONFIGURATION_SUPPORT d3d12_caps;
++         D3D12_VIDEO_ENCODER_CODEC_AV1_PICTURE_CONTROL_SUPPORT d3d12_picture_control;
+ #endif
+       } av1_support;
+    };
+@@ -235,7 +236,8 @@ d3d12_video_encode_supported_resolution_range(const D3D12_VIDEO_ENCODER_CODEC &a
+ static uint32_t
+ d3d12_video_encode_supported_references_per_frame_structures(const D3D12_VIDEO_ENCODER_CODEC &codec,
+                                                              D3D12_VIDEO_ENCODER_PROFILE_DESC profile,
+-                                                             ID3D12VideoDevice3 *pD3D12VideoDevice)
++                                                             ID3D12VideoDevice3 *pD3D12VideoDevice,
++                                                             struct d3d12_encode_codec_support& codecSupport)
+ {
+    uint32_t supportedMaxRefFrames = 0u;
+ 
+@@ -296,10 +298,10 @@ d3d12_video_encode_supported_references_per_frame_structures(const D3D12_VIDEO_E
+    }
+ #if ((D3D12_SDK_VERSION >= 611) && (D3D12_PREVIEW_SDK_VERSION >= 712))
+    else if(codec == D3D12_VIDEO_ENCODER_CODEC_AV1){
+-      D3D12_VIDEO_ENCODER_CODEC_AV1_PICTURE_CONTROL_SUPPORT av1PictureControl = {};
++      codecSupport.av1_support.d3d12_picture_control = {};
+       capPictureControlData.Profile = profile;
+-      capPictureControlData.PictureSupport.pAV1Support = &av1PictureControl;
+-      capPictureControlData.PictureSupport.DataSize = sizeof(av1PictureControl);
++      capPictureControlData.PictureSupport.pAV1Support = &codecSupport.av1_support.d3d12_picture_control;
++      capPictureControlData.PictureSupport.DataSize = sizeof(codecSupport.av1_support.d3d12_picture_control);
+       HRESULT hr = pD3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_CODEC_PICTURE_CONTROL_SUPPORT,
+                                                             &capPictureControlData,
+                                                             sizeof(capPictureControlData));
+@@ -857,7 +859,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
+             maxReferencesPerFrame =
+                d3d12_video_encode_supported_references_per_frame_structures(codecDesc,
+                                                                             profile,
+-                                                                            spD3D12VideoDevice.Get());
++                                                                            spD3D12VideoDevice.Get(),
++                                                                            codecSupport);
+          }
+       } break;
+       case PIPE_VIDEO_PROFILE_HEVC_MAIN:
+@@ -898,7 +901,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
+             maxReferencesPerFrame =
+                d3d12_video_encode_supported_references_per_frame_structures(codecDesc,
+                                                                             d3d12_profile,
+-                                                                            spD3D12VideoDevice.Get());
++                                                                            spD3D12VideoDevice.Get(),
++                                                                            codecSupport);
+ 
+             supportsProfile = d3d12_video_encode_get_hevc_codec_support(codecDesc,
+                                                                         profDesc,
+@@ -1056,7 +1060,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
+             maxReferencesPerFrame =
+                d3d12_video_encode_supported_references_per_frame_structures(codecDesc,
+                                                                             d3d12_profile,
+-                                                                            spD3D12VideoDevice.Get());
++                                                                            spD3D12VideoDevice.Get(),
++                                                                            codecSupport);
+ 
+             supportsProfile = d3d12_video_encode_get_av1_codec_support(codecDesc,
+                                                                         profDesc,
+@@ -1213,14 +1218,25 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
+                      // Check the current d3d12SupportFlag (ie. D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAG_XXX) is supported for all frame types
+                      bool tx_mode_supported = true;
+                      for(uint8_t j = D3D12_VIDEO_ENCODER_AV1_FRAME_TYPE_KEY_FRAME; j <= D3D12_VIDEO_ENCODER_AV1_FRAME_TYPE_SWITCH_FRAME; j++)
+-                        tx_mode_supported &= ((codecSupport.av1_support.d3d12_caps.SupportedTxModes[j] & d3d12SupportFlag) != 0);
++                     {
++                        // Check frame supported by picture control caps, otherwise don't check against this frame type
++                        if(codecSupport.av1_support.d3d12_picture_control.SupportedFrameTypes & (1 << j /* See D3D12_VIDEO_ENCODER_AV1_FRAME_TYPE_FLAGS */))
++                           tx_mode_supported &= ((codecSupport.av1_support.d3d12_caps.SupportedTxModes[j] & d3d12SupportFlag) != 0);
++                     }
+ 
+                      // When supported for all frames, report it as part of the bitmask
+                      if (tx_mode_supported)
+                         codecSupport.av1_support.features_ext2.bits.tx_mode_support |= d3d12SupportFlag;
+                   }
+ 
+-                  assert(codecSupport.av1_support.features_ext2.bits.tx_mode_support); // As per d3d12 spec, driver must support at least one default mode for all frame types
++                  // As per d3d12 spec, driver must support at least one default mode for all frame types
++                  // Workaround for mismatch between VAAPI/D3D12 and TxMode support for all/some frame types
++                  if (!codecSupport.av1_support.features_ext2.bits.tx_mode_support)
++                  {
++                     debug_printf("[d3d12_has_video_encode_support] Reporting features_ext2.bits.tx_mode_support = D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAG_SELECT"
++                     " due to mismatch between D3D12/VAAPI TxMode support semantic");
++                     codecSupport.av1_support.features_ext2.bits.tx_mode_support = D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAG_SELECT;
++                  }
+                }
+ 
+                supportsProfile = supportsProfile &&
+-- 
+2.42.0
+

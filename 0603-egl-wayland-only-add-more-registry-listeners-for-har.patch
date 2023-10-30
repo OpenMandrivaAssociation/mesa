@@ -1,0 +1,56 @@
+From e36e9bd3922e501d8f3c8441045a730dd5d77649 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Thu, 19 Oct 2023 13:16:42 -0400
+Subject: [PATCH 603/834] egl/wayland: only add more registry listeners for
+ hardware devices
+
+these extensions shouldn't be exposed for pure software drivers
+
+fixes #9948
+
+Fixes: 1b4e877def1 ("egl/wayland: use more registry listeners to better handle device init")
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25817>
+---
+ src/egl/drivers/dri2/platform_wayland.c | 24 ++++++++++++++----------
+ 1 file changed, 14 insertions(+), 10 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index 560adfd2843..8922a1e1a8b 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2654,16 +2654,20 @@ registry_handle_global_swrast(void *data, struct wl_registry *registry,
+    if (strcmp(interface, wl_shm_interface.name) == 0) {
+       dri2_dpy->wl_shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+       wl_shm_add_listener(dri2_dpy->wl_shm, &shm_listener, dri2_dpy);
+-   } else if (strcmp(interface, wl_drm_interface.name) == 0) {
+-      dri2_dpy->wl_drm_version = MIN2(version, 2);
+-      dri2_dpy->wl_drm_name = name;
+-   } else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0 &&
+-              version >= 3) {
+-      dri2_dpy->wl_dmabuf = wl_registry_bind(
+-         registry, name, &zwp_linux_dmabuf_v1_interface,
+-         MIN2(version, ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION));
+-      zwp_linux_dmabuf_v1_add_listener(dri2_dpy->wl_dmabuf, &dmabuf_listener,
+-                                       dri2_dpy);
++   }
++   if (dri2_dpy->fd_render_gpu != -1 || dri2_dpy->fd_display_gpu != -1) {
++      if (strcmp(interface, wl_drm_interface.name) == 0) {
++         dri2_dpy->wl_drm_version = MIN2(version, 2);
++         dri2_dpy->wl_drm_name = name;
++      } else if (strcmp(interface, zwp_linux_dmabuf_v1_interface.name) == 0 &&
++                 version >= 3) {
++         dri2_dpy->wl_dmabuf = wl_registry_bind(
++            registry, name, &zwp_linux_dmabuf_v1_interface,
++            MIN2(version,
++                 ZWP_LINUX_DMABUF_V1_GET_DEFAULT_FEEDBACK_SINCE_VERSION));
++         zwp_linux_dmabuf_v1_add_listener(dri2_dpy->wl_dmabuf, &dmabuf_listener,
++                                          dri2_dpy);
++      }
+    }
+ }
+ 
+-- 
+2.42.0
+

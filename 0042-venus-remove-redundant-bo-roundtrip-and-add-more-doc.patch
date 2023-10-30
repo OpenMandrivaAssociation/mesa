@@ -1,0 +1,63 @@
+From 1db03e42bda6e1e4777778525593b80b7353c66f Mon Sep 17 00:00:00 2001
+From: Yiwei Zhang <zzyiwei@chromium.org>
+Date: Thu, 5 Oct 2023 00:33:29 -0700
+Subject: [PATCH 042/834] venus: remove redundant bo roundtrip and add more
+ docs
+
+Signed-off-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25611>
+---
+ src/virtio/vulkan/vn_device_memory.c | 10 ----------
+ src/virtio/vulkan/vn_device_memory.h | 13 ++++++++++++-
+ 2 files changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_device_memory.c b/src/virtio/vulkan/vn_device_memory.c
+index 51659c91e41..3a1589b31e1 100644
+--- a/src/virtio/vulkan/vn_device_memory.c
++++ b/src/virtio/vulkan/vn_device_memory.c
+@@ -335,16 +335,6 @@ vn_device_memory_alloc_guest_vram(
+       return result;
+    }
+ 
+-   result =
+-      vn_instance_submit_roundtrip(dev->instance, &mem->bo_roundtrip_seqno);
+-   if (result != VK_SUCCESS) {
+-      vn_renderer_bo_unref(dev->renderer, mem->base_bo);
+-      vn_async_vkFreeMemory(dev->instance, dev_handle, mem_handle, NULL);
+-      return result;
+-   }
+-
+-   mem->bo_roundtrip_seqno_valid = true;
+-
+    return VK_SUCCESS;
+ }
+ 
+diff --git a/src/virtio/vulkan/vn_device_memory.h b/src/virtio/vulkan/vn_device_memory.h
+index 4bf5911f2d1..cc4d4708045 100644
+--- a/src/virtio/vulkan/vn_device_memory.h
++++ b/src/virtio/vulkan/vn_device_memory.h
+@@ -31,9 +31,20 @@ struct vn_device_memory {
+    struct vn_device_memory *base_memory;
+    /* non-NULL when mappable or external */
+    struct vn_renderer_bo *base_bo;
+-   /* enforce kernel and ring ordering between memory export and free */
++
++   /* ensure renderer side vkFreeMemory is called after vkGetMemoryFdKHR
++    *
++    * 1. driver creates virtgpu bo from renderer VkDeviceMemory
++    * 2. driver submits via vq to update the vq seqno
++    * 3, driver submits via ring to wait for vq reaching above seqno
++    * 4. driver submits vkFreeMemory via ring
++    *
++    * To be noted: a successful virtgpu mmap implies a roundtrip, so
++    * vn_FreeMemory after that no longer has to wait.
++    */
+    bool bo_roundtrip_seqno_valid;
+    uint64_t bo_roundtrip_seqno;
++
+    VkDeviceSize base_offset;
+ 
+    VkDeviceSize map_end;
+-- 
+2.42.0
+

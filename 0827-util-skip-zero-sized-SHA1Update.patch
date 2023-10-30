@@ -1,0 +1,35 @@
+From 477b310dfd5ec662837e2e1cde87b9416dbcf67f Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Wed, 27 Sep 2023 15:55:25 +0100
+Subject: [PATCH 827/834] util: skip zero-sized SHA1Update
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes UBSan error:
+src/util/sha1/sha1.c:140:8: runtime error: null pointer passed as argument 2, which is declared to never be null
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25853>
+---
+ src/util/mesa-sha1.h | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/util/mesa-sha1.h b/src/util/mesa-sha1.h
+index 809fabc525f..c264927d572 100644
+--- a/src/util/mesa-sha1.h
++++ b/src/util/mesa-sha1.h
+@@ -44,7 +44,8 @@ _mesa_sha1_init(struct mesa_sha1 *ctx)
+ static inline void
+ _mesa_sha1_update(struct mesa_sha1 *ctx, const void *data, size_t size)
+ {
+-   SHA1Update(ctx, (const unsigned char *)data, size);
++   if (size)
++      SHA1Update(ctx, (const unsigned char *)data, size);
+ }
+ 
+ static inline void
+-- 
+2.42.0
+

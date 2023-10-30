@@ -1,0 +1,46 @@
+From 1fe201f7a3488f424ae0b296bee903be1dc65f6a Mon Sep 17 00:00:00 2001
+From: Rob Clark <robdclark@chromium.org>
+Date: Tue, 3 Oct 2023 10:08:52 -0700
+Subject: [PATCH 420/834] panfrost: Add PIPE_CAP_HAS_CONST_BW support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25464>
+---
+ src/gallium/drivers/panfrost/pan_resource.c | 4 ++++
+ src/gallium/drivers/panfrost/pan_screen.c   | 1 +
+ 2 files changed, 5 insertions(+)
+
+diff --git a/src/gallium/drivers/panfrost/pan_resource.c b/src/gallium/drivers/panfrost/pan_resource.c
+index 4e114f2ccbf..d653fe6ceb5 100644
+--- a/src/gallium/drivers/panfrost/pan_resource.c
++++ b/src/gallium/drivers/panfrost/pan_resource.c
+@@ -337,6 +337,10 @@ panfrost_should_afbc(struct panfrost_device *dev,
+    if (pres->base.usage == PIPE_USAGE_STREAM)
+       return false;
+ 
++   /* If constant (non-data-dependent) format is requested, don't AFBC: */
++   if (pres->base.bind & PIPE_BIND_CONST_BW)
++      return false;
++
+    /* Only a small selection of formats are AFBC'able */
+    if (!panfrost_format_supports_afbc(dev, fmt))
+       return false;
+diff --git a/src/gallium/drivers/panfrost/pan_screen.c b/src/gallium/drivers/panfrost/pan_screen.c
+index 0286c01e7bb..5517c9891cb 100644
+--- a/src/gallium/drivers/panfrost/pan_screen.c
++++ b/src/gallium/drivers/panfrost/pan_screen.c
+@@ -123,6 +123,7 @@ panfrost_get_param(struct pipe_screen *screen, enum pipe_cap param)
+    case PIPE_CAP_FRAMEBUFFER_NO_ATTACHMENT:
+    case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
+    case PIPE_CAP_SHADER_PACK_HALF_FLOAT:
++   case PIPE_CAP_HAS_CONST_BW:
+       return 1;
+ 
+    case PIPE_CAP_MAX_RENDER_TARGETS:
+-- 
+2.42.0
+

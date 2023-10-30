@@ -1,0 +1,28 @@
+From 7d6d63e554efa51b82fea115b6d3fce4bebf5906 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Mon, 9 Oct 2023 16:45:58 -0700
+Subject: [PATCH 039/834] ci/zink: Skip 3-minute-long glx-visuals timeouts.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25626>
+---
+ src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt b/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
+index 2309cc9c643..28eb2dbdfe0 100644
+--- a/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
++++ b/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
+@@ -14,6 +14,10 @@ KHR-Single-GL46.enhanced_layouts.xfb_global_buffer
+ KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls1
+ KHR-GL46.direct_state_access.framebuffers_texture_layer_attachment
+ 
++# Definitely shouldn't take this long, but times out at 3 minutes.
++glx@glx-visuals-depth$
++glx@glx-visuals-stencil$
++
+ .*built-in-functions@.*-inverse-dmat3
+ .*built-in-functions@.*-inverse-dmat4
+ .*built-in-functions@.*-op-mult-dmat4-dmat4
+-- 
+2.42.0
+

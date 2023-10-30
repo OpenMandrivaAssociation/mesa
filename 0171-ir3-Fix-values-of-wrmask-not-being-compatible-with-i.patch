@@ -1,0 +1,45 @@
+From 94af08421ba9ac9636b4036af8b3e36ed5b297e8 Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Wed, 11 Oct 2023 16:33:24 +0200
+Subject: [PATCH 171/834] ir3: Fix values of #wrmask not being compatible with
+ ir3 parser
+
+IR3 parser expects wrmask values to be in xyzw order.
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25661>
+---
+ src/freedreno/ir3/tests/disasm.c | 1 +
+ src/freedreno/isa/ir3-common.xml | 4 ++--
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/freedreno/ir3/tests/disasm.c b/src/freedreno/ir3/tests/disasm.c
+index e809a879a0b..f012d2a3cfc 100644
+--- a/src/freedreno/ir3/tests/disasm.c
++++ b/src/freedreno/ir3/tests/disasm.c
+@@ -179,6 +179,7 @@ static const struct test {
+    INSTR_6XX(a0c81108_e2000001, "sam.base0 (f32)(x)r2.x, r0.x, s#16, a1.x"),
+    INSTR_6XX(a048d107_cc080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, t#6"),
+    INSTR_6XX(a048d107_e0080a07, "isaml.base3 (s32)(x)r1.w, r0.w, r1.y, s#0, a1.x"),
++   INSTR_6XX(a1481606_e4803035, "saml.base0 (f32)(yz)r1.z, r6.z, r6.x, s#36, a1.x"),
+ 
+    INSTR_7XX(a0081f02_e2000001, "isam.base0 (f32)(xyzw)r0.z, r0.x, t#16, a1.x"),
+    INSTR_7XX(a148310d_e028302c, "saml.base2 (u32)(x)r3.y, hr5.z, hr6.x, t#1, a1.x"),
+diff --git a/src/freedreno/isa/ir3-common.xml b/src/freedreno/isa/ir3-common.xml
+index 09afc2648cc..8662dbd7f79 100644
+--- a/src/freedreno/isa/ir3-common.xml
++++ b/src/freedreno/isa/ir3-common.xml
+@@ -350,8 +350,8 @@ SOFTWARE.
+ 	<value val="2"  display="y"/>
+ 	<value val="3"  display="xy"/>
+ 	<value val="4"  display="z"/>
+-	<value val="5"  display="zx"/>
+-	<value val="6"  display="zy"/>
++	<value val="5"  display="xz"/>
++	<value val="6"  display="yz"/>
+ 	<value val="7"  display="xyz"/>
+ 	<value val="8"  display="w"/>
+ 	<value val="9"  display="xw"/>
+-- 
+2.42.0
+

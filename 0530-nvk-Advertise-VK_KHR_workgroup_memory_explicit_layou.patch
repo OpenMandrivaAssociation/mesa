@@ -1,0 +1,55 @@
+From d3edbf69358698d1892f362d9a352b7cac5c652a Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 17 Oct 2023 09:27:50 -0500
+Subject: [PATCH 530/834] nvk: Advertise
+ VK_KHR_workgroup_memory_explicit_layout
+
+It's all done for us in NIR.
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9623
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25780>
+---
+ src/nouveau/vulkan/nvk_physical_device.c | 7 +++++++
+ src/nouveau/vulkan/nvk_shader.c          | 1 +
+ 2 files changed, 8 insertions(+)
+
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index 548e32053a9..7c5ec2f7650 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -96,6 +96,7 @@ nvk_get_device_extensions(const struct nv_device_info *info,
+ #endif
+       .KHR_uniform_buffer_standard_layout = true,
+       .KHR_variable_pointers = true,
++      .KHR_workgroup_memory_explicit_layout = true,
+       .EXT_4444_formats = true,
+       .EXT_border_color_swizzle = true,
+       .EXT_buffer_device_address = true,
+@@ -252,6 +253,12 @@ nvk_get_device_features(const struct nv_device_info *info,
+       .shaderSubgroupClock = true,
+       .shaderDeviceClock = true,
+ 
++      /* VK_KHR_workgroup_memory_explicit_layout */
++      .workgroupMemoryExplicitLayout = true,
++      .workgroupMemoryExplicitLayoutScalarBlockLayout = true,
++      .workgroupMemoryExplicitLayout8BitAccess = false,
++      .workgroupMemoryExplicitLayout16BitAccess = false,
++
+       /* VK_EXT_4444_formats */
+       .formatA4R4G4B4 = true,
+       .formatA4B4G4R4 = true,
+diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
+index 59c550dbd6e..0ffac7edfef 100644
+--- a/src/nouveau/vulkan/nvk_shader.c
++++ b/src/nouveau/vulkan/nvk_shader.c
+@@ -119,6 +119,7 @@ nvk_physical_device_spirv_options(const struct nvk_physical_device *pdev,
+          .tessellation = true,
+          .transform_feedback = true,
+          .variable_pointers = true,
++         .workgroup_memory_explicit_layout = true,
+       },
+       .ssbo_addr_format = nvk_buffer_addr_format(rs->storage_buffers),
+       .phys_ssbo_addr_format = nir_address_format_64bit_global,
+-- 
+2.42.0
+

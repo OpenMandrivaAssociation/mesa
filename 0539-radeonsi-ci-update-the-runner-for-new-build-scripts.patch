@@ -1,0 +1,56 @@
+From ff9e883246086b5bb199b4c78218d177b7f2f4f7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Tue, 17 Oct 2023 20:55:09 -0400
+Subject: [PATCH 539/834] radeonsi/ci: update the runner for new build scripts
+
+Needed for the new build scripts at:
+  https://github.com/marekolsak/marek-build
+which is needed for:
+- updating deqp to main
+- updating glcts to opengl-cts-4.6.3
+
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25774>
+---
+ src/gallium/drivers/radeonsi/ci/radeonsi-run-tests.py | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/ci/radeonsi-run-tests.py b/src/gallium/drivers/radeonsi/ci/radeonsi-run-tests.py
+index 8a9022146dd..6622fcb05d1 100755
+--- a/src/gallium/drivers/radeonsi/ci/radeonsi-run-tests.py
++++ b/src/gallium/drivers/radeonsi/ci/radeonsi-run-tests.py
+@@ -415,13 +415,13 @@ if args.glcts:
+         "--tests-per-group",
+         "100",
+         "--deqp",
+-        "{}/external/openglcts/modules/glcts".format(glcts_path),
++        "{}/build/external/openglcts/modules/glcts".format(glcts_path),
+         "--caselist",
+-        "{}/external/openglcts/modules/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-master.txt".format(
++        "{}/build/external/openglcts/modules/gl_cts/data/mustpass/gl/khronos_mustpass/4.6.1.x/gl46-master.txt".format(
+             glcts_path
+         ),
+         "--caselist",
+-        "{}/external/openglcts/modules/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl46-khr-single.txt".format(
++        "{}/build/external/openglcts/modules/gl_cts/data/mustpass/gl/khronos_mustpass_single/4.6.1.x/gl46-khr-single.txt".format(
+             glcts_path
+         ),
+         "--output",
+@@ -466,12 +466,12 @@ if args.deqp:
+         suite.write("[[deqp]]\n")
+         suite.write(
+             'deqp = "{}"\n'.format(
+-                "{}/modules/{subtest}/deqp-{subtest}".format(deqp_path, subtest=k)
++                "{}/build/modules/{subtest}/deqp-{subtest}".format(deqp_path, subtest=k)
+             )
+         )
+         suite.write(
+             'caselists = ["{}"]\n'.format(
+-                "{}/android/cts/master/{}-master.txt".format(deqp_path, k)
++                "{}/android/cts/main/{}-master.txt".format(deqp_path, k)
+             )
+         )
+         if os.path.exists(baseline):
+-- 
+2.42.0
+

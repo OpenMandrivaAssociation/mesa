@@ -1,0 +1,50 @@
+From cd1ba2195863552edb9a4df1c7dd1058f0ee07df Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Thu, 12 Oct 2023 10:40:09 -0400
+Subject: [PATCH 206/834] r600/sfn: Handle load_global_constant
+
+as an alias of load_global, for CL.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Suggested-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25625>
+---
+ src/gallium/drivers/r600/sfn/sfn_nir_lower_64bit.cpp | 2 ++
+ src/gallium/drivers/r600/sfn/sfn_shader.cpp          | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/src/gallium/drivers/r600/sfn/sfn_nir_lower_64bit.cpp b/src/gallium/drivers/r600/sfn/sfn_nir_lower_64bit.cpp
+index f291453b1c5..6c82843ee51 100644
+--- a/src/gallium/drivers/r600/sfn/sfn_nir_lower_64bit.cpp
++++ b/src/gallium/drivers/r600/sfn/sfn_nir_lower_64bit.cpp
+@@ -830,6 +830,7 @@ Lower64BitToVec2::filter(const nir_instr *instr) const
+       case nir_intrinsic_load_uniform:
+       case nir_intrinsic_load_ubo:
+       case nir_intrinsic_load_global:
++      case nir_intrinsic_load_global_constant:
+       case nir_intrinsic_load_ubo_vec4:
+       case nir_intrinsic_load_ssbo:
+          return intr->def.bit_size == 64;
+@@ -883,6 +884,7 @@ Lower64BitToVec2::lower(nir_instr *instr)
+          return load_ssbo_64_to_vec2(intr);
+       case nir_intrinsic_load_input:
+       case nir_intrinsic_load_global:
++      case nir_intrinsic_load_global_constant:
+       case nir_intrinsic_load_ubo:
+       case nir_intrinsic_load_ubo_vec4:
+          return load_64_to_vec2(intr);
+diff --git a/src/gallium/drivers/r600/sfn/sfn_shader.cpp b/src/gallium/drivers/r600/sfn/sfn_shader.cpp
+index eda2a042ebc..5f51804e0f6 100644
+--- a/src/gallium/drivers/r600/sfn/sfn_shader.cpp
++++ b/src/gallium/drivers/r600/sfn/sfn_shader.cpp
+@@ -900,6 +900,7 @@ Shader::process_intrinsic(nir_intrinsic_instr *intr)
+    case nir_intrinsic_store_local_shared_r600:
+       return emit_local_store(intr);
+    case nir_intrinsic_load_global:
++   case nir_intrinsic_load_global_constant:
+       return emit_load_global(intr);
+    case nir_intrinsic_load_local_shared_r600:
+       return emit_local_load(intr);
+-- 
+2.42.0
+

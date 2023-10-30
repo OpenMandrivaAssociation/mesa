@@ -1,0 +1,34 @@
+From 8f59274e2286110f90c53828eb700960acc32fa8 Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Wed, 4 Oct 2023 15:53:36 +0100
+Subject: [PATCH 148/834] pvr: Fix PPP_SCREEN sizes
+
+The `- 1` was accidentally removed.
+
+Fixes: aae23fe68d16 ("pvr: HWRT creation simplifications.")
+Reported-by: Frank Binns <frank.binns@imgtec.com>
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25584>
+---
+ src/imagination/vulkan/winsys/pvrsrvkm/pvr_srv_job_render.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/imagination/vulkan/winsys/pvrsrvkm/pvr_srv_job_render.c b/src/imagination/vulkan/winsys/pvrsrvkm/pvr_srv_job_render.c
+index 708f864cf54..a63ab22c1db 100644
+--- a/src/imagination/vulkan/winsys/pvrsrvkm/pvr_srv_job_render.c
++++ b/src/imagination/vulkan/winsys/pvrsrvkm/pvr_srv_job_render.c
+@@ -299,8 +299,8 @@ static uint32_t pvr_rogue_get_ppp_screen_val(uint32_t width, uint32_t height)
+    uint32_t val;
+ 
+    pvr_csb_pack (&val, CR_PPP_SCREEN, state) {
+-      state.pixxmax = width;
+-      state.pixymax = height;
++      state.pixxmax = width - 1;
++      state.pixymax = height - 1;
+    }
+ 
+    return val;
+-- 
+2.42.0
+

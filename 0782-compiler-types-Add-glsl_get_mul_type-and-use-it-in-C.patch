@@ -1,0 +1,108 @@
+From 3ce4d5e033adce089346f98452829ce6f50b3160 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 7 Sep 2023 19:50:36 -0700
+Subject: [PATCH 782/834] compiler/types: Add glsl_get_mul_type() and use it in
+ C++
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 30 +++++++++++++++---------------
+ src/compiler/glsl_types.h      |  1 +
+ src/compiler/glsl_types_impl.h |  1 +
+ 3 files changed, 17 insertions(+), 15 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 5c8a8fce35e..66463bf9de3 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -1637,8 +1637,8 @@ glsl_subroutine_type(const char *subroutine_name)
+    return t;
+ }
+ 
+-const struct glsl_type *
+-glsl_type::get_mul_type(const struct glsl_type *type_a, const struct glsl_type *type_b)
++extern "C" const struct glsl_type *
++glsl_get_mul_type(const struct glsl_type *type_a, const struct glsl_type *type_b)
+ {
+    if (type_a->is_matrix() && type_b->is_matrix()) {
+       /* Matrix multiply.  The columns of A must match the rows of B.  Given
+@@ -1653,10 +1653,10 @@ glsl_type::get_mul_type(const struct glsl_type *type_a, const struct glsl_type *
+           * transpose (size of a row) is done for B.
+           */
+          const struct glsl_type *const type =
+-            get_instance(type_a->base_type,
+-                         type_a->column_type()->vector_elements,
+-                         type_b->row_type()->vector_elements);
+-         assert(type != error_type);
++            glsl_type::get_instance(type_a->base_type,
++                                    type_a->column_type()->vector_elements,
++                                    type_b->row_type()->vector_elements);
++         assert(type != &glsl_type_builtin_error);
+ 
+          return type;
+       }
+@@ -1672,10 +1672,10 @@ glsl_type::get_mul_type(const struct glsl_type *type_a, const struct glsl_type *
+          /* The resulting vector has a number of elements equal to
+           * the number of rows of matrix A. */
+          const struct glsl_type *const type =
+-            get_instance(type_a->base_type,
+-                         type_a->column_type()->vector_elements,
+-                         1);
+-         assert(type != error_type);
++            glsl_type::get_instance(type_a->base_type,
++                                    type_a->column_type()->vector_elements,
++                                    1);
++         assert(type != &glsl_type_builtin_error);
+ 
+          return type;
+       }
+@@ -1691,16 +1691,16 @@ glsl_type::get_mul_type(const struct glsl_type *type_a, const struct glsl_type *
+          /* The resulting vector has a number of elements equal to
+           * the number of columns of matrix B. */
+          const struct glsl_type *const type =
+-            get_instance(type_a->base_type,
+-                         type_b->row_type()->vector_elements,
+-                         1);
+-         assert(type != error_type);
++            glsl_type::get_instance(type_a->base_type,
++                                    type_b->row_type()->vector_elements,
++                                    1);
++         assert(type != &glsl_type_builtin_error);
+ 
+          return type;
+       }
+    }
+ 
+-   return error_type;
++   return &glsl_type_builtin_error;
+ }
+ 
+ 
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 3aaf0c13e58..f68500629f5 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1552,6 +1552,7 @@ glsl_sampler_type_to_texture(const struct glsl_type *t)
+ 
+ const struct glsl_type *glsl_replace_vector_type(const struct glsl_type *t, unsigned components);
+ const struct glsl_type *glsl_channel_type(const struct glsl_type *t);
++const struct glsl_type *glsl_get_mul_type(const struct glsl_type *type_a, const struct glsl_type *type_b);
+ 
+ unsigned glsl_type_get_sampler_count(const struct glsl_type *t);
+ unsigned glsl_type_get_texture_count(const struct glsl_type *t);
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index 4f5dd00a019..dd7ad1106b3 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -169,6 +169,7 @@ glsl_type::get_explicit_type_for_size_align(glsl_type_size_align_func type_info,
+ }
+ 
+ inline const glsl_type *glsl_type::replace_vec3_with_vec4() const { return glsl_type_replace_vec3_with_vec4(this); }
++inline const glsl_type *glsl_type::get_mul_type(const glsl_type *type_a, const glsl_type *type_b) { return glsl_get_mul_type(type_a, type_b); }
+ 
+ inline bool
+ glsl_type::is_integer_16() const
+-- 
+2.42.0
+

@@ -1,0 +1,394 @@
+From e64ab3e4a94c4e8baee3bec3a5eb4d098b8e7193 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 10 Oct 2023 11:42:59 -0700
+Subject: [PATCH 625/834] glx: Delete support for GLX_OML_swap_method.
+
+This was an ill-advised extension.  While we advertised SWAP_COPY support,
+we might implement it with a back-copy from the front buffer.  And we
+never advertised EXCHANGE because we couldn't guarantee it.  So, if you
+actually used this extension to try to reduce app redraws of the back
+buffer, you might actually increase the bandwidth you used.  Whoops.
+
+Instead, GLX_EXT_buffer_age and the similar EGL extension give you
+feedback on what's left in your back buffer, letting you do minimum
+redraws.
+
+This reduces our GLX visual+fbconfig count from 1410 to 940 on an llvmpipe
+X server.  Reducing visual counts will improve test runtime for
+visual-iterating tests like piglit's glx-visuals-*.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25650>
+---
+ include/GL/internal/dri_interface.h    |  6 ++---
+ src/gallium/frontends/dri/dri_screen.c | 32 +++++++-------------------
+ src/gallium/frontends/dri/dri_util.c   |  8 ++++++-
+ src/gallium/frontends/dri/kopper.c     |  3 +--
+ src/glx/dri_common.c                   | 14 -----------
+ src/glx/glxcmds.c                      |  2 --
+ src/glx/glxconfig.c                    |  4 ----
+ src/glx/glxconfig.h                    |  3 ---
+ src/glx/glxext.c                       | 13 -----------
+ src/glx/glxextensions.c                |  1 -
+ src/glx/glxextensions.h                |  1 -
+ src/loader/loader_dri3_helper.c        | 17 ++++----------
+ src/loader/loader_dri3_helper.h        |  1 -
+ src/mesa/main/glconfig.h               |  3 ---
+ 14 files changed, 23 insertions(+), 85 deletions(-)
+
+diff --git a/include/GL/internal/dri_interface.h b/include/GL/internal/dri_interface.h
+index 45f9e77e973..ad3ce1cfed4 100644
+--- a/include/GL/internal/dri_interface.h
++++ b/include/GL/internal/dri_interface.h
+@@ -742,7 +742,7 @@ struct __DRIuseInvalidateExtensionRec {
+ #define __DRI_ATTRIB_OPTIMAL_PBUFFER_WIDTH	37
+ #define __DRI_ATTRIB_OPTIMAL_PBUFFER_HEIGHT	38
+ #define __DRI_ATTRIB_VISUAL_SELECT_GROUP	39
+-#define __DRI_ATTRIB_SWAP_METHOD		40
++#define __DRI_ATTRIB_SWAP_METHOD		40 // Parsed by the X server when our visuals return it as an attrib.
+ #define __DRI_ATTRIB_MAX_SWAP_INTERVAL		41
+ #define __DRI_ATTRIB_MIN_SWAP_INTERVAL		42
+ #define __DRI_ATTRIB_BIND_TO_TEXTURE_RGB	43
+@@ -782,8 +782,8 @@ struct __DRIuseInvalidateExtensionRec {
+ /* Note that with the exception of __DRI_ATTRIB_SWAP_NONE, we need to define
+  * the same tokens as GLX. This is because old and current X servers will
+  * transmit the driconf value grabbed from the AIGLX driver untranslated as
+- * the GLX fbconfig value. __DRI_ATTRIB_SWAP_NONE is only used by dri drivers
+- * to signal to the dri core that the driconfig is single-buffer.
++ * the GLX fbconfig value. These defines are kept for X Server suorce compatibility,
++ * since Mesa no longer exposes GLX_OML_swap_method.
+  */
+ #define __DRI_ATTRIB_SWAP_NONE                  0x0000
+ #define __DRI_ATTRIB_SWAP_EXCHANGE              0x8061
+diff --git a/src/gallium/frontends/dri/dri_screen.c b/src/gallium/frontends/dri/dri_screen.c
+index 733b38a28de..0919a1c7847 100644
+--- a/src/gallium/frontends/dri/dri_screen.c
++++ b/src/gallium/frontends/dri/dri_screen.c
+@@ -123,13 +123,7 @@ dri_loader_get_cap(struct dri_screen *screen, enum dri_loader_cap cap)
+  * \param stencil_bits  Array of stencil buffer sizes to be exposed.
+  * \param num_depth_stencil_bits  Number of entries in both \c depth_bits and
+  *                      \c stencil_bits.
+- * \param db_modes      Array of buffer swap modes.  If an element has a
+- *                      value of \c __DRI_ATTRIB_SWAP_NONE, then it
+- *                      represents a single-buffered mode.  Other valid
+- *                      values are \c __DRI_ATTRIB_SWAP_EXCHANGE,
+- *                      \c __DRI_ATTRIB_SWAP_COPY, and \c __DRI_ATTRIB_SWAP_UNDEFINED.
+- *                      They represent the respective GLX values as in
+- *                      the GLX_OML_swap_method extension spec.
++ * \param db_modes      Array of double buffer modes.
+  * \param num_db_modes  Number of entries in \c db_modes.
+  * \param msaa_samples  Array of msaa sample count. 0 represents a visual
+  *                      without a multisample buffer.
+@@ -149,7 +143,7 @@ static __DRIconfig **
+ driCreateConfigs(mesa_format format,
+                  const uint8_t * depth_bits, const uint8_t * stencil_bits,
+                  unsigned num_depth_stencil_bits,
+-                 const GLenum * db_modes, unsigned num_db_modes,
++                 const bool *db_modes, unsigned num_db_modes,
+                  const uint8_t * msaa_samples, unsigned num_msaa_modes,
+                  GLboolean enable_accum, GLboolean color_depth_match)
+ {
+@@ -349,14 +343,7 @@ driCreateConfigs(mesa_format format,
+                     modes->stencilBits = stencil_bits[k];
+                     modes->depthBits = depth_bits[k];
+ 
+-                    if (db_modes[i] == __DRI_ATTRIB_SWAP_NONE) {
+-                            modes->doubleBufferMode = GL_FALSE;
+-                        modes->swapMethod = __DRI_ATTRIB_SWAP_UNDEFINED;
+-                    }
+-                    else {
+-                            modes->doubleBufferMode = GL_TRUE;
+-                            modes->swapMethod = db_modes[i];
+-                    }
++                    modes->doubleBufferMode = db_modes[i];
+ 
+                     modes->samples = msaa_samples[h];
+ 
+@@ -484,10 +471,7 @@ dri_fill_in_modes(struct dri_screen *screen)
+    bool allow_rgb10;
+    bool allow_fp16;
+ 
+-   static const GLenum back_buffer_modes[] = {
+-      __DRI_ATTRIB_SWAP_NONE, __DRI_ATTRIB_SWAP_UNDEFINED,
+-      __DRI_ATTRIB_SWAP_COPY
+-   };
++   static const bool db_modes[] = { false, true };
+ 
+    if (driQueryOptionb(&screen->dev->option_cache, "always_have_depth_buffer")) {
+       /* all visuals will have a depth buffer */
+@@ -594,8 +578,8 @@ dri_fill_in_modes(struct dri_screen *screen)
+          /* Single-sample configs with an accumulation buffer. */
+          new_configs = driCreateConfigs(mesa_formats[format],
+                                         depth_bits_array, stencil_bits_array,
+-                                        depth_buffer_factor, back_buffer_modes,
+-                                        ARRAY_SIZE(back_buffer_modes),
++                                        depth_buffer_factor,
++                                        db_modes, ARRAY_SIZE(db_modes),
+                                         msaa_modes, 1,
+                                         GL_TRUE, !mixed_color_depth);
+          configs = driConcatConfigs(configs, new_configs);
+@@ -604,8 +588,8 @@ dri_fill_in_modes(struct dri_screen *screen)
+          if (num_msaa_modes > 1) {
+             new_configs = driCreateConfigs(mesa_formats[format],
+                                            depth_bits_array, stencil_bits_array,
+-                                           depth_buffer_factor, back_buffer_modes,
+-                                           ARRAY_SIZE(back_buffer_modes),
++                                           depth_buffer_factor,
++                                           db_modes, ARRAY_SIZE(db_modes),
+                                            msaa_modes+1, num_msaa_modes-1,
+                                            GL_FALSE, !mixed_color_depth);
+             configs = driConcatConfigs(configs, new_configs);
+diff --git a/src/gallium/frontends/dri/dri_util.c b/src/gallium/frontends/dri/dri_util.c
+index b27dee35f60..2476121634a 100644
+--- a/src/gallium/frontends/dri/dri_util.c
++++ b/src/gallium/frontends/dri/dri_util.c
+@@ -321,7 +321,13 @@ driGetConfigAttribIndex(const __DRIconfig *config,
+     case __DRI_ATTRIB_VISUAL_SELECT_GROUP:
+         *value = 0;
+         break;
+-    SIMPLE_CASE(__DRI_ATTRIB_SWAP_METHOD, swapMethod);
++    case __DRI_ATTRIB_SWAP_METHOD:
++        /* Not supported any more, but we have the __DRI_ATTRIB still defined
++         * for the X server's sake, and EGL will expect us to handle it because
++         * it iterates all __DRI_ATTRIBs.
++         */
++        *value = __DRI_ATTRIB_SWAP_EXCHANGE;
++        break;
+     case __DRI_ATTRIB_MAX_SWAP_INTERVAL:
+         *value = INT_MAX;
+         break;
+diff --git a/src/gallium/frontends/dri/kopper.c b/src/gallium/frontends/dri/kopper.c
+index 34b2567a88b..70b9980b6f5 100644
+--- a/src/gallium/frontends/dri/kopper.c
++++ b/src/gallium/frontends/dri/kopper.c
+@@ -567,8 +567,7 @@ XXX do this once swapinterval is hooked up
+    /* pixmaps always have front buffers.
+     * Exchange swaps also mandate fake front buffers.
+     */
+-   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW ||
+-       draw->swap_method == __DRI_ATTRIB_SWAP_EXCHANGE)
++   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW)
+       buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
+ #endif
+ 
+diff --git a/src/glx/dri_common.c b/src/glx/dri_common.c
+index 3421d654b5a..15b0e0fc328 100644
+--- a/src/glx/dri_common.c
++++ b/src/glx/dri_common.c
+@@ -116,7 +116,6 @@ static const struct
+       __ATTRIB(__DRI_ATTRIB_DOUBLE_BUFFER, doubleBufferMode),
+       __ATTRIB(__DRI_ATTRIB_STEREO, stereoMode),
+       __ATTRIB(__DRI_ATTRIB_AUX_BUFFERS, numAuxBuffers),
+-      __ATTRIB(__DRI_ATTRIB_SWAP_METHOD, swapMethod),
+       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGB, bindToTextureRgb),
+       __ATTRIB(__DRI_ATTRIB_BIND_TO_TEXTURE_RGBA, bindToTextureRgba),
+       __ATTRIB(__DRI_ATTRIB_BIND_TO_MIPMAP_TEXTURE, bindToMipmapTexture),
+@@ -179,19 +178,6 @@ driConfigEqual(const __DRIcoreExtension *core,
+             return GL_FALSE;
+          break;
+ 
+-      case __DRI_ATTRIB_SWAP_METHOD:
+-         if (value == __DRI_ATTRIB_SWAP_EXCHANGE)
+-            glxValue = GLX_SWAP_EXCHANGE_OML;
+-         else if (value == __DRI_ATTRIB_SWAP_COPY)
+-            glxValue = GLX_SWAP_COPY_OML;
+-         else
+-            glxValue = GLX_SWAP_UNDEFINED_OML;
+-
+-         if (!scalarEqual(config, attrib, glxValue))
+-            return GL_FALSE;
+-
+-         break;
+-
+       /* Nerf some attributes we can safely ignore if the server claims to
+        * support them but the driver does not.
+        */
+diff --git a/src/glx/glxcmds.c b/src/glx/glxcmds.c
+index 295b047779b..7ce8aba22f9 100644
+--- a/src/glx/glxcmds.c
++++ b/src/glx/glxcmds.c
+@@ -773,7 +773,6 @@ init_fbconfig_for_chooser(struct glx_config * config,
+    config->xRenderable = GLX_DONT_CARE;
+    config->fbconfigID = (GLXFBConfigID) (GLX_DONT_CARE);
+ 
+-   config->swapMethod = GLX_DONT_CARE;
+    config->sRGBCapable = GLX_DONT_CARE;
+ }
+ 
+@@ -824,7 +823,6 @@ fbconfigs_compatible(const struct glx_config * const a,
+    MATCH_DONT_CARE(visualRating);
+    MATCH_DONT_CARE(xRenderable);
+    MATCH_DONT_CARE(fbconfigID);
+-   MATCH_DONT_CARE(swapMethod);
+ 
+    MATCH_MINIMUM(rgbBits);
+    MATCH_MINIMUM(numAuxBuffers);
+diff --git a/src/glx/glxconfig.c b/src/glx/glxconfig.c
+index 6f9670bb86c..f22d055231a 100644
+--- a/src/glx/glxconfig.c
++++ b/src/glx/glxconfig.c
+@@ -160,9 +160,6 @@ glx_config_get(struct glx_config * mode, int attribute, int *value_return)
+    case GLX_OPTIMAL_PBUFFER_HEIGHT_SGIX:
+       *value_return = mode->optimalPbufferHeight;
+       return 0;
+-   case GLX_SWAP_METHOD_OML:
+-      *value_return = mode->swapMethod;
+-      return 0;
+ #endif
+    case GLX_SAMPLE_BUFFERS_SGIS:
+       *value_return = mode->sampleBuffers;
+@@ -245,7 +242,6 @@ glx_config_create_list(unsigned count)
+       (*next)->transparentIndex = GLX_DONT_CARE;
+       (*next)->xRenderable = GLX_DONT_CARE;
+       (*next)->fbconfigID = GLX_DONT_CARE;
+-      (*next)->swapMethod = GLX_SWAP_UNDEFINED_OML;
+       (*next)->bindToTextureRgb = GLX_DONT_CARE;
+       (*next)->bindToTextureRgba = GLX_DONT_CARE;
+       (*next)->bindToMipmapTexture = GLX_DONT_CARE;
+diff --git a/src/glx/glxconfig.h b/src/glx/glxconfig.h
+index 009357ce271..49abc4f4ad8 100644
+--- a/src/glx/glxconfig.h
++++ b/src/glx/glxconfig.h
+@@ -85,9 +85,6 @@ struct glx_config {
+     /* SGIX_visual_select_group */
+     GLint visualSelectGroup;
+ 
+-    /* OML_swap_method */
+-    GLint swapMethod;
+-
+     GLint screen;
+ 
+     /* EXT_texture_from_pixmap */
+diff --git a/src/glx/glxext.c b/src/glx/glxext.c
+index 42369e4da07..7712e54c1d6 100644
+--- a/src/glx/glxext.c
++++ b/src/glx/glxext.c
+@@ -556,19 +556,6 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
+       case GLX_VISUAL_SELECT_GROUP_SGIX:
+          config->visualSelectGroup = *bp++;
+          break;
+-      case GLX_SWAP_METHOD_OML:
+-         if (*bp == GLX_SWAP_UNDEFINED_OML ||
+-             *bp == GLX_SWAP_COPY_OML ||
+-             *bp == GLX_SWAP_EXCHANGE_OML) {
+-            config->swapMethod = *bp++;
+-         } else {
+-            /* X servers with old HW drivers may return any value here, so
+-             * assume GLX_SWAP_METHOD_UNDEFINED.
+-             */
+-            config->swapMethod = GLX_SWAP_UNDEFINED_OML;
+-            bp++;
+-         }
+-         break;
+ #endif
+       case GLX_SAMPLE_BUFFERS_SGIS:
+          config->sampleBuffers = *bp++;
+diff --git a/src/glx/glxextensions.c b/src/glx/glxextensions.c
+index 7c443fcb96c..71b2c94d092 100644
+--- a/src/glx/glxextensions.c
++++ b/src/glx/glxextensions.c
+@@ -109,7 +109,6 @@ static const struct extension_info known_glx_extensions[] = {
+    { GLX(MESA_query_renderer),            N, Y },
+    { GLX(MESA_swap_control),              N, Y },
+    { GLX(NV_float_buffer),                N, N },
+-   { GLX(OML_swap_method),                Y, N },
+    { GLX(OML_sync_control),               N, Y },
+    { GLX(SGIS_multisample),               Y, N },
+    { GLX(SGIX_fbconfig),                  Y, N },
+diff --git a/src/glx/glxextensions.h b/src/glx/glxextensions.h
+index ebd5def3985..37f60f5cf85 100644
+--- a/src/glx/glxextensions.h
++++ b/src/glx/glxextensions.h
+@@ -65,7 +65,6 @@ enum
+    MESA_swap_control_bit,
+    MESA_swap_frame_usage_bit,
+    NV_float_buffer_bit,
+-   OML_swap_method_bit,
+    OML_sync_control_bit,
+    SGIS_multisample_bit,
+    SGIX_fbconfig_bit,
+diff --git a/src/loader/loader_dri3_helper.c b/src/loader/loader_dri3_helper.c
+index 32135770e9d..2631a9e2fd5 100644
+--- a/src/loader/loader_dri3_helper.c
++++ b/src/loader/loader_dri3_helper.c
+@@ -463,13 +463,6 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
+    draw->vtable->set_drawable_size(draw, draw->width, draw->height);
+    free(reply);
+ 
+-   draw->swap_method = __DRI_ATTRIB_SWAP_UNDEFINED;
+-   if (draw->ext->core->base.version >= 2) {
+-      (void )draw->ext->core->getConfigAttrib(dri_config,
+-                                              __DRI_ATTRIB_SWAP_METHOD,
+-                                              &draw->swap_method);
+-   }
+-
+    /*
+     * Make sure server has the same swap interval we do for the new
+     * drawable.
+@@ -1070,7 +1063,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
+     * The force_copy parameter is used by EGL to attempt to preserve
+     * the back buffer across a call to this function.
+     */
+-   if (draw->swap_method != __DRI_ATTRIB_SWAP_UNDEFINED || force_copy)
++   if (force_copy)
+       draw->cur_blit_source = LOADER_DRI3_BACK_ID(draw->cur_back);
+ 
+    /* Exchange the back and fake front. Even though the server knows about these
+@@ -1083,7 +1076,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
+       draw->buffers[LOADER_DRI3_FRONT_ID] = back;
+       draw->buffers[LOADER_DRI3_BACK_ID(draw->cur_back)] = tmp;
+ 
+-      if (draw->swap_method == __DRI_ATTRIB_SWAP_COPY  || force_copy)
++      if (force_copy)
+          draw->cur_blit_source = LOADER_DRI3_FRONT_ID;
+    }
+ 
+@@ -2244,10 +2237,8 @@ loader_dri3_get_buffers(__DRIdrawable *driDrawable,
+    }
+ 
+    /* pixmaps always have front buffers.
+-    * Exchange swaps also mandate fake front buffers.
+     */
+-   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW ||
+-       draw->swap_method == __DRI_ATTRIB_SWAP_EXCHANGE)
++   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW)
+       buffer_mask |= __DRI_IMAGE_BUFFER_FRONT;
+ 
+    if (buffer_mask & __DRI_IMAGE_BUFFER_FRONT) {
+@@ -2402,7 +2393,7 @@ dri3_find_back_alloc(struct loader_dri3_drawable *draw)
+ 
+    dri3_set_render_buffer(draw, id, back);
+ 
+-   /* If necessary, prefill the back with data according to swap_method mode. */
++   /* If necessary, prefill the back with data. */
+    if (draw->cur_blit_source != -1 &&
+        draw->buffers[draw->cur_blit_source] &&
+        back != draw->buffers[draw->cur_blit_source]) {
+diff --git a/src/loader/loader_dri3_helper.h b/src/loader/loader_dri3_helper.h
+index 1fd340bd145..cc2362dd599 100644
+--- a/src/loader/loader_dri3_helper.h
++++ b/src/loader/loader_dri3_helper.h
+@@ -182,7 +182,6 @@ struct loader_dri3_drawable {
+    struct loader_dri3_extensions *ext;
+    const struct loader_dri3_vtable *vtable;
+ 
+-   unsigned int swap_method;
+    unsigned int back_format;
+    xcb_present_complete_mode_t last_present_mode;
+ 
+diff --git a/src/mesa/main/glconfig.h b/src/mesa/main/glconfig.h
+index 12255c0e799..024681a754d 100644
+--- a/src/mesa/main/glconfig.h
++++ b/src/mesa/main/glconfig.h
+@@ -26,9 +26,6 @@ struct gl_config
+    /* ARB_multisample / SGIS_multisample */
+    GLuint samples;
+ 
+-   /* OML_swap_method */
+-   GLint swapMethod;
+-
+    /* EXT_framebuffer_sRGB */
+    GLint sRGBCapable;
+ };
+-- 
+2.42.0
+

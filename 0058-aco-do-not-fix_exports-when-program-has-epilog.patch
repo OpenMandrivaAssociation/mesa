@@ -1,0 +1,71 @@
+From 6eb0910d454ea46045dac2a22724ffb4588479fd Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Thu, 17 Aug 2023 15:17:20 +0800
+Subject: [PATCH 058/834] aco: do not fix_exports when program has epilog
+
+PS with epilog does not need to fix_exports. And radeonsi use
+p_end_with_regs so does not have jump instruction at last.
+
+radeonsi may also have exec restore instruction, so may break
+before reach to p_end_with_regs.
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/compiler/aco_assembler.cpp             | 13 +++----------
+ src/amd/compiler/aco_instruction_selection.cpp |  1 -
+ 2 files changed, 3 insertions(+), 11 deletions(-)
+
+diff --git a/src/amd/compiler/aco_assembler.cpp b/src/amd/compiler/aco_assembler.cpp
+index 076e850c584..f552618acc7 100644
+--- a/src/amd/compiler/aco_assembler.cpp
++++ b/src/amd/compiler/aco_assembler.cpp
+@@ -1001,21 +1001,14 @@ fix_exports(asm_context& ctx, std::vector<uint32_t>& out, Program* program)
+                   break;
+                }
+             } else {
+-               if (!program->info.has_epilog) {
+-                  exp.done = true;
+-                  exp.valid_mask = true;
+-               }
++               exp.done = true;
++               exp.valid_mask = true;
+                exported = true;
+                break;
+             }
+          } else if ((*it)->definitions.size() && (*it)->definitions[0].physReg() == exec) {
+             break;
+          } else if ((*it)->opcode == aco_opcode::s_setpc_b64) {
+-            /* Do not abort if the main FS has an epilog because it only
+-             * exports MRTZ (if present) and the epilog exports colors.
+-             */
+-            exported |= program->stage.hw == AC_HW_PIXEL_SHADER && program->info.has_epilog;
+-
+             /* Do not abort for VS/TES as NGG if they are non-monolithic shaders
+              * because a jump would be emitted.
+              */
+@@ -1301,7 +1294,7 @@ emit_program(Program* program, std::vector<uint32_t>& code, std::vector<struct a
+    asm_context ctx(program, symbols);
+ 
+    /* Prolog has no exports. */
+-   if (!program->is_prolog &&
++   if (!program->is_prolog && !program->info.has_epilog &&
+        (program->stage.hw == AC_HW_VERTEX_SHADER || program->stage.hw == AC_HW_PIXEL_SHADER ||
+         program->stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER))
+       fix_exports(ctx, code, program);
+diff --git a/src/amd/compiler/aco_instruction_selection.cpp b/src/amd/compiler/aco_instruction_selection.cpp
+index 47b03ce36a0..22fc17f71c3 100644
+--- a/src/amd/compiler/aco_instruction_selection.cpp
++++ b/src/amd/compiler/aco_instruction_selection.cpp
+@@ -11756,7 +11756,6 @@ select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, cons
+ 
+          /* FS epilogs always have at least one color/null export. */
+          ctx.program->has_color_exports = true;
+-         ctx.block->kind |= block_kind_export_end;
+       } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
+          assert(ctx.stage == tess_control_hs || ctx.stage == vertex_tess_control_hs);
+          if (ctx.options->is_opengl)
+-- 
+2.42.0
+

@@ -1,0 +1,52 @@
+From 570306e7b949aca7d52c08dbd7aaa34a5d8a818b Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Mon, 9 Oct 2023 14:23:32 +0200
+Subject: [PATCH 457/834] docs/relnotes: remove cruft from end of lines
+
+We don't include the full commit message here, so let's drop all of this
+cruft. Not sure how this happened in the first place.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25712>
+---
+ docs/relnotes/19.1.8.rst | 4 +---
+ docs/relnotes/19.3.0.rst | 9 ++-------
+ 2 files changed, 3 insertions(+), 10 deletions(-)
+
+diff --git a/docs/relnotes/19.1.8.rst b/docs/relnotes/19.1.8.rst
+index 3020043e34c..3c4486a0d12 100644
+--- a/docs/relnotes/19.1.8.rst
++++ b/docs/relnotes/19.1.8.rst
+@@ -205,9 +205,7 @@ Paulo Zanoni (1):
+ 
+ Prodea Alexandru-Liviu (1):
+ 
+--  scons/MSYS2-MinGW-W64: Fix build options defaults Signed-off-by:
+-   Prodea Alexandru-Liviu <liviuprodea@yahoo.com> Reviewed-by: Jose
+-   Fonseca <jfonseca@vmware.com> Cc: <mesa-stable@lists.freedesktop.org>
++-  scons/MSYS2-MinGW-W64: Fix build options defaults
+ 
+ Rhys Perry (2):
+ 
+diff --git a/docs/relnotes/19.3.0.rst b/docs/relnotes/19.3.0.rst
+index 709785b3494..7746c33cca5 100644
+--- a/docs/relnotes/19.3.0.rst
++++ b/docs/relnotes/19.3.0.rst
+@@ -2751,13 +2751,8 @@ Plamena Manolova (8):
+ Prodea Alexandru-Liviu (4):
+ 
+ -  scons/windows: Fix build with LLVM>=8
+--  scons/MSYS2-MinGW-W64: Fix build options defaults Signed-off-by:
+-   Prodea Alexandru-Liviu <liviuprodea@yahoo.com> Reviewed-by: Jose
+-   Fonseca <jfonseca@vmware.com> Cc: <mesa-stable@lists.freedesktop.org>
+--  Appveyor/Meson: Add build test of osmesa gallium Signed-off-by:
+-   Prodea Alexandru-Liviu <liviuprodea@yahoo.com> Acked-by: Eric
+-   Engestrom <eric@engestrom.ch> Reviewed-by: Dylan Baker
+-   <dylan@pnwbakers.com>
++-  scons/MSYS2-MinGW-W64: Fix build options defaults
++-  Appveyor/Meson: Add build test of osmesa gallium
+ -  Meson: Remove lib prefix from graw and osmesa when building with
+    Mingw. Also remove version sufix from osmesa swrast on Windows.
+ 
+-- 
+2.42.0
+

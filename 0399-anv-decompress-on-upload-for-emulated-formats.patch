@@ -1,0 +1,453 @@
+From a73e0e9a042045bd2c063bd9d8d7a6ef95cbf5fc Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Thu, 28 Sep 2023 09:40:36 -0700
+Subject: [PATCH 399/834] anv: decompress on upload for emulated formats
+
+Add anv_astc_emu_decompress to decompress the raw texel data to the
+hidden plane.  Call anv_astc_emu_decompress from anv_CmdCopyImage2 and
+anv_CmdCopyBufferToImage2.
+
+v2: support transfer queue and add missing flushes (Lionel)
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/intel/vulkan/anv_astc_emu.c | 195 ++++++++++++++++++++++++++++++++
+ src/intel/vulkan/anv_blorp.c    |  90 +++++++++++++--
+ src/intel/vulkan/anv_device.c   |   4 +
+ src/intel/vulkan/anv_image.c    |  14 ++-
+ src/intel/vulkan/anv_private.h  |  11 ++
+ src/intel/vulkan/meson.build    |   1 +
+ 6 files changed, 305 insertions(+), 10 deletions(-)
+ create mode 100644 src/intel/vulkan/anv_astc_emu.c
+
+diff --git a/src/intel/vulkan/anv_astc_emu.c b/src/intel/vulkan/anv_astc_emu.c
+new file mode 100644
+index 00000000000..d3014c7cde4
+--- /dev/null
++++ b/src/intel/vulkan/anv_astc_emu.c
+@@ -0,0 +1,195 @@
++/*
++ * Copyright 2023 Google LLC
++ * SPDX-License-Identifier: MIT
++ */
++
++#include "anv_private.h"
++
++static void
++astc_emu_init_image_view(struct anv_cmd_buffer *cmd_buffer,
++                         struct anv_image_view *iview,
++                         struct anv_image *image,
++                         VkFormat format,
++                         VkImageUsageFlags usage,
++                         uint32_t level, uint32_t layer)
++{
++   struct anv_device *device = cmd_buffer->device;
++
++   const VkImageViewCreateInfo create_info = {
++      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
++      .pNext = &(VkImageViewUsageCreateInfo){
++         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
++         .usage = usage,
++      },
++      .image = anv_image_to_handle(image),
++      /* XXX we only need 2D but the shader expects 2D_ARRAY */
++      .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
++      .format = format,
++      .subresourceRange = {
++         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
++         .baseMipLevel = level,
++         .levelCount = 1,
++         .baseArrayLayer = layer,
++         .layerCount = 1,
++      },
++   };
++
++   memset(iview, 0, sizeof(*iview));
++   anv_image_view_init(device, iview, &create_info,
++                       &cmd_buffer->surface_state_stream);
++}
++
++static void
++astc_emu_init_push_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
++                                  struct anv_push_descriptor_set *push_set,
++                                  const struct vk_texcompress_astc_write_descriptor_set *writes)
++{
++   struct anv_device *device = cmd_buffer->device;
++   struct anv_descriptor_set_layout *layout =
++      anv_descriptor_set_layout_from_handle(
++            device->texcompress_astc->ds_layout);
++
++   memset(push_set, 0, sizeof(*push_set));
++   anv_push_descriptor_set_init(cmd_buffer, push_set, layout);
++
++   anv_descriptor_set_write(device, &push_set->set,
++                            ARRAY_SIZE(writes->descriptor_set),
++                            writes->descriptor_set);
++}
++
++static void
++astc_emu_decompress_slice(struct anv_cmd_buffer *cmd_buffer,
++                          VkFormat astc_format,
++                          VkImageLayout layout,
++                          VkImageView src_view,
++                          VkImageView dst_view,
++                          VkRect2D rect)
++{
++   struct anv_device *device = cmd_buffer->device;
++   VkCommandBuffer cmd_buffer_ = anv_cmd_buffer_to_handle(cmd_buffer);
++
++   VkPipeline pipeline =
++      vk_texcompress_astc_get_decode_pipeline(&device->vk, &device->vk.alloc,
++                                              device->texcompress_astc,
++                                              VK_NULL_HANDLE, astc_format);
++   if (pipeline == VK_NULL_HANDLE) {
++      anv_batch_set_error(&cmd_buffer->batch, VK_ERROR_UNKNOWN);
++      return;
++   }
++
++   anv_CmdBindPipeline(cmd_buffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
++
++   struct vk_texcompress_astc_write_descriptor_set writes;
++   vk_texcompress_astc_fill_write_descriptor_sets(device->texcompress_astc,
++                                                  &writes, src_view, layout,
++                                                  dst_view, astc_format);
++
++   struct anv_push_descriptor_set push_set;
++   astc_emu_init_push_descriptor_set(cmd_buffer, &push_set, &writes);
++
++   VkDescriptorSet set = anv_descriptor_set_to_handle(&push_set.set);
++   anv_CmdBindDescriptorSets(cmd_buffer_, VK_PIPELINE_BIND_POINT_COMPUTE,
++                             device->texcompress_astc->p_layout, 0, 1, &set,
++                             0, NULL);
++
++   const uint32_t push_const[] = {
++      rect.offset.x,
++      rect.offset.y,
++      (rect.offset.x + rect.extent.width) *
++         vk_format_get_blockwidth(astc_format),
++      (rect.offset.y + rect.extent.height) *
++         vk_format_get_blockheight(astc_format),
++      false, /* we don't use VK_IMAGE_VIEW_TYPE_3D */
++   };
++   anv_CmdPushConstants(cmd_buffer_, device->texcompress_astc->p_layout,
++                        VK_SHADER_STAGE_COMPUTE_BIT, 0,
++                        sizeof(push_const), push_const);
++
++   /* each workgroup processes 2x2 texel blocks */
++   rect.extent.width = DIV_ROUND_UP(rect.extent.width, 2);
++   rect.extent.height = DIV_ROUND_UP(rect.extent.height, 2);
++
++   anv_genX(device->info, CmdDispatchBase)(cmd_buffer_, 0, 0, 0,
++                                           rect.extent.width,
++                                           rect.extent.height,
++                                           1);
++
++   anv_push_descriptor_set_finish(&push_set);
++}
++
++void
++anv_astc_emu_decompress(struct anv_cmd_buffer *cmd_buffer,
++                        struct anv_image *image,
++                        VkImageLayout layout,
++                        const VkImageSubresourceLayers *subresource,
++                        VkOffset3D block_offset,
++                        VkExtent3D block_extent)
++{
++   assert(image->emu_plane_format != VK_FORMAT_UNDEFINED);
++
++   const VkRect2D rect = {
++      .offset = {
++         .x = block_offset.x,
++         .y = block_offset.y,
++      },
++      .extent = {
++         .width = block_extent.width,
++         .height = block_extent.height,
++      },
++   };
++
++   /* decompress one layer at a time because anv_image_fill_surface_state
++    * requires an uncompressed view of a compressed image to be single layer
++    */
++   const bool is_3d = image->vk.image_type == VK_IMAGE_TYPE_3D;
++   const uint32_t slice_base = is_3d ?
++      block_offset.z : subresource->baseArrayLayer;
++   const uint32_t slice_count = is_3d ?
++      block_extent.depth : subresource->layerCount;
++
++   struct anv_cmd_saved_state saved;
++   anv_cmd_buffer_save_state(cmd_buffer,
++                             ANV_CMD_SAVED_STATE_COMPUTE_PIPELINE |
++                             ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_0 |
++                             ANV_CMD_SAVED_STATE_PUSH_CONSTANTS,
++                             &saved);
++
++   for (uint32_t i = 0; i < slice_count; i++) {
++      struct anv_image_view src_view;
++      struct anv_image_view dst_view;
++      astc_emu_init_image_view(cmd_buffer, &src_view, image,
++                               VK_FORMAT_R32G32B32A32_UINT,
++                               VK_IMAGE_USAGE_SAMPLED_BIT,
++                               subresource->mipLevel, slice_base + i);
++      astc_emu_init_image_view(cmd_buffer, &dst_view, image,
++                               VK_FORMAT_R8G8B8A8_UINT,
++                               VK_IMAGE_USAGE_STORAGE_BIT,
++                               subresource->mipLevel, slice_base + i);
++
++      astc_emu_decompress_slice(cmd_buffer, image->vk.format, layout,
++                                anv_image_view_to_handle(&src_view),
++                                anv_image_view_to_handle(&dst_view),
++                                rect);
++   }
++
++   anv_cmd_buffer_restore_state(cmd_buffer, &saved);
++}
++
++VkResult
++anv_device_init_astc_emu(struct anv_device *device)
++{
++   if (!device->physical->emu_astc_ldr)
++      return VK_SUCCESS;
++
++   return vk_texcompress_astc_init(&device->vk, &device->vk.alloc,
++                                   VK_NULL_HANDLE, &device->texcompress_astc);
++}
++
++void
++anv_device_finish_astc_emu(struct anv_device *device)
++{
++   if (device->texcompress_astc) {
++      vk_texcompress_astc_finish(&device->vk, &device->vk.alloc,
++                                 device->texcompress_astc);
++   }
++}
+diff --git a/src/intel/vulkan/anv_blorp.c b/src/intel/vulkan/anv_blorp.c
+index 414893d2343..e1d6e988905 100644
+--- a/src/intel/vulkan/anv_blorp.c
++++ b/src/intel/vulkan/anv_blorp.c
+@@ -398,6 +398,28 @@ end_main_rcs_cmd_buffer_done(struct anv_cmd_buffer *cmd_buffer,
+                                                           syncpoint);
+ }
+ 
++static bool
++anv_blorp_execute_on_companion(struct anv_cmd_buffer *cmd_buffer,
++                               struct anv_image *dst_image)
++{
++   /* MSAA images have to be dealt with on the companion RCS command buffer
++    * for both CCS && BCS engines.
++    */
++   if ((anv_cmd_buffer_is_blitter_queue(cmd_buffer) ||
++        anv_cmd_buffer_is_compute_queue(cmd_buffer)) &&
++       dst_image->vk.samples > 1)
++      return true;
++
++   /* Emulation of formats is done through a compute shader, so we need
++    * the companion command buffer for the BCS engine.
++    */
++   if (anv_cmd_buffer_is_blitter_queue(cmd_buffer) &&
++       dst_image->emu_plane_format != VK_FORMAT_UNDEFINED)
++      return true;
++
++   return false;
++}
++
+ void anv_CmdCopyImage2(
+     VkCommandBuffer                             commandBuffer,
+     const VkCopyImageInfo2*                     pCopyImageInfo)
+@@ -407,12 +429,9 @@ void anv_CmdCopyImage2(
+    ANV_FROM_HANDLE(anv_image, dst_image, pCopyImageInfo->dstImage);
+ 
+    struct anv_cmd_buffer *main_cmd_buffer = cmd_buffer;
+-   UNUSED struct anv_state rcs_done = ANV_STATE_NULL;;
++   UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
+ 
+-   if (cmd_buffer->device->info->verx10 >= 125 &&
+-       dst_image->vk.samples > 1 &&
+-       (anv_cmd_buffer_is_blitter_queue(main_cmd_buffer) ||
+-        anv_cmd_buffer_is_compute_queue(main_cmd_buffer))) {
++   if (anv_blorp_execute_on_companion(cmd_buffer, dst_image)) {
+       rcs_done = record_main_rcs_cmd_buffer_done(cmd_buffer);
+       cmd_buffer = cmd_buffer->companion_rcs_cmd_buffer;
+    }
+@@ -429,6 +448,28 @@ void anv_CmdCopyImage2(
+ 
+    anv_blorp_batch_finish(&batch);
+ 
++   if (dst_image->emu_plane_format != VK_FORMAT_UNDEFINED) {
++      assert(!anv_cmd_buffer_is_blitter_queue(cmd_buffer));
++      const enum anv_pipe_bits pipe_bits =
++         anv_cmd_buffer_is_compute_queue(cmd_buffer) ?
++         ANV_PIPE_HDC_PIPELINE_FLUSH_BIT :
++         ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
++      anv_add_pending_pipe_bits(cmd_buffer, pipe_bits,
++                                "Copy flush before decompression");
++
++      for (unsigned r = 0; r < pCopyImageInfo->regionCount; r++) {
++         const VkImageCopy2 *region = &pCopyImageInfo->pRegions[r];
++         const VkOffset3D block_offset = vk_image_offset_to_elements(
++               &dst_image->vk, region->dstOffset);
++         const VkExtent3D block_extent = vk_image_extent_to_elements(
++               &src_image->vk, region->extent);
++         anv_astc_emu_decompress(cmd_buffer, dst_image,
++                                 pCopyImageInfo->dstImageLayout,
++                                 &region->dstSubresource,
++                                 block_offset, block_extent);
++      }
++   }
++
+    if (rcs_done.alloc_size)
+       end_main_rcs_cmd_buffer_done(main_cmd_buffer, rcs_done);
+ }
+@@ -563,6 +604,14 @@ void anv_CmdCopyBufferToImage2(
+    ANV_FROM_HANDLE(anv_buffer, src_buffer, pCopyBufferToImageInfo->srcBuffer);
+    ANV_FROM_HANDLE(anv_image, dst_image, pCopyBufferToImageInfo->dstImage);
+ 
++   struct anv_cmd_buffer *main_cmd_buffer = cmd_buffer;
++   UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
++
++   if (anv_blorp_execute_on_companion(cmd_buffer, dst_image)) {
++      rcs_done = record_main_rcs_cmd_buffer_done(cmd_buffer);
++      cmd_buffer = cmd_buffer->companion_rcs_cmd_buffer;
++   }
++
+    struct blorp_batch batch;
+    anv_blorp_batch_init(cmd_buffer, &batch, 0);
+ 
+@@ -573,6 +622,32 @@ void anv_CmdCopyBufferToImage2(
+    }
+ 
+    anv_blorp_batch_finish(&batch);
++
++   if (dst_image->emu_plane_format != VK_FORMAT_UNDEFINED) {
++      assert(!anv_cmd_buffer_is_blitter_queue(cmd_buffer));
++      const enum anv_pipe_bits pipe_bits =
++         anv_cmd_buffer_is_compute_queue(cmd_buffer) ?
++         ANV_PIPE_HDC_PIPELINE_FLUSH_BIT :
++         ANV_PIPE_RENDER_TARGET_CACHE_FLUSH_BIT;
++      anv_add_pending_pipe_bits(cmd_buffer, pipe_bits,
++                                "Copy flush before decompression");
++
++      for (unsigned r = 0; r < pCopyBufferToImageInfo->regionCount; r++) {
++         const VkBufferImageCopy2 *region =
++            &pCopyBufferToImageInfo->pRegions[r];
++         const VkOffset3D block_offset = vk_image_offset_to_elements(
++               &dst_image->vk, region->imageOffset);
++         const VkExtent3D block_extent = vk_image_extent_to_elements(
++               &dst_image->vk, region->imageExtent);
++         anv_astc_emu_decompress(cmd_buffer, dst_image,
++                                 pCopyBufferToImageInfo->dstImageLayout,
++                                 &region->imageSubresource,
++                                 block_offset, block_extent);
++      }
++   }
++
++   if (rcs_done.alloc_size)
++      end_main_rcs_cmd_buffer_done(main_cmd_buffer, rcs_done);
+ }
+ 
+ static void
+@@ -1018,10 +1093,7 @@ void anv_CmdClearColorImage(
+    struct anv_cmd_buffer *main_cmd_buffer = cmd_buffer;
+    UNUSED struct anv_state rcs_done = ANV_STATE_NULL;
+ 
+-   if (cmd_buffer->device->info->verx10 >= 125 &&
+-       image->vk.samples > 1 &&
+-       (anv_cmd_buffer_is_blitter_queue(main_cmd_buffer) ||
+-        anv_cmd_buffer_is_compute_queue(main_cmd_buffer))) {
++   if (anv_blorp_execute_on_companion(cmd_buffer, image)) {
+       rcs_done = record_main_rcs_cmd_buffer_done(cmd_buffer);
+       cmd_buffer = cmd_buffer->companion_rcs_cmd_buffer;
+    }
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index 51f9124ed31..7c3968180c6 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -3546,6 +3546,8 @@ VkResult anv_CreateDevice(
+ 
+    anv_device_init_internal_kernels(device);
+ 
++   anv_device_init_astc_emu(device);
++
+    anv_device_perf_init(device);
+ 
+    anv_device_utrace_init(device);
+@@ -3672,6 +3674,8 @@ void anv_DestroyDevice(
+ 
+    anv_device_finish_rt_shaders(device);
+ 
++   anv_device_finish_astc_emu(device);
++
+    anv_device_finish_internal_kernels(device);
+ 
+    vk_pipeline_cache_destroy(device->internal_cache, NULL);
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index 99e69ee32db..6a27a1d6a3a 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -2875,7 +2875,19 @@ anv_image_fill_surface_state(struct anv_device *device,
+                              enum anv_image_view_state_flags flags,
+                              struct anv_surface_state *state_inout)
+ {
+-   const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
++   uint32_t plane = anv_image_aspect_to_plane(image, aspect);
++   if (image->emu_plane_format != VK_FORMAT_UNDEFINED) {
++      const uint16_t view_bpb = isl_format_get_layout(view_in->format)->bpb;
++      enum isl_format format =
++         image->planes[plane].primary_surface.isl.format;
++
++      /* redirect to the hidden plane if not size-compatible */
++      if (isl_format_get_layout(format)->bpb != view_bpb) {
++         plane = image->n_planes;
++         format = image->planes[plane].primary_surface.isl.format;
++         assert(isl_format_get_layout(format)->bpb == view_bpb);
++      }
++   }
+ 
+    const struct anv_surface *surface = &image->planes[plane].primary_surface,
+       *aux_surface = &image->planes[plane].aux_surface;
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 8d3a69e0b02..eb21036de22 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -1670,6 +1670,8 @@ struct anv_device {
+      * resources but never use them.
+      */
+     bool                                         using_sparse;
++
++    struct vk_texcompress_astc_state           *texcompress_astc;
+ };
+ 
+ static inline uint32_t
+@@ -5356,6 +5358,15 @@ struct anv_memcpy_state {
+ VkResult anv_device_init_internal_kernels(struct anv_device *device);
+ void anv_device_finish_internal_kernels(struct anv_device *device);
+ 
++VkResult anv_device_init_astc_emu(struct anv_device *device);
++void anv_device_finish_astc_emu(struct anv_device *device);
++void anv_astc_emu_decompress(struct anv_cmd_buffer *cmd_buffer,
++                             struct anv_image *image,
++                             VkImageLayout layout,
++                             const VkImageSubresourceLayers *subresource,
++                             VkOffset3D block_offset,
++                             VkExtent3D block_extent);
++
+ /* This structure is used in 2 scenarios :
+  *
+  *    - copy utrace timestamps from command buffer so that command buffer can
+diff --git a/src/intel/vulkan/meson.build b/src/intel/vulkan/meson.build
+index 60058c8cd50..a120e422cb7 100644
+--- a/src/intel/vulkan/meson.build
++++ b/src/intel/vulkan/meson.build
+@@ -183,6 +183,7 @@ libanv_files = files(
+   'anv_private.h',
+   'anv_queue.c',
+   'anv_sparse.c',
++  'anv_astc_emu.c',
+   'anv_util.c',
+   'anv_utrace.c',
+   'anv_va.c',
+-- 
+2.42.0
+

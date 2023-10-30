@@ -1,0 +1,33 @@
+From 1f77f52bbe5dd950628bf304297940b30f212d14 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Tue, 19 Sep 2023 14:33:47 +0200
+Subject: [PATCH 201/834] radv: skip GDS allocation for NGG streamout on GFX11
+
+Only GDS OA is needed on GFX11.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25284>
+---
+ src/amd/vulkan/radv_cmd_buffer.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/amd/vulkan/radv_cmd_buffer.c b/src/amd/vulkan/radv_cmd_buffer.c
+index 9323998b5d1..5d6723397c8 100644
+--- a/src/amd/vulkan/radv_cmd_buffer.c
++++ b/src/amd/vulkan/radv_cmd_buffer.c
+@@ -6346,7 +6346,11 @@ radv_bind_pre_rast_shader(struct radv_cmd_buffer *cmd_buffer, const struct radv_
+       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_STREAMOUT_BUFFER;
+ 
+       if (cmd_buffer->device->physical_device->use_ngg_streamout) {
+-         cmd_buffer->gds_needed = true;
++         /* GFX11 only needs GDS OA for streamout. */
++         if (cmd_buffer->device->physical_device->rad_info.gfx_level < GFX11) {
++            cmd_buffer->gds_needed = true;
++         }
++
+          cmd_buffer->gds_oa_needed = true;
+       }
+    }
+-- 
+2.42.0
+

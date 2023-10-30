@@ -1,0 +1,716 @@
+From a368e3f8d5b8fb1a163fa3f94cb7a4fae4f14370 Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Fri, 6 Oct 2023 15:15:05 +1000
+Subject: [PATCH 080/834] lavapipe: start introducing planes structure.
+
+this just introduces a single plane and refactors code to use it.
+
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ .../frontends/lavapipe/lvp_descriptor_set.c   | 36 ++++----
+ src/gallium/frontends/lavapipe/lvp_device.c   | 54 ++++++++----
+ src/gallium/frontends/lavapipe/lvp_execute.c  | 88 +++++++++----------
+ src/gallium/frontends/lavapipe/lvp_image.c    | 75 ++++++++--------
+ src/gallium/frontends/lavapipe/lvp_private.h  | 24 +++--
+ 5 files changed, 154 insertions(+), 123 deletions(-)
+
+diff --git a/src/gallium/frontends/lavapipe/lvp_descriptor_set.c b/src/gallium/frontends/lavapipe/lvp_descriptor_set.c
+index 5d3c6013d0e..66856701b3a 100644
+--- a/src/gallium/frontends/lavapipe/lvp_descriptor_set.c
++++ b/src/gallium/frontends/lavapipe/lvp_descriptor_set.c
+@@ -464,8 +464,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
+             LVP_FROM_HANDLE(lvp_image_view, iview,
+                             write->pImageInfo[j].imageView);
+             if (iview) {
+-               lp_jit_texture_from_pipe(&desc[j].texture, iview->sv);
+-               desc[j].functions = iview->texture_handle->functions;
++               lp_jit_texture_from_pipe(&desc[j].texture, iview->planes[0].sv);
++               desc[j].functions = iview->planes[0].texture_handle->functions;
+ 
+                if (!bind_layout->immutable_samplers) {
+                   LVP_FROM_HANDLE(lvp_sampler, sampler,
+@@ -487,8 +487,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
+                             write->pImageInfo[j].imageView);
+ 
+             if (iview) {
+-               lp_jit_texture_from_pipe(&desc[j].texture, iview->sv);
+-               desc[j].functions = iview->texture_handle->functions;
++               lp_jit_texture_from_pipe(&desc[j].texture, iview->planes[0].sv);
++               desc[j].functions = iview->planes[0].texture_handle->functions;
+             } else {
+                desc[j].functions = device->null_texture_handle->functions;
+                desc[j].sampler_index = 0;
+@@ -502,8 +502,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_UpdateDescriptorSets(
+                             write->pImageInfo[j].imageView);
+ 
+             if (iview) {
+-               lp_jit_image_from_pipe(&desc[j].image, &iview->iv);
+-               desc[j].functions = iview->image_handle->functions;
++               lp_jit_image_from_pipe(&desc[j].image, &iview->planes[0].iv);
++               desc[j].functions = iview->planes[0].image_handle->functions;
+             } else {
+                desc[j].functions = device->null_image_handle->functions;
+             }
+@@ -822,8 +822,8 @@ lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descri
+             LVP_FROM_HANDLE(lvp_image_view, iview, info->imageView);
+ 
+             if (iview) {
+-               lp_jit_texture_from_pipe(&desc[idx].texture, iview->sv);
+-               desc[idx].functions = iview->texture_handle->functions;
++               lp_jit_texture_from_pipe(&desc[idx].texture, iview->planes[0].sv);
++               desc[idx].functions = iview->planes[0].texture_handle->functions;
+ 
+                if (!bind_layout->immutable_samplers) {
+                   LVP_FROM_HANDLE(lvp_sampler, sampler, info->sampler);
+@@ -842,8 +842,8 @@ lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descri
+             LVP_FROM_HANDLE(lvp_image_view, iview, info->imageView);
+ 
+             if (iview) {
+-               lp_jit_texture_from_pipe(&desc[idx].texture, iview->sv);
+-               desc[idx].functions = iview->texture_handle->functions;
++               lp_jit_texture_from_pipe(&desc[idx].texture, iview->planes[0].sv);
++               desc[idx].functions = iview->planes[0].texture_handle->functions;
+             } else {
+                desc[j].functions = device->null_texture_handle->functions;
+                desc[j].sampler_index = 0;
+@@ -856,8 +856,8 @@ lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descri
+                             ((VkDescriptorImageInfo *)pSrc)->imageView);
+ 
+             if (iview) {
+-               lp_jit_image_from_pipe(&desc[idx].image, &iview->iv);
+-               desc[idx].functions = iview->image_handle->functions;
++               lp_jit_image_from_pipe(&desc[idx].image, &iview->planes[0].iv);
++               desc[idx].functions = iview->planes[0].image_handle->functions;
+             } else {
+                desc[idx].functions = device->null_image_handle->functions;
+             }
+@@ -1018,8 +1018,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDescriptorEXT(
+       if (info && info->imageView) {
+          LVP_FROM_HANDLE(lvp_image_view, iview, info->imageView);
+ 
+-         lp_jit_texture_from_pipe(&desc->texture, iview->sv);
+-         desc->functions = iview->texture_handle->functions;
++         lp_jit_texture_from_pipe(&desc->texture, iview->planes[0].sv);
++         desc->functions = iview->planes[0].texture_handle->functions;
+ 
+          if (info->sampler) {
+             LVP_FROM_HANDLE(lvp_sampler, sampler, info->sampler);
+@@ -1040,8 +1040,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDescriptorEXT(
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: {
+       if (pCreateInfo->data.pSampledImage && pCreateInfo->data.pSampledImage->imageView) {
+          LVP_FROM_HANDLE(lvp_image_view, iview, pCreateInfo->data.pSampledImage->imageView);
+-         lp_jit_texture_from_pipe(&desc->texture, iview->sv);
+-         desc->functions = iview->texture_handle->functions;
++         lp_jit_texture_from_pipe(&desc->texture, iview->planes[0].sv);
++         desc->functions = iview->planes[0].texture_handle->functions;
+       } else {
+          desc->functions = device->null_texture_handle->functions;
+          desc->sampler_index = 0;
+@@ -1054,8 +1054,8 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDescriptorEXT(
+    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT: {
+       if (pCreateInfo->data.pStorageImage && pCreateInfo->data.pStorageImage->imageView) {
+          LVP_FROM_HANDLE(lvp_image_view, iview, pCreateInfo->data.pStorageImage->imageView);
+-         lp_jit_image_from_pipe(&desc->image, &iview->iv);
+-         desc->functions = iview->image_handle->functions;
++         lp_jit_image_from_pipe(&desc->image, &iview->planes[0].iv);
++         desc->functions = iview->planes[0].image_handle->functions;
+       } else {
+          desc->functions = device->null_image_handle->functions;
+       }
+diff --git a/src/gallium/frontends/lavapipe/lvp_device.c b/src/gallium/frontends/lavapipe/lvp_device.c
+index 83e32556a6e..b86489d484f 100644
+--- a/src/gallium/frontends/lavapipe/lvp_device.c
++++ b/src/gallium/frontends/lavapipe/lvp_device.c
+@@ -2012,6 +2012,31 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindBufferMemory2(VkDevice _device,
+    return VK_SUCCESS;
+ }
+ 
++static VkResult
++lvp_image_plane_bind(struct lvp_device *device,
++                     struct lvp_image_plane *plane,
++                     struct lvp_device_memory *mem,
++                     VkDeviceSize memory_offset,
++                     VkDeviceSize *plane_offset)
++{
++   if (!device->pscreen->resource_bind_backing(device->pscreen,
++                                               plane->bo,
++                                               mem->pmem,
++                                               memory_offset + *plane_offset)) {
++      /* This is probably caused by the texture being too large, so let's
++       * report this as the *closest* allowed error-code. It's not ideal,
++       * but it's unlikely that anyone will care too much.
++       */
++      return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
++   }
++   plane->pmem = mem->pmem;
++   plane->memory_offset = memory_offset;
++   plane->plane_offset = *plane_offset;
++   *plane_offset += plane->size;
++   return VK_SUCCESS;
++}
++
++
+ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
+                               uint32_t bindInfoCount,
+                               const VkBindImageMemoryInfo *pBindInfos)
+@@ -2032,12 +2057,12 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
+                lvp_swapchain_get_image(swapchain_info->swapchain,
+                                        swapchain_info->imageIndex);
+ 
+-            image->pmem = swapchain_image->pmem;
+-            image->memory_offset = swapchain_image->memory_offset;
++            image->planes[0].pmem = swapchain_image->planes[0].pmem;
++            image->planes[0].memory_offset = swapchain_image->planes[0].memory_offset;
+             device->pscreen->resource_bind_backing(device->pscreen,
+-                                                   image->bo,
+-                                                   image->pmem,
+-                                                   image->memory_offset);
++                                                   image->planes[0].bo,
++                                                   image->planes[0].pmem,
++                                                   image->planes[0].memory_offset);
+             did_bind = true;
+             break;
+          }
+@@ -2047,18 +2072,13 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BindImageMemory2(VkDevice _device,
+       }
+ 
+       if (!did_bind) {
+-         if (!device->pscreen->resource_bind_backing(device->pscreen,
+-                                                     image->bo,
+-                                                     mem->pmem,
+-                                                     bind_info->memoryOffset)) {
+-            /* This is probably caused by the texture being too large, so let's
+-             * report this as the *closest* allowed error-code. It's not ideal,
+-             * but it's unlikely that anyone will care too much.
+-             */
+-            return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
+-         }
+-         image->pmem = mem->pmem;
+-         image->memory_offset = bind_info->memoryOffset;
++         uint64_t offset_B = 0;
++         VkResult result;
++
++         result = lvp_image_plane_bind(device, &image->planes[0],
++                                       mem, bind_info->memoryOffset, &offset_B);
++         if (result != VK_SUCCESS)
++            return result;
+       }
+    }
+    return VK_SUCCESS;
+diff --git a/src/gallium/frontends/lavapipe/lvp_execute.c b/src/gallium/frontends/lavapipe/lvp_execute.c
+index 461bb67622b..5b69d1499a4 100644
+--- a/src/gallium/frontends/lavapipe/lvp_execute.c
++++ b/src/gallium/frontends/lavapipe/lvp_execute.c
+@@ -1285,7 +1285,7 @@ static struct pipe_surface *create_img_surface(struct rendering_state *state,
+    VkImageSubresourceRange imgv_subres =
+       vk_image_view_subresource_range(&imgv->vk);
+ 
+-   return create_img_surface_bo(state, &imgv_subres, imgv->image->bo,
++   return create_img_surface_bo(state, &imgv_subres, imgv->image->planes[0].bo,
+                                 lvp_vk_format_to_pipe_format(format),
+                                 width, height, base_layer, layer_count, 0);
+ }
+@@ -1529,8 +1529,8 @@ resolve_ds(struct rendering_state *state, bool multi)
+ 
+       struct pipe_blit_info info = {0};
+ 
+-      info.src.resource = src_imgv->image->bo;
+-      info.dst.resource = dst_imgv->image->bo;
++      info.src.resource = src_imgv->image->planes[0].bo;
++      info.dst.resource = dst_imgv->image->planes[0].bo;
+       info.src.format = src_imgv->pformat;
+       info.dst.format = dst_imgv->pformat;
+       info.filter = PIPE_TEX_FILTER_NEAREST;
+@@ -1577,8 +1577,8 @@ resolve_color(struct rendering_state *state, bool multi)
+ 
+       struct pipe_blit_info info = { 0 };
+ 
+-      info.src.resource = src_imgv->image->bo;
+-      info.dst.resource = dst_imgv->image->bo;
++      info.src.resource = src_imgv->image->planes[0].bo;
++      info.dst.resource = dst_imgv->image->planes[0].bo;
+       info.src.format = src_imgv->pformat;
+       info.dst.format = dst_imgv->pformat;
+       info.filter = PIPE_TEX_FILTER_NEAREST;
+@@ -1628,12 +1628,12 @@ replicate_attachment(struct rendering_state *state,
+       .x = 0,
+       .y = 0,
+       .z = 0,
+-      .width = u_minify(dst->image->bo->width0, level),
+-      .height = u_minify(dst->image->bo->height0, level),
+-      .depth = u_minify(dst->image->bo->depth0, level),
++      .width = u_minify(dst->image->planes[0].bo->width0, level),
++      .height = u_minify(dst->image->planes[0].bo->height0, level),
++      .depth = u_minify(dst->image->planes[0].bo->depth0, level),
+    };
+-   state->pctx->resource_copy_region(state->pctx, dst->image->bo, level,
+-                                     0, 0, 0, src->image->bo, level, &box);
++   state->pctx->resource_copy_region(state->pctx, dst->image->planes[0].bo, level,
++                                     0, 0, 0, src->image->planes[0].bo, level, &box);
+ }
+ 
+ static struct lvp_image_view *
+@@ -1645,13 +1645,13 @@ create_multisample_surface(struct rendering_state *state, struct lvp_image_view
+    templ.nr_samples = samples;
+    struct lvp_image *image = mem_dup(imgv->image, sizeof(struct lvp_image));
+    image->vk.samples = samples;
+-   image->pmem = NULL;
+-   image->bo = state->pctx->screen->resource_create(state->pctx->screen, &templ);
++   image->planes[0].pmem = NULL;
++   image->planes[0].bo = state->pctx->screen->resource_create(state->pctx->screen, &templ);
+ 
+    struct lvp_image_view *multi = mem_dup(imgv, sizeof(struct lvp_image_view));
+    multi->image = image;
+-   multi->surface = state->pctx->create_surface(state->pctx, image->bo, imgv->surface);
+-   struct pipe_resource *ref = image->bo;
++   multi->surface = state->pctx->create_surface(state->pctx, image->planes[0].bo, imgv->surface);
++   struct pipe_resource *ref = image->planes[0].bo;
+    pipe_resource_reference(&ref, NULL);
+    imgv->multisample = multi;
+    multi->multisample = imgv;
+@@ -2187,7 +2187,7 @@ static void handle_copy_image_to_buffer2(struct vk_cmd_queue_entry *cmd,
+       box.depth = src_image->vk.image_type == VK_IMAGE_TYPE_3D ? region->imageExtent.depth : subresource_layercount(src_image, &region->imageSubresource);
+ 
+       src_data = state->pctx->texture_map(state->pctx,
+-                                           src_image->bo,
++                                           src_image->planes[0].bo,
+                                            region->imageSubresource.mipLevel,
+                                            PIPE_MAP_READ,
+                                            &box,
+@@ -2206,7 +2206,7 @@ static void handle_copy_image_to_buffer2(struct vk_cmd_queue_entry *cmd,
+                                            &dbox,
+                                            &dst_t);
+ 
+-      enum pipe_format src_format = src_image->bo->format;
++      enum pipe_format src_format = src_image->planes[0].bo->format;
+       enum pipe_format dst_format = src_format;
+       if (util_format_is_depth_or_stencil(src_format)) {
+          if (region->imageSubresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT) {
+@@ -2276,17 +2276,17 @@ static void handle_copy_buffer_to_image(struct vk_cmd_queue_entry *cmd,
+       box.depth = dst_image->vk.image_type == VK_IMAGE_TYPE_3D ? region->imageExtent.depth : subresource_layercount(dst_image, &region->imageSubresource);
+ 
+       dst_data = state->pctx->texture_map(state->pctx,
+-                                           dst_image->bo,
++                                           dst_image->planes[0].bo,
+                                            region->imageSubresource.mipLevel,
+                                            PIPE_MAP_WRITE,
+                                            &box,
+                                            &dst_t);
+ 
+-      enum pipe_format dst_format = dst_image->bo->format;
++      enum pipe_format dst_format = dst_image->planes[0].bo->format;
+       enum pipe_format src_format = dst_format;
+       if (util_format_is_depth_or_stencil(dst_format)) {
+          if (region->imageSubresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT) {
+-            src_format = util_format_get_depth_only(dst_image->bo->format);
++            src_format = util_format_get_depth_only(dst_image->planes[0].bo->format);
+          } else if (region->imageSubresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
+             src_format = PIPE_FORMAT_S8_UINT;
+          }
+@@ -2336,7 +2336,7 @@ static void handle_copy_image(struct vk_cmd_queue_entry *cmd,
+       src_box.y = region->srcOffset.y;
+       src_box.width = region->extent.width;
+       src_box.height = region->extent.height;
+-      if (src_image->bo->target == PIPE_TEXTURE_3D) {
++      if (src_image->planes[0].bo->target == PIPE_TEXTURE_3D) {
+          src_box.depth = region->extent.depth;
+          src_box.z = region->srcOffset.z;
+       } else {
+@@ -2344,15 +2344,15 @@ static void handle_copy_image(struct vk_cmd_queue_entry *cmd,
+          src_box.z = region->srcSubresource.baseArrayLayer;
+       }
+ 
+-      unsigned dstz = dst_image->bo->target == PIPE_TEXTURE_3D ?
++      unsigned dstz = dst_image->planes[0].bo->target == PIPE_TEXTURE_3D ?
+                       region->dstOffset.z :
+                       region->dstSubresource.baseArrayLayer;
+-      state->pctx->resource_copy_region(state->pctx, dst_image->bo,
++      state->pctx->resource_copy_region(state->pctx, dst_image->planes[0].bo,
+                                         region->dstSubresource.mipLevel,
+                                         region->dstOffset.x,
+                                         region->dstOffset.y,
+                                         dstz,
+-                                        src_image->bo,
++                                        src_image->planes[0].bo,
+                                         region->srcSubresource.mipLevel,
+                                         &src_box);
+    }
+@@ -2381,10 +2381,10 @@ static void handle_blit_image(struct vk_cmd_queue_entry *cmd,
+    LVP_FROM_HANDLE(lvp_image, dst_image, blitcmd->dstImage);
+ 
+    struct pipe_blit_info info = {
+-      .src.resource = src_image->bo,
+-      .dst.resource = dst_image->bo,
+-      .src.format = src_image->bo->format,
+-      .dst.format = dst_image->bo->format,
++      .src.resource = src_image->planes[0].bo,
++      .dst.resource = dst_image->planes[0].bo,
++      .src.format = src_image->planes[0].bo->format,
++      .dst.format = dst_image->planes[0].bo->format,
+       .mask = util_format_is_depth_or_stencil(info.src.format) ? PIPE_MASK_ZS : PIPE_MASK_RGBA,
+       .filter = blitcmd->filter == VK_FILTER_NEAREST ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR,
+    };
+@@ -2433,7 +2433,7 @@ static void handle_blit_image(struct vk_cmd_queue_entry *cmd,
+ 
+       assert_subresource_layers(info.src.resource, src_image, &blitcmd->pRegions[i].srcSubresource, blitcmd->pRegions[i].srcOffsets);
+       assert_subresource_layers(info.dst.resource, dst_image, &blitcmd->pRegions[i].dstSubresource, blitcmd->pRegions[i].dstOffsets);
+-      if (src_image->bo->target == PIPE_TEXTURE_3D) {
++      if (src_image->planes[0].bo->target == PIPE_TEXTURE_3D) {
+          if (dstZ0 < dstZ1) {
+             info.dst.box.z = dstZ0;
+             info.src.box.z = srcZ0;
+@@ -2929,7 +2929,7 @@ static void handle_clear_color_image(struct vk_cmd_queue_entry *cmd,
+    LVP_FROM_HANDLE(lvp_image, image, cmd->u.clear_color_image.image);
+    union util_color uc;
+    uint32_t *col_val = uc.ui;
+-   util_pack_color_union(image->bo->format, &uc, (void*)cmd->u.clear_color_image.color);
++   util_pack_color_union(image->planes[0].bo->format, &uc, (void*)cmd->u.clear_color_image.color);
+    for (unsigned i = 0; i < cmd->u.clear_color_image.range_count; i++) {
+       VkImageSubresourceRange *range = &cmd->u.clear_color_image.ranges[i];
+       struct pipe_box box;
+@@ -2939,12 +2939,12 @@ static void handle_clear_color_image(struct vk_cmd_queue_entry *cmd,
+ 
+       uint32_t level_count = vk_image_subresource_level_count(&image->vk, range);
+       for (unsigned j = range->baseMipLevel; j < range->baseMipLevel + level_count; j++) {
+-         box.width = u_minify(image->bo->width0, j);
+-         box.height = u_minify(image->bo->height0, j);
++         box.width = u_minify(image->planes[0].bo->width0, j);
++         box.height = u_minify(image->planes[0].bo->height0, j);
+          box.depth = 1;
+-         if (image->bo->target == PIPE_TEXTURE_3D) {
+-            box.depth = u_minify(image->bo->depth0, j);
+-         } else if (image->bo->target == PIPE_TEXTURE_1D_ARRAY) {
++         if (image->planes[0].bo->target == PIPE_TEXTURE_3D) {
++            box.depth = u_minify(image->planes[0].bo->depth0, j);
++         } else if (image->planes[0].bo->target == PIPE_TEXTURE_1D_ARRAY) {
+             box.y = range->baseArrayLayer;
+             box.height = vk_image_subresource_layer_count(&image->vk, range);
+             box.depth = 1;
+@@ -2953,7 +2953,7 @@ static void handle_clear_color_image(struct vk_cmd_queue_entry *cmd,
+             box.depth = vk_image_subresource_layer_count(&image->vk, range);
+          }
+ 
+-         state->pctx->clear_texture(state->pctx, image->bo,
++         state->pctx->clear_texture(state->pctx, image->planes[0].bo,
+                                     j, &box, (void *)col_val);
+       }
+    }
+@@ -2975,17 +2975,17 @@ static void handle_clear_ds_image(struct vk_cmd_queue_entry *cmd,
+       for (unsigned j = 0; j < level_count; j++) {
+          struct pipe_surface *surf;
+          unsigned width, height, depth;
+-         width = u_minify(image->bo->width0, range->baseMipLevel + j);
+-         height = u_minify(image->bo->height0, range->baseMipLevel + j);
++         width = u_minify(image->planes[0].bo->width0, range->baseMipLevel + j);
++         height = u_minify(image->planes[0].bo->height0, range->baseMipLevel + j);
+ 
+-         if (image->bo->target == PIPE_TEXTURE_3D) {
+-            depth = u_minify(image->bo->depth0, range->baseMipLevel + j);
++         if (image->planes[0].bo->target == PIPE_TEXTURE_3D) {
++            depth = u_minify(image->planes[0].bo->depth0, range->baseMipLevel + j);
+          } else {
+             depth = vk_image_subresource_layer_count(&image->vk, range);
+          }
+ 
+          surf = create_img_surface_bo(state, range,
+-                                      image->bo, image->bo->format,
++                                      image->planes[0].bo, image->planes[0].bo->format,
+                                       width, height,
+                                       0, depth, j);
+ 
+@@ -3064,10 +3064,10 @@ static void handle_resolve_image(struct vk_cmd_queue_entry *cmd,
+    LVP_FROM_HANDLE(lvp_image, dst_image, resolvecmd->dstImage);
+ 
+    struct pipe_blit_info info = {0};
+-   info.src.resource = src_image->bo;
+-   info.dst.resource = dst_image->bo;
+-   info.src.format = src_image->bo->format;
+-   info.dst.format = dst_image->bo->format;
++   info.src.resource = src_image->planes[0].bo;
++   info.dst.resource = dst_image->planes[0].bo;
++   info.src.format = src_image->planes[0].bo->format;
++   info.dst.format = dst_image->planes[0].bo->format;
+    info.mask = util_format_is_depth_or_stencil(info.src.format) ? PIPE_MASK_ZS : PIPE_MASK_RGBA;
+    info.filter = PIPE_TEX_FILTER_NEAREST;
+ 
+diff --git a/src/gallium/frontends/lavapipe/lvp_image.c b/src/gallium/frontends/lavapipe/lvp_image.c
+index e737159775e..19fdba70273 100644
+--- a/src/gallium/frontends/lavapipe/lvp_image.c
++++ b/src/gallium/frontends/lavapipe/lvp_image.c
+@@ -43,9 +43,10 @@ lvp_image_create(VkDevice _device,
+       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+ 
+    image->alignment = 16;
++
+    {
+       struct pipe_resource template;
+-
++      VkFormat format = pCreateInfo->format;
+       memset(&template, 0, sizeof(template));
+ 
+       template.screen = device->pscreen;
+@@ -62,7 +63,7 @@ lvp_image_create(VkDevice _device,
+          break;
+       }
+ 
+-      template.format = lvp_vk_format_to_pipe_format(pCreateInfo->format);
++      template.format = lvp_vk_format_to_pipe_format(format);
+ 
+       bool is_ds = util_format_is_depth_or_stencil(template.format);
+ 
+@@ -99,11 +100,13 @@ lvp_image_create(VkDevice _device,
+       template.last_level = pCreateInfo->mipLevels - 1;
+       template.nr_samples = pCreateInfo->samples;
+       template.nr_storage_samples = pCreateInfo->samples;
+-      image->bo = device->pscreen->resource_create_unbacked(device->pscreen,
+-                                                            &template,
+-                                                            &image->size);
+-      if (!image->bo)
++      image->planes[0].bo = device->pscreen->resource_create_unbacked(device->pscreen,
++                                                                      &template,
++                                                                      &image->planes[0].size);
++      if (!image->planes[0].bo)
+          return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
++
++      image->size += image->planes[0].size;
+    }
+    *pImage = lvp_image_to_handle(image);
+ 
+@@ -167,7 +170,7 @@ lvp_DestroyImage(VkDevice _device, VkImage _image,
+ 
+    if (!_image)
+      return;
+-   pipe_resource_reference(&image->bo, NULL);
++   pipe_resource_reference(&image->planes[0].bo, NULL);
+    vk_image_destroy(&device->vk, pAllocator, &image->vk);
+ }
+ 
+@@ -202,7 +205,7 @@ lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv)
+    else
+       pformat = lvp_vk_format_to_pipe_format(iv->vk.format);
+    u_sampler_view_default_template(&templ,
+-                                   iv->image->bo,
++                                   iv->image->planes[0].bo,
+                                    pformat);
+    if (iv->vk.view_type == VK_IMAGE_VIEW_TYPE_1D)
+       templ.target = PIPE_TEXTURE_1D;
+@@ -235,7 +238,7 @@ lvp_create_samplerview(struct pipe_context *pctx, struct lvp_image_view *iv)
+       templ.swizzle_a = conv_depth_swiz(templ.swizzle_a);
+    }
+ 
+-   return pctx->create_sampler_view(pctx, iv->image->bo, &templ);
++   return pctx->create_sampler_view(pctx, iv->image->planes[0].bo, &templ);
+ }
+ 
+ static struct pipe_image_view
+@@ -245,7 +248,7 @@ lvp_create_imageview(const struct lvp_image_view *iv)
+    if (!iv)
+       return view;
+ 
+-   view.resource = iv->image->bo;
++   view.resource = iv->image->planes[0].bo;
+    if (iv->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT)
+       view.format = lvp_vk_format_to_pipe_format(iv->vk.format);
+    else if (iv->vk.aspects == VK_IMAGE_ASPECT_STENCIL_BIT)
+@@ -285,14 +288,14 @@ lvp_CreateImageView(VkDevice _device,
+ 
+    simple_mtx_lock(&device->queue.lock);
+ 
+-   if (image->bo->bind & PIPE_BIND_SHADER_IMAGE) {
+-      view->iv = lvp_create_imageview(view);
+-      view->image_handle = (void *)(uintptr_t)device->queue.ctx->create_image_handle(device->queue.ctx, &view->iv);
++   if (image->planes[0].bo->bind & PIPE_BIND_SHADER_IMAGE) {
++      view->planes[0].iv = lvp_create_imageview(view);
++      view->planes[0].image_handle = (void *)(uintptr_t)device->queue.ctx->create_image_handle(device->queue.ctx, &view->planes[0].iv);
+    }
+ 
+-   if (image->bo->bind & PIPE_BIND_SAMPLER_VIEW) {
+-      view->sv = lvp_create_samplerview(device->queue.ctx, view);
+-      view->texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, view->sv, NULL);
++   if (image->planes[0].bo->bind & PIPE_BIND_SAMPLER_VIEW) {
++      view->planes[0].sv = lvp_create_samplerview(device->queue.ctx, view);
++      view->planes[0].texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, view->planes[0].sv, NULL);
+    }
+ 
+    simple_mtx_unlock(&device->queue.lock);
+@@ -314,10 +317,10 @@ lvp_DestroyImageView(VkDevice _device, VkImageView _iview,
+ 
+    simple_mtx_lock(&device->queue.lock);
+ 
+-   device->queue.ctx->delete_image_handle(device->queue.ctx, (uint64_t)(uintptr_t)iview->image_handle);
++   device->queue.ctx->delete_image_handle(device->queue.ctx, (uint64_t)(uintptr_t)iview->planes[0].image_handle);
+ 
+-   pipe_sampler_view_reference(&iview->sv, NULL);
+-   device->queue.ctx->delete_texture_handle(device->queue.ctx, (uint64_t)(uintptr_t)iview->texture_handle);
++   pipe_sampler_view_reference(&iview->planes[0].sv, NULL);
++   device->queue.ctx->delete_texture_handle(device->queue.ctx, (uint64_t)(uintptr_t)iview->planes[0].texture_handle);
+ 
+    simple_mtx_unlock(&device->queue.lock);
+ 
+@@ -337,7 +340,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout(
+ 
+    device->pscreen->resource_get_param(device->pscreen,
+                                        NULL,
+-                                       image->bo,
++                                       image->planes[0].bo,
+                                        0,
+                                        pSubresource->arrayLayer,
+                                        pSubresource->mipLevel,
+@@ -348,7 +351,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout(
+ 
+    device->pscreen->resource_get_param(device->pscreen,
+                                        NULL,
+-                                       image->bo,
++                                       image->planes[0].bo,
+                                        0,
+                                        pSubresource->arrayLayer,
+                                        pSubresource->mipLevel,
+@@ -359,14 +362,14 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetImageSubresourceLayout(
+ 
+    device->pscreen->resource_get_param(device->pscreen,
+                                        NULL,
+-                                       image->bo,
++                                       image->planes[0].bo,
+                                        0,
+                                        pSubresource->arrayLayer,
+                                        pSubresource->mipLevel,
+                                        PIPE_RESOURCE_PARAM_LAYER_STRIDE,
+                                        0, &value);
+ 
+-   if (image->bo->target == PIPE_TEXTURE_3D) {
++   if (image->planes[0].bo->target == PIPE_TEXTURE_3D) {
+       pLayout->depthPitch = value;
+       pLayout->arrayPitch = 0;
+    } else {
+@@ -626,7 +629,7 @@ lvp_CopyMemoryToImageEXT(VkDevice _device, const VkCopyMemoryToImageInfoEXT *pCo
+          .height = copy->imageExtent.height,
+          .depth = 1,
+       };
+-      switch (image->bo->target) {
++      switch (image->planes[0].bo->target) {
+       case PIPE_TEXTURE_CUBE:
+       case PIPE_TEXTURE_CUBE_ARRAY:
+       case PIPE_TEXTURE_2D_ARRAY:
+@@ -644,9 +647,9 @@ lvp_CopyMemoryToImageEXT(VkDevice _device, const VkCopyMemoryToImageInfoEXT *pCo
+          break;
+       }
+ 
+-      unsigned stride = util_format_get_stride(image->bo->format, copy->memoryRowLength ? copy->memoryRowLength : box.width);
+-      unsigned layer_stride = util_format_get_2d_size(image->bo->format, stride, copy->memoryImageHeight ? copy->memoryImageHeight : box.height);
+-      device->queue.ctx->texture_subdata(device->queue.ctx, image->bo, copy->imageSubresource.mipLevel, 0,
++      unsigned stride = util_format_get_stride(image->planes[0].bo->format, copy->memoryRowLength ? copy->memoryRowLength : box.width);
++      unsigned layer_stride = util_format_get_2d_size(image->planes[0].bo->format, stride, copy->memoryImageHeight ? copy->memoryImageHeight : box.height);
++      device->queue.ctx->texture_subdata(device->queue.ctx, image->planes[0].bo, copy->imageSubresource.mipLevel, 0,
+                                          &box, copy->pHostPointer, stride, layer_stride);
+    }
+    return VK_SUCCESS;
+@@ -667,7 +670,7 @@ lvp_CopyImageToMemoryEXT(VkDevice _device, const VkCopyImageToMemoryInfoEXT *pCo
+          .height = copy->imageExtent.height,
+          .depth = 1,
+       };
+-      switch (image->bo->target) {
++      switch (image->planes[0].bo->target) {
+       case PIPE_TEXTURE_CUBE:
+       case PIPE_TEXTURE_CUBE_ARRAY:
+       case PIPE_TEXTURE_2D_ARRAY:
+@@ -685,14 +688,14 @@ lvp_CopyImageToMemoryEXT(VkDevice _device, const VkCopyImageToMemoryInfoEXT *pCo
+          break;
+       }
+       struct pipe_transfer *xfer;
+-      uint8_t *data = device->queue.ctx->texture_map(device->queue.ctx, image->bo, copy->imageSubresource.mipLevel,
++      uint8_t *data = device->queue.ctx->texture_map(device->queue.ctx, image->planes[0].bo, copy->imageSubresource.mipLevel,
+                                                      PIPE_MAP_READ | PIPE_MAP_UNSYNCHRONIZED | PIPE_MAP_THREAD_SAFE, &box, &xfer);
+       if (!data)
+          return VK_ERROR_MEMORY_MAP_FAILED;
+ 
+-      unsigned stride = util_format_get_stride(image->bo->format, copy->memoryRowLength ? copy->memoryRowLength : box.width);
+-      unsigned layer_stride = util_format_get_2d_size(image->bo->format, stride, copy->memoryImageHeight ? copy->memoryImageHeight : box.height);
+-      util_copy_box(copy->pHostPointer, image->bo->format, stride, layer_stride,
++      unsigned stride = util_format_get_stride(image->planes[0].bo->format, copy->memoryRowLength ? copy->memoryRowLength : box.width);
++      unsigned layer_stride = util_format_get_2d_size(image->planes[0].bo->format, stride, copy->memoryImageHeight ? copy->memoryImageHeight : box.height);
++      util_copy_box(copy->pHostPointer, image->planes[0].bo->format, stride, layer_stride,
+                     /* offsets are all zero because texture_map handles the offset */
+                     0, 0, 0, box.width, box.height, box.depth, data, xfer->stride, xfer->layer_stride, 0, 0, 0);
+       pipe_texture_unmap(device->queue.ctx, xfer);
+@@ -714,7 +717,7 @@ lvp_CopyImageToImageEXT(VkDevice _device, const VkCopyImageToImageInfoEXT *pCopy
+       src_box.y = pCopyImageToImageInfo->pRegions[i].srcOffset.y;
+       src_box.width = pCopyImageToImageInfo->pRegions[i].extent.width;
+       src_box.height = pCopyImageToImageInfo->pRegions[i].extent.height;
+-      if (src_image->bo->target == PIPE_TEXTURE_3D) {
++      if (src_image->planes[0].bo->target == PIPE_TEXTURE_3D) {
+          src_box.depth = pCopyImageToImageInfo->pRegions[i].extent.depth;
+          src_box.z = pCopyImageToImageInfo->pRegions[i].srcOffset.z;
+       } else {
+@@ -722,15 +725,15 @@ lvp_CopyImageToImageEXT(VkDevice _device, const VkCopyImageToImageInfoEXT *pCopy
+          src_box.z = pCopyImageToImageInfo->pRegions[i].srcSubresource.baseArrayLayer;
+       }
+ 
+-      unsigned dstz = dst_image->bo->target == PIPE_TEXTURE_3D ?
++      unsigned dstz = dst_image->planes[0].bo->target == PIPE_TEXTURE_3D ?
+                       pCopyImageToImageInfo->pRegions[i].dstOffset.z :
+                       pCopyImageToImageInfo->pRegions[i].dstSubresource.baseArrayLayer;
+-      device->queue.ctx->resource_copy_region(device->queue.ctx, dst_image->bo,
++      device->queue.ctx->resource_copy_region(device->queue.ctx, dst_image->planes[0].bo,
+                                               pCopyImageToImageInfo->pRegions[i].dstSubresource.mipLevel,
+                                               pCopyImageToImageInfo->pRegions[i].dstOffset.x,
+                                               pCopyImageToImageInfo->pRegions[i].dstOffset.y,
+                                               dstz,
+-                                              src_image->bo,
++                                              src_image->planes[0].bo,
+                                               pCopyImageToImageInfo->pRegions[i].srcSubresource.mipLevel,
+                                               &src_box);
+    }
+diff --git a/src/gallium/frontends/lavapipe/lvp_private.h b/src/gallium/frontends/lavapipe/lvp_private.h
+index 6abb3bf0205..92f799e188d 100644
+--- a/src/gallium/frontends/lavapipe/lvp_private.h
++++ b/src/gallium/frontends/lavapipe/lvp_private.h
+@@ -251,13 +251,19 @@ vk_sync_as_lvp_pipe_sync(struct vk_sync *sync)
+    return container_of(sync, struct lvp_pipe_sync, base);
+ }
+ 
++struct lvp_image_plane {
++   struct pipe_resource *bo;
++   struct pipe_memory_allocation *pmem;
++   VkDeviceSize plane_offset;
++   VkDeviceSize memory_offset;
++   VkDeviceSize size;
++};
++
+ struct lvp_image {
+    struct vk_image vk;
+    VkDeviceSize size;
+    uint32_t alignment;
+-   struct pipe_memory_allocation *pmem;
+-   unsigned memory_offset;
+-   struct pipe_resource *bo;
++   struct lvp_image_plane planes[1];
+ };
+ 
+ struct lvp_image_view {
+@@ -266,14 +272,16 @@ struct lvp_image_view {
+ 
+    enum pipe_format pformat;
+ 
+-   struct pipe_sampler_view *sv;
+-   struct pipe_image_view iv;
+-
+    struct pipe_surface *surface; /* have we created a pipe surface for this? */
+    struct lvp_image_view *multisample; //VK_EXT_multisampled_render_to_single_sampled
+ 
+-   struct lp_texture_handle *texture_handle;
+-   struct lp_texture_handle *image_handle;
++   uint8_t plane_count;
++   struct {
++      struct pipe_sampler_view *sv;
++      struct pipe_image_view iv;
++      struct lp_texture_handle *texture_handle;
++      struct lp_texture_handle *image_handle;
++   } planes[1];
+ };
+ 
+ struct lvp_sampler {
+-- 
+2.42.0
+

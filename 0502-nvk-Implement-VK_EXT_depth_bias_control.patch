@@ -1,0 +1,74 @@
+From 4591c525eaad555a9efa69d3d61feb8851379496 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 17 Oct 2023 08:24:50 -0500
+Subject: [PATCH 502/834] nvk: Implement VK_EXT_depth_bias_control
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9628
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25765>
+---
+ src/nouveau/vulkan/nvk_cmd_draw.c        | 16 +++++++++++++++-
+ src/nouveau/vulkan/nvk_physical_device.c |  7 +++++++
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/src/nouveau/vulkan/nvk_cmd_draw.c b/src/nouveau/vulkan/nvk_cmd_draw.c
+index 0a4ea4afaea..407a11f0092 100644
+--- a/src/nouveau/vulkan/nvk_cmd_draw.c
++++ b/src/nouveau/vulkan/nvk_cmd_draw.c
+@@ -1137,7 +1137,7 @@ vk_to_nv9097_provoking_vertex(VkProvokingVertexModeEXT vk_mode)
+ static void
+ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
+ {
+-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 36);
++   struct nv_push *p = nvk_cmd_buffer_push(cmd, 38);
+ 
+    const struct vk_dynamic_graphics_state *dyn =
+       &cmd->vk.dynamic_graphics_state;
+@@ -1217,6 +1217,20 @@ nvk_flush_rs_state(struct nvk_cmd_buffer *cmd)
+    }
+ 
+    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS)) {
++      switch (dyn->rs.depth_bias.representation) {
++      case VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORMAT_EXT:
++         P_IMMD(p, NV9097, SET_DEPTH_BIAS_CONTROL,
++                DEPTH_FORMAT_DEPENDENT_TRUE);
++         break;
++      case VK_DEPTH_BIAS_REPRESENTATION_LEAST_REPRESENTABLE_VALUE_FORCE_UNORM_EXT:
++         P_IMMD(p, NV9097, SET_DEPTH_BIAS_CONTROL,
++                DEPTH_FORMAT_DEPENDENT_FALSE);
++         break;
++      case VK_DEPTH_BIAS_REPRESENTATION_FLOAT_EXT:
++      default:
++         unreachable("Unsupported depth bias representation");
++      }
++      /* TODO: The blob multiplies by 2 for some reason. We don't. */
+       P_IMMD(p, NV9097, SET_DEPTH_BIAS, fui(dyn->rs.depth_bias.constant));
+       P_IMMD(p, NV9097, SET_SLOPE_SCALE_DEPTH_BIAS, fui(dyn->rs.depth_bias.slope));
+       P_IMMD(p, NV9097, SET_DEPTH_BIAS_CLAMP, fui(dyn->rs.depth_bias.clamp));
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index ce9d8318bc5..aff8a0d2296 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -101,6 +101,7 @@ nvk_get_device_extensions(const struct nv_device_info *info,
+       .EXT_buffer_device_address = true,
+       .EXT_conditional_rendering = true,
+       .EXT_custom_border_color = true,
++      .EXT_depth_bias_control = true,
+       .EXT_depth_clip_control = true,
+       .EXT_depth_clip_enable = true,
+       .EXT_descriptor_indexing = true,
+@@ -265,6 +266,12 @@ nvk_get_device_features(const struct nv_device_info *info,
+       .customBorderColors = true,
+       .customBorderColorWithoutFormat = true,
+ 
++      /* VK_EXT_depth_bias_control */
++      .depthBiasControl = true,
++      .leastRepresentableValueForceUnormRepresentation = true,
++      .floatRepresentation = false,
++      .depthBiasExact = true,
++
+       /* VK_EXT_depth_clip_control */
+       .depthClipControl = info->cls_eng3d >= VOLTA_A,
+ 
+-- 
+2.42.0
+

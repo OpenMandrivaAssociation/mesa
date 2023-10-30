@@ -1,0 +1,40 @@
+From 25a232238f40bf2776f224b8bc2df318b54e982e Mon Sep 17 00:00:00 2001
+From: Rohan Garg <rohan.garg@intel.com>
+Date: Wed, 11 Oct 2023 12:30:58 +0200
+Subject: [PATCH 727/834] anv: turn off non zero fast clears for CCS_E
+
+This helps fix a performance regression on games such as F1 22 and RDR2.
+Turning on non zero fast clears causes additional partial resolves for
+these games that degrades performance. Let's turn off non zero fast
+clears till we can eliminate the partial resolves.
+
+Signed-off-by: Rohan Garg <rohan.garg@intel.com>
+Reviewed-by: Nanley Chery <nanley.g.chery@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25863>
+---
+ src/intel/vulkan/anv_image.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index c9e15a32ce9..37e96b3f57a 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -361,6 +361,15 @@ can_fast_clear_with_non_zero_color(const struct intel_device_info *devinfo,
+    if (image->planes[plane].aux_usage == ISL_AUX_USAGE_FCV_CCS_E)
+       return false;
+ 
++   /* Turning on non zero fast clears for CCS_E introduces a performance
++    * regression for games such as F1 22 and RDR2 by introducing additional
++    * partial resolves. Let's turn non zero fast clears back off till we can
++    * fix performance.
++    */
++   if (image->planes[plane].aux_usage == ISL_AUX_USAGE_CCS_E &&
++       devinfo->ver >= 12)
++      return false;
++
+    /* Non mutable image, we can fast clear with any color supported by HW.
+     */
+    if (!(image->vk.create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT))
+-- 
+2.42.0
+

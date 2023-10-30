@@ -1,0 +1,46 @@
+From 395b7ce364affa1e289b3160cef3e541a7212970 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Thu, 5 Oct 2023 06:07:32 -0400
+Subject: [PATCH 474/834] ac/gpu_info: conservatively decrease IB alignment and
+ padding to 256B
+
+This should be large enough for all engines.
+
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25578>
+---
+ src/amd/common/ac_gpu_info.c | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 310df8145cd..0d12d28ea3f 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -677,13 +677,19 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+             info->ip[AMD_IP_GFX].ver_minor = info->ip[AMD_IP_COMPUTE].ver_minor = 3;
+       }
+       info->ip[ip_type].num_queues = util_bitcount(ip_info.available_rings);
++
++      /* According to the kernel, only SDMA and VPE require 256B alignment, but use it
++       * for all queues because the kernel reports wrong limits for some of the queues.
++       * This is only space allocation alignment, so it's OK to keep it like this even
++       * when it's greater than what the queues require.
++       */
+       info->ip[ip_type].ib_alignment = MAX3(ip_info.ib_start_alignment,
+-                                            ip_info.ib_size_alignment, 1024);
++                                            ip_info.ib_size_alignment, 256);
+    }
+ 
+-   /* This is "align_mask" copied from the kernel, maximums of all IP versions. */
+-   info->ip[AMD_IP_GFX].ib_pad_dw_mask = 0xff;
+-   info->ip[AMD_IP_COMPUTE].ib_pad_dw_mask = 0xff;
++   /* Set dword padding minus 1. */
++   info->ip[AMD_IP_GFX].ib_pad_dw_mask = 0x3f;
++   info->ip[AMD_IP_COMPUTE].ib_pad_dw_mask = 0x3f;
+    info->ip[AMD_IP_SDMA].ib_pad_dw_mask = 0xf;
+    info->ip[AMD_IP_UVD].ib_pad_dw_mask = 0xf;
+    info->ip[AMD_IP_VCE].ib_pad_dw_mask = 0x3f;
+-- 
+2.42.0
+

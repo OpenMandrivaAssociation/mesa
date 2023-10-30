@@ -1,0 +1,31 @@
+From 9e3b014d4f8aa6c582a4fcc32bb340de9676c999 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Wed, 27 Sep 2023 16:04:16 +0100
+Subject: [PATCH 686/834] radv: fix signed integer overflow
+
+Fixes UBSan error:
+src/amd/vulkan/radv_shader_info.c:78:41: runtime error: left shift of 15 by 28 places cannot be represented in type 'int'
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25432>
+---
+ src/amd/vulkan/radv_shader_info.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/amd/vulkan/radv_shader_info.c b/src/amd/vulkan/radv_shader_info.c
+index 4a3e250d91f..44dec6af0e9 100644
+--- a/src/amd/vulkan/radv_shader_info.c
++++ b/src/amd/vulkan/radv_shader_info.c
+@@ -75,7 +75,7 @@ gather_intrinsic_store_output_info(const nir_shader *nir, const nir_intrinsic_in
+       break;
+    case MESA_SHADER_FRAGMENT:
+       if (idx >= FRAG_RESULT_DATA0) {
+-         info->ps.colors_written |= 0xf << (4 * (idx - FRAG_RESULT_DATA0));
++         info->ps.colors_written |= 0xfu << (4 * (idx - FRAG_RESULT_DATA0));
+ 
+          if (idx == FRAG_RESULT_DATA0)
+             info->ps.color0_written = write_mask;
+-- 
+2.42.0
+

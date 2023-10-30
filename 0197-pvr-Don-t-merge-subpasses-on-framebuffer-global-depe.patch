@@ -1,0 +1,55 @@
+From f1c9efc52e056ad1c48a66ddcbd5dc91e8815756 Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Mon, 9 Oct 2023 10:25:35 +0100
+Subject: [PATCH 197/834] pvr: Don't merge subpasses on framebuffer-global
+ dependancy
+
+When we have a framebuffer-local dependency we cannot merge
+subpasses.
+
+dEQP tests fixed:
+  dEQP-VK.renderpass.suballocation.attachment_allocation
+    .input_output.{15,23,35,61,80,93}
+  dEQP-VK.renderpass.suballocation.attachment_allocation
+    .roll.{13,31,42,47,55,59,61,98}
+
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25612>
+---
+ src/imagination/vulkan/pvr_pass.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/imagination/vulkan/pvr_pass.c b/src/imagination/vulkan/pvr_pass.c
+index 027ac7af73c..42ad4c1501c 100644
+--- a/src/imagination/vulkan/pvr_pass.c
++++ b/src/imagination/vulkan/pvr_pass.c
+@@ -38,6 +38,7 @@
+ #include "vk_alloc.h"
+ #include "vk_format.h"
+ #include "vk_log.h"
++#include "vk_render_pass.h"
+ 
+ /*****************************************************************************
+   PDS pre-baked program generation parameters and variables.
+@@ -611,10 +612,16 @@ VkResult pvr_CreateRenderPass2(VkDevice _device,
+           dep->dstSubpass != VK_SUBPASS_EXTERNAL &&
+           dep->srcSubpass != dep->dstSubpass) {
+          struct pvr_render_subpass *subpass = &pass->subpasses[dep->dstSubpass];
++         bool is_dep_fb_local =
++            vk_subpass_dependency_is_fb_local(dep,
++                                              dep->srcStageMask,
++                                              dep->dstStageMask);
+ 
+          subpass->dep_list[subpass->dep_count] = dep->srcSubpass;
+-         if (pvr_subpass_has_msaa_input_attachment(subpass, pCreateInfo))
++         if (pvr_subpass_has_msaa_input_attachment(subpass, pCreateInfo) ||
++             !is_dep_fb_local) {
+             subpass->flush_on_dep[subpass->dep_count] = true;
++         }
+ 
+          subpass->dep_count++;
+       }
+-- 
+2.42.0
+

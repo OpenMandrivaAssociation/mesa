@@ -1,0 +1,33 @@
+From 2c4d5c6aecd05197d081771155859bd0e3109abe Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Thu, 17 Aug 2023 11:50:50 -0700
+Subject: [PATCH 521/834] i915: Make I915_DEBUG=fs log shaders that fail to
+ link due to CF.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24763>
+---
+ src/gallium/drivers/i915/i915_screen.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/i915/i915_screen.c b/src/gallium/drivers/i915/i915_screen.c
+index ac0e6adf6c8..c0172359f28 100644
+--- a/src/gallium/drivers/i915/i915_screen.c
++++ b/src/gallium/drivers/i915/i915_screen.c
+@@ -281,8 +281,13 @@ i915_finalize_nir(struct pipe_screen *pscreen, void *nir)
+    nir_sweep(s);
+ 
+    char *msg = i915_check_control_flow(s);
+-   if (msg)
++   if (msg) {
++      if (I915_DBG_ON(DBG_FS) && (!s->info.internal || NIR_DEBUG(PRINT_INTERNAL))) {
++         mesa_logi("failing shader:");
++         nir_log_shaderi(s);
++      }
+       return strdup(msg);
++   }
+ 
+    if (s->info.stage == MESA_SHADER_FRAGMENT)
+       return i915_test_fragment_shader_compile(pscreen, s);
+-- 
+2.42.0
+

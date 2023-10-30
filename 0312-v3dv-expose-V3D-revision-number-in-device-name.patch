@@ -1,0 +1,34 @@
+From 15a0ad216a83fb6ebf4654e75e50e0c3e6c94b83 Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Wed, 10 Nov 2021 10:06:50 +0100
+Subject: [PATCH 312/834] v3dv: expose V3D revision number in device name
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/vulkan/v3dv_device.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/broadcom/vulkan/v3dv_device.c b/src/broadcom/vulkan/v3dv_device.c
+index e109b38ba13..c9a826b1828 100644
+--- a/src/broadcom/vulkan/v3dv_device.c
++++ b/src/broadcom/vulkan/v3dv_device.c
+@@ -1127,8 +1127,10 @@ create_physical_device(struct v3dv_instance *instance,
+    device->next_program_id = 0;
+ 
+    ASSERTED int len =
+-      asprintf(&device->name, "V3D %d.%d",
+-               device->devinfo.ver / 10, device->devinfo.ver % 10);
++      asprintf(&device->name, "V3D %d.%d.%d",
++               device->devinfo.ver / 10,
++               device->devinfo.ver % 10,
++               device->devinfo.rev);
+    assert(len != -1);
+ 
+    v3dv_physical_device_init_disk_cache(device);
+-- 
+2.42.0
+

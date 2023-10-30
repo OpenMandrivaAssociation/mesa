@@ -1,0 +1,57 @@
+From 9f3a79a6a392f628e8c301d142c88f7bceab5052 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Thu, 31 Aug 2023 11:31:42 -0400
+Subject: [PATCH 803/834] panfrost: Add method to get size of AFBC subblocks
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Each AFBC superblock is subdivised into subblocks that are
+compressed individually. For all formats that we currently support,
+the subblocks are 4x4 pixels.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/panfrost/lib/pan_layout.c  | 11 +++++++++++
+ src/panfrost/lib/pan_texture.h |  2 ++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/src/panfrost/lib/pan_layout.c b/src/panfrost/lib/pan_layout.c
+index 04751c9572e..309f4895c30 100644
+--- a/src/panfrost/lib/pan_layout.c
++++ b/src/panfrost/lib/pan_layout.c
+@@ -104,6 +104,17 @@ panfrost_afbc_is_wide(uint64_t modifier)
+    return panfrost_afbc_superblock_width(modifier) > 16;
+ }
+ 
++/*
++ * Given an AFBC modifier, return the subblock size (subdivision of a
++ * superblock). This is always 4x4 for now as we only support one AFBC
++ * superblock layout.
++ */
++struct pan_block_size
++panfrost_afbc_subblock_size(uint64_t modifier)
++{
++   return (struct pan_block_size){4, 4};
++}
++
+ /*
+  * Given a format, determine the tile size used for u-interleaving. For formats
+  * that are already block compressed, this is 4x4. For all other formats, this
+diff --git a/src/panfrost/lib/pan_texture.h b/src/panfrost/lib/pan_texture.h
+index 001818320a9..80028be275b 100644
+--- a/src/panfrost/lib/pan_texture.h
++++ b/src/panfrost/lib/pan_texture.h
+@@ -249,6 +249,8 @@ unsigned panfrost_afbc_superblock_height(uint64_t modifier);
+ 
+ bool panfrost_afbc_is_wide(uint64_t modifier);
+ 
++struct pan_block_size panfrost_afbc_subblock_size(uint64_t modifier);
++
+ uint32_t pan_afbc_row_stride(uint64_t modifier, uint32_t width);
+ 
+ uint32_t pan_afbc_stride_blocks(uint64_t modifier, uint32_t row_stride_bytes);
+-- 
+2.42.0
+

@@ -1,0 +1,59 @@
+From 649ebbb0fb7a429034314d12622da23065c2a88d Mon Sep 17 00:00:00 2001
+From: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Date: Wed, 30 Aug 2023 10:54:20 +0100
+Subject: [PATCH 644/834] pvr: Implement VK_EXT_texel_buffer_alignment
+
+This commit will implement the VK_EXT_texel_buffer_alignment
+extension and add the texture_baseaddress_byte_aligned feature.
+
+Signed-off-by: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Reviewed-by: Matt Coster <matt.coster@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25781>
+---
+ docs/features.txt                   | 2 +-
+ src/imagination/vulkan/pvr_device.c | 7 ++++++-
+ 2 files changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index 023c44c0e57..7f0e6757297 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -494,7 +494,7 @@ Vulkan 1.3 -- all DONE: anv, radv, tu, lvp, vn
+   VK_EXT_image_robustness                               DONE (anv, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+   VK_EXT_shader_demote_to_helper_invocation             DONE (anv, hasvk, lvp, radv, tu, vn)
+   VK_EXT_subgroup_size_control                          DONE (anv, hasvk, lvp, radv, tu, vn)
+-  VK_EXT_texel_buffer_alignment                         DONE (anv, hasvk, lvp, radv, tu, v3dv, vn)
++  VK_EXT_texel_buffer_alignment                         DONE (anv, hasvk, lvp, pvr, radv, tu, v3dv, vn)
+   VK_EXT_texture_compression_astc_hdr                   DONE (vn)
+   VK_EXT_tooling_info                                   DONE (anv, hasvk, nvk, pvr, radv, tu, v3dv, vn)
+   VK_EXT_ycbcr_2plane_444_formats                       DONE (lvp, nvk, vn)
+diff --git a/src/imagination/vulkan/pvr_device.c b/src/imagination/vulkan/pvr_device.c
+index 303cf346e3d..9070be17182 100644
+--- a/src/imagination/vulkan/pvr_device.c
++++ b/src/imagination/vulkan/pvr_device.c
+@@ -186,6 +186,7 @@ static void pvr_physical_device_get_supported_extensions(
+       .EXT_external_memory_dma_buf = true,
+       .EXT_private_data = true,
+       .EXT_scalar_block_layout = true,
++      .EXT_texel_buffer_alignment = true,
+       .EXT_tooling_info = true,
+    };
+ }
+@@ -260,9 +261,13 @@ static void pvr_physical_device_get_supported_features(
+ 
+       /* Vulkan 1.3 / VK_EXT_private_data */
+       .privateData = true,
+-      
++
+       /* Vulkan 1.2 / VK_EXT_scalar_block_layout */
+       .scalarBlockLayout = true,
++
++      /* Vulkan 1.3 / VK_EXT_texel_buffer_alignment */
++      .texelBufferAlignment = true,
++
+    };
+ }
+ 
+-- 
+2.42.0
+

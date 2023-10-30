@@ -1,0 +1,281 @@
+From ee6e2bc4a31345e50b3c674cdae233a5de5179d1 Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Fri, 25 Aug 2023 17:03:59 -0400
+Subject: [PATCH 679/834] anv: Place images into the aux-map when safe to do so
+
+At image bind time, if an image's addresses can be placed into the
+aux-map without causing conflicts with a pre-existing mapping, do so.
+The code aux management code in the binding function operates on a
+per-plane basis. So, use the per-plane CCS memory range from the image
+rather than the CCS memory region for the entire BO.
+
+Another way to avoid aux-map conflicts is to rely solely on having a
+dedicated allocation for an image. Unfortunately, not all workloads
+change their behavior when drivers report a preference for dedicated
+allocations. In particular, 3DMark Wild Life Extreme does not make more
+dedicated allocations and such a solution was measured to perform ~16%
+worse than this solution. With this solution, I did not measure a loss
+of CCS on that benchmark.
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/6304
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com> (v1)
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_allocator.c   |  18 +---
+ src/intel/vulkan/anv_image.c       |  19 ++++-
+ src/intel/vulkan/anv_private.h     |   5 +-
+ src/intel/vulkan/genX_cmd_buffer.c | 132 -----------------------------
+ 4 files changed, 26 insertions(+), 148 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_allocator.c b/src/intel/vulkan/anv_allocator.c
+index 662407647df..c1bf5086571 100644
+--- a/src/intel/vulkan/anv_allocator.c
++++ b/src/intel/vulkan/anv_allocator.c
+@@ -1508,15 +1508,6 @@ anv_device_alloc_bo(struct anv_device *device,
+       return vk_errorf(device, VK_ERROR_UNKNOWN, "vm bind failed");
+    }
+ 
+-   if (new_bo._ccs_size > 0) {
+-      assert(device->info->has_aux_map);
+-      const bool mapped =
+-         intel_aux_map_add_mapping(device->aux_map_ctx, new_bo.offset,
+-                                   intel_canonical_address(new_bo.offset + new_bo.size),
+-                                   new_bo.size, 0 /* format_bits */);
+-      assert(mapped);
+-   }
+-
+    assert(new_bo.gem_handle);
+ 
+    /* If we just got this gem_handle from anv_bo_init_new then we know no one
+@@ -1867,12 +1858,11 @@ anv_device_release_bo(struct anv_device *device,
+    }
+    assert(bo->refcount == 0);
+ 
+-   if (bo->_ccs_size > 0) {
+-      assert(device->physical->has_implicit_ccs);
+-      assert(device->info->has_aux_map);
+-      assert(bo->has_implicit_ccs);
++   /* Unmap the entire BO. In the case that some addresses lacked an aux-map
++    * entry, the unmapping function will add table entries for them.
++    */
++   if (anv_bo_allows_aux_map(device, bo))
+       intel_aux_map_unmap_range(device->aux_map_ctx, bo->offset, bo->size);
+-   }
+ 
+    /* Memset the BO just in case.  The refcount being zero should be enough to
+     * prevent someone from assuming the data is valid but it's safer to just
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index e0dbff99b02..e0549d78ea8 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -2273,8 +2273,25 @@ VkResult anv_BindImageMemory2(
+          if (device->info->has_flat_ccs && bo->vram_only)
+             continue;
+ 
++         /* Add the plane to the aux map when applicable. */
+          if (anv_bo_allows_aux_map(device, bo)) {
+-            continue;
++            const struct anv_address main_addr =
++               anv_image_address(image,
++                 &image->planes[p].primary_surface.memory_range);
++            const struct anv_address aux_addr =
++               anv_image_address(image,
++                 &image->planes[p].compr_ctrl_memory_range);
++            const struct isl_surf *surf =
++               &image->planes[p].primary_surface.isl;
++            const uint64_t format_bits =
++               intel_aux_map_format_bits_for_isl_surf(surf);
++            const bool mapped =
++               intel_aux_map_add_mapping(device->aux_map_ctx,
++                                         anv_address_physical(main_addr),
++                                         anv_address_physical(aux_addr),
++                                         surf->size_B, format_bits);
++            if (mapped)
++               continue;
+          }
+ 
+          /* Do nothing prior to gfx12. There are no special requirements. */
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index f824d29668f..9d64ef4b9d7 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -4855,7 +4855,10 @@ static inline const struct anv_image_memory_range *
+ anv_image_get_aux_memory_range(const struct anv_image *image,
+                                uint32_t plane)
+ {
+-  return &image->planes[plane].aux_surface.memory_range;
++   if (image->planes[plane].aux_surface.memory_range.size > 0)
++     return &image->planes[plane].aux_surface.memory_range;
++   else
++     return &image->planes[plane].compr_ctrl_memory_range;
+ }
+ 
+ /* Returns true if a HiZ-enabled depth buffer can be sampled from. */
+diff --git a/src/intel/vulkan/genX_cmd_buffer.c b/src/intel/vulkan/genX_cmd_buffer.c
+index f46a24a7dfd..4bc160b012e 100644
+--- a/src/intel/vulkan/genX_cmd_buffer.c
++++ b/src/intel/vulkan/genX_cmd_buffer.c
+@@ -339,113 +339,6 @@ add_surface_state_relocs(struct anv_cmd_buffer *cmd_buffer,
+    }
+ }
+ 
+-#define READ_ONCE(x) (*(volatile __typeof__(x) *)&(x))
+-
+-#if GFX_VER == 12
+-static void
+-anv_image_init_aux_tt(struct anv_cmd_buffer *cmd_buffer,
+-                      const struct anv_image *image,
+-                      VkImageAspectFlagBits aspect,
+-                      uint32_t base_level, uint32_t level_count,
+-                      uint32_t base_layer, uint32_t layer_count)
+-{
+-   const uint32_t plane = anv_image_aspect_to_plane(image, aspect);
+-
+-   const struct anv_surface *surface = &image->planes[plane].primary_surface;
+-   uint64_t base_address =
+-      anv_address_physical(anv_image_address(image, &surface->memory_range));
+-
+-   const struct isl_surf *isl_surf = &image->planes[plane].primary_surface.isl;
+-   uint64_t format_bits = intel_aux_map_format_bits_for_isl_surf(isl_surf);
+-
+-   /* We're about to live-update the AUX-TT.  We really don't want anyone else
+-    * trying to read it while we're doing this.  We could probably get away
+-    * with not having this stall in some cases if we were really careful but
+-    * it's better to play it safe.  Full stall the GPU.
+-    */
+-   anv_add_pending_pipe_bits(cmd_buffer,
+-                             ANV_PIPE_END_OF_PIPE_SYNC_BIT,
+-                             "before update AUX-TT");
+-   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
+-
+-   struct mi_builder b;
+-   mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
+-
+-   for (uint32_t a = 0; a < layer_count; a++) {
+-      const uint32_t layer = base_layer + a;
+-
+-      uint64_t start_offset_B = UINT64_MAX, end_offset_B = 0;
+-      for (uint32_t l = 0; l < level_count; l++) {
+-         const uint32_t level = base_level + l;
+-
+-         uint32_t logical_array_layer, logical_z_offset_px;
+-         if (image->vk.image_type == VK_IMAGE_TYPE_3D) {
+-            logical_array_layer = 0;
+-
+-            /* If the given miplevel does not have this layer, then any higher
+-             * miplevels won't either because miplevels only get smaller the
+-             * higher the LOD.
+-             */
+-            assert(layer < image->vk.extent.depth);
+-            if (layer >= u_minify(image->vk.extent.depth, level))
+-               break;
+-            logical_z_offset_px = layer;
+-         } else {
+-            assert(layer < image->vk.array_layers);
+-            logical_array_layer = layer;
+-            logical_z_offset_px = 0;
+-         }
+-
+-         uint64_t slice_start_offset_B, slice_end_offset_B;
+-         isl_surf_get_image_range_B_tile(isl_surf, level,
+-                                         logical_array_layer,
+-                                         logical_z_offset_px,
+-                                         &slice_start_offset_B,
+-                                         &slice_end_offset_B);
+-
+-         start_offset_B = MIN2(start_offset_B, slice_start_offset_B);
+-         end_offset_B = MAX2(end_offset_B, slice_end_offset_B);
+-      }
+-
+-      struct intel_aux_map_context *ctx = cmd_buffer->device->aux_map_ctx;
+-      /* It depends on what the purpose you use that figure from AUX module,
+-       * alignment, page size of main surface, or actually granularity...
+-       */
+-      uint64_t main_page_size = intel_aux_map_get_alignment(ctx);
+-      start_offset_B = ROUND_DOWN_TO(start_offset_B, main_page_size);
+-      end_offset_B = align64(end_offset_B, main_page_size);
+-
+-      for (uint64_t offset = start_offset_B;
+-           offset < end_offset_B; offset += main_page_size) {
+-         uint64_t address = base_address + offset;
+-
+-         uint64_t aux_entry_addr64, *aux_entry_map;
+-         struct intel_aux_map_context *ctx = cmd_buffer->device->aux_map_ctx;
+-         aux_entry_map = intel_aux_map_get_entry(ctx, address, &aux_entry_addr64);
+-
+-         struct anv_address aux_entry_address = {
+-            .bo = NULL,
+-            .offset = aux_entry_addr64,
+-         };
+-
+-         const uint64_t old_aux_entry = READ_ONCE(*aux_entry_map);
+-         uint64_t new_aux_entry =
+-            (old_aux_entry & intel_aux_get_meta_address_mask(ctx)) |
+-            format_bits;
+-
+-         if (isl_aux_usage_has_ccs(image->planes[plane].aux_usage))
+-            new_aux_entry |= INTEL_AUX_MAP_ENTRY_VALID_BIT;
+-
+-         mi_store(&b, mi_mem64(aux_entry_address), mi_imm(new_aux_entry));
+-      }
+-   }
+-
+-   anv_add_pending_pipe_bits(cmd_buffer,
+-                             ANV_PIPE_AUX_TABLE_INVALIDATE_BIT,
+-                             "after update AUX-TT");
+-}
+-#endif /* GFX_VER == 12 */
+-
+ /* Transitions a HiZ-enabled depth buffer from one layout to another. Unless
+  * the initial layout is undefined, the HiZ buffer and depth buffer will
+  * represent the same data at the end of this operation.
+@@ -463,16 +356,6 @@ transition_depth_buffer(struct anv_cmd_buffer *cmd_buffer,
+    if (image->planes[depth_plane].aux_usage == ISL_AUX_USAGE_NONE)
+       return;
+ 
+-#if GFX_VER == 12
+-   if ((initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
+-        initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) &&
+-       cmd_buffer->device->physical->has_implicit_ccs &&
+-       cmd_buffer->device->info->has_aux_map) {
+-      anv_image_init_aux_tt(cmd_buffer, image, VK_IMAGE_ASPECT_DEPTH_BIT,
+-                            0, 1, base_layer, layer_count);
+-   }
+-#endif
+-
+    /* If will_full_fast_clear is set, the caller promises to fast-clear the
+     * largest portion of the specified range as it can.  For depth images,
+     * that means the entire image because we don't support multi-LOD HiZ.
+@@ -541,9 +424,6 @@ transition_stencil_buffer(struct anv_cmd_buffer *cmd_buffer,
+         initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) &&
+        cmd_buffer->device->physical->has_implicit_ccs &&
+        cmd_buffer->device->info->has_aux_map) {
+-      anv_image_init_aux_tt(cmd_buffer, image, VK_IMAGE_ASPECT_STENCIL_BIT,
+-                            base_level, level_count, base_layer, layer_count);
+-
+       /* If will_full_fast_clear is set, the caller promises to fast-clear the
+        * largest portion of the specified range as it can.
+        */
+@@ -1160,18 +1040,6 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
+       }
+    }
+ 
+-#if GFX_VER == 12
+-   if (initial_layout_undefined) {
+-      if (device->physical->has_implicit_ccs && devinfo->has_aux_map) {
+-         anv_image_init_aux_tt(cmd_buffer, image, aspect,
+-                               base_level, level_count,
+-                               base_layer, layer_count);
+-      }
+-   }
+-#else
+-   assert(!(device->physical->has_implicit_ccs && devinfo->has_aux_map));
+-#endif
+-
+    if (must_init_fast_clear_state) {
+       if (base_level == 0 && base_layer == 0) {
+          set_image_fast_clear_state(cmd_buffer, image, aspect,
+-- 
+2.42.0
+

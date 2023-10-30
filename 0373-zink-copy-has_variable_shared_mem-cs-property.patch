@@ -1,0 +1,40 @@
+From a3214e89760963da327f3de793191f89d042a1d0 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 373/834] zink: copy has_variable_shared_mem cs property
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/drivers/zink/zink_program.c | 1 +
+ src/gallium/drivers/zink/zink_types.h   | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/zink_program.c b/src/gallium/drivers/zink/zink_program.c
+index 0fc39a26c83..25790ac60cf 100644
+--- a/src/gallium/drivers/zink/zink_program.c
++++ b/src/gallium/drivers/zink/zink_program.c
+@@ -1370,6 +1370,7 @@ create_compute_program(struct zink_context *ctx, nir_shader *nir)
+    comp->use_local_size = !(nir->info.workgroup_size[0] ||
+                             nir->info.workgroup_size[1] ||
+                             nir->info.workgroup_size[2]);
++   comp->has_variable_shared_mem = nir->info.cs.has_variable_shared_mem;
+    comp->base.can_precompile = !comp->use_local_size &&
+                                (screen->info.have_EXT_non_seamless_cube_map || !zink_shader_has_cubes(nir)) &&
+                                (screen->info.rb2_feats.robustImageAccess2 || !(ctx->flags & PIPE_CONTEXT_ROBUST_BUFFER_ACCESS));
+diff --git a/src/gallium/drivers/zink/zink_types.h b/src/gallium/drivers/zink/zink_types.h
+index 86926758a34..0dbb4d3c545 100644
+--- a/src/gallium/drivers/zink/zink_types.h
++++ b/src/gallium/drivers/zink/zink_types.h
+@@ -1131,6 +1131,7 @@ struct zink_compute_program {
+    struct zink_program base;
+ 
+    bool use_local_size;
++   bool has_variable_shared_mem;
+ 
+    unsigned scratch_size;
+ 
+-- 
+2.42.0
+

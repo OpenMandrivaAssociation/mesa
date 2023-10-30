@@ -1,0 +1,27 @@
+From 569d44eff4b3e52e1b5c963b03f1e46b1f85f705 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Tue, 5 Sep 2023 17:43:49 -0400
+Subject: [PATCH 209/834] nir/print: Handle KERNEL
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25625>
+---
+ src/compiler/nir/nir_print.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/compiler/nir/nir_print.c b/src/compiler/nir/nir_print.c
+index 6c7bc824798..80414ca4f15 100644
+--- a/src/compiler/nir/nir_print.c
++++ b/src/compiler/nir/nir_print.c
+@@ -2551,6 +2551,7 @@ print_shader_info(const struct shader_info *info, FILE *fp)
+       break;
+ 
+    case MESA_SHADER_COMPUTE:
++   case MESA_SHADER_KERNEL:
+       if (info->cs.workgroup_size_hint[0] || info->cs.workgroup_size_hint[1] || info->cs.workgroup_size_hint[2])
+          fprintf(fp, "workgroup_size_hint: {%u, %u, %u}\n",
+                  info->cs.workgroup_size_hint[0],
+-- 
+2.42.0
+

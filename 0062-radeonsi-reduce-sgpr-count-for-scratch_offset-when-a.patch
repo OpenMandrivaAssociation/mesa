@@ -1,0 +1,51 @@
+From c77a57b981db032cdd1e6f092b644fbfe620a280 Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Sun, 6 Aug 2023 11:12:17 +0800
+Subject: [PATCH 062/834] radeonsi: reduce sgpr count for scratch_offset when
+ aco
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+aco add scratch_offset to shader args explicitly.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24989>
+---
+ src/gallium/drivers/radeonsi/si_shader.c | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_shader.c b/src/gallium/drivers/radeonsi/si_shader.c
+index 488cd6c84fd..71f101d5ecc 100644
+--- a/src/gallium/drivers/radeonsi/si_shader.c
++++ b/src/gallium/drivers/radeonsi/si_shader.c
+@@ -2877,11 +2877,22 @@ bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compi
+       }
+    }
+ 
+-   /* Add the scratch offset to input SGPRs. */
++   /* Add/remove the scratch offset to/from input SGPRs. */
+    if (sel->screen->info.gfx_level < GFX11 &&
+        (sel->screen->info.family < CHIP_GFX940 || sel->screen->info.has_graphics) &&
+-       shader->config.scratch_bytes_per_wave && !si_is_merged_shader(shader))
+-      shader->info.num_input_sgprs += 1; /* scratch byte offset */
++       !si_is_merged_shader(shader)) {
++      if (shader->use_aco) {
++         /* When aco scratch_offset arg is added explicitly at the beginning.
++          * After compile if no scratch used, reduce the input sgpr count.
++          */
++         if (!shader->config.scratch_bytes_per_wave)
++            shader->info.num_input_sgprs--;
++      } else {
++         /* scratch_offset arg is added by llvm implicitly */
++         if (shader->info.num_input_sgprs)
++            shader->info.num_input_sgprs++;
++      }
++   }
+ 
+    /* Calculate the number of fragment input VGPRs. */
+    if (sel->stage == MESA_SHADER_FRAGMENT) {
+-- 
+2.42.0
+

@@ -1,0 +1,32 @@
+From 62fded5e4f8fce10abcb310b03a135ed794dff28 Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Wed, 27 Sep 2023 07:28:11 -0400
+Subject: [PATCH 617/834] d3d12: Allocate d3d12_video_buffer with higher
+ alignment for compatibility
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ src/gallium/drivers/d3d12/d3d12_video_buffer.cpp | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp b/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp
+index 0dfdf65a4aa..a801ce11c0f 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp
+@@ -73,9 +73,10 @@ d3d12_video_buffer_create_impl(struct pipe_context *pipe,
+    templ.target     = PIPE_TEXTURE_2D;
+    templ.bind       = pD3D12VideoBuffer->base.bind;
+    templ.format     = pD3D12VideoBuffer->base.buffer_format;
+-   // YUV 4:2:0 formats in D3D12 need to have multiple of 2 dimensions
++   // YUV 4:2:0 formats in D3D12 need to at least be multiple of 2 dimensions
++   // However, we allocate with a higher alignment to maximize HW compatibility
+    templ.width0     = align(pD3D12VideoBuffer->base.width, 2);
+-   templ.height0    = align(pD3D12VideoBuffer->base.height, 2);
++   templ.height0    = align(pD3D12VideoBuffer->base.height, 16);
+    templ.depth0     = 1;
+    templ.array_size = 1;
+    templ.flags      = 0;
+-- 
+2.42.0
+

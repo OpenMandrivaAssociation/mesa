@@ -1,0 +1,54 @@
+From 6f8d331188a9314fa310bdc1dec4122a3734d493 Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Wed, 10 Nov 2021 07:54:35 +0100
+Subject: [PATCH 313/834] v3dv/device: handle new rpi5 device (bcm2712)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This includes both master and primary devices.
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/vulkan/v3dv_device.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/src/broadcom/vulkan/v3dv_device.c b/src/broadcom/vulkan/v3dv_device.c
+index c9a826b1828..3c324a76138 100644
+--- a/src/broadcom/vulkan/v3dv_device.c
++++ b/src/broadcom/vulkan/v3dv_device.c
+@@ -1255,7 +1255,8 @@ enumerate_devices(struct vk_instance *vk_instance)
+       if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER) {
+          char **compat = devices[i]->deviceinfo.platform->compatible;
+          while (*compat) {
+-            if (strncmp(*compat, "brcm,2711-v3d", 13) == 0) {
++            if (strncmp(*compat, "brcm,2711-v3d", 13) == 0 ||
++                strncmp(*compat, "brcm,2712-v3d", 13) == 0) {
+                v3d_idx = i;
+                break;
+             }
+@@ -1264,8 +1265,9 @@ enumerate_devices(struct vk_instance *vk_instance)
+       } else if (devices[i]->available_nodes & 1 << DRM_NODE_PRIMARY) {
+          char **compat = devices[i]->deviceinfo.platform->compatible;
+          while (*compat) {
+-            if (strncmp(*compat, "brcm,bcm2711-vc5", 16) == 0 ||
+-                strncmp(*compat, "brcm,bcm2835-vc4", 16) == 0 ) {
++            if (strncmp(*compat, "brcm,bcm2712-vc6", 16) == 0 ||
++                strncmp(*compat, "brcm,bcm2711-vc5", 16) == 0 ||
++                strncmp(*compat, "brcm,bcm2835-vc4", 16) == 0) {
+                vc4_idx = i;
+                break;
+             }
+@@ -1303,6 +1305,8 @@ v3dv_physical_device_device_id(struct v3dv_physical_device *dev)
+    switch (dev->devinfo.ver) {
+    case 42:
+       return 0xBE485FD3; /* Broadcom deviceID for 2711 */
++   case 71:
++      return 0x55701C33; /* Broadcom deviceID for 2712 */
+    default:
+       unreachable("Unsupported V3D version");
+    }
+-- 
+2.42.0
+

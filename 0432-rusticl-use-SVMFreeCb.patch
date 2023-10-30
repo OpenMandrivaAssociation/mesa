@@ -1,0 +1,64 @@
+From bef50d164f9c0600490be34b130422588d609920 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Thu, 12 Oct 2023 00:09:10 +0200
+Subject: [PATCH 432/834] rusticl: use SVMFreeCb
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/memory.rs | 7 +++++--
+ src/gallium/frontends/rusticl/api/types.rs  | 3 +++
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/memory.rs b/src/gallium/frontends/rusticl/api/memory.rs
+index 13cb29da3e4..dfac9ff39aa 100644
+--- a/src/gallium/frontends/rusticl/api/memory.rs
++++ b/src/gallium/frontends/rusticl/api/memory.rs
+@@ -2371,6 +2371,9 @@ fn enqueue_svm_free_impl(
+     // SAFETY: num_svm_pointers specifies the amount of elements in svm_pointers
+     let svm_pointers =
+         unsafe { slice::from_raw_parts(svm_pointers, num_svm_pointers as usize) }.to_vec();
++    // SAFETY: The requirements on `SVMFreeCb::new` match the requirements
++    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
++    let cb_opt = unsafe { SVMFreeCb::new(pfn_free_func, user_data) }.ok();
+ 
+     create_and_queue(
+         q,
+@@ -2379,12 +2382,12 @@ fn enqueue_svm_free_impl(
+         event,
+         false,
+         Box::new(move |q, _| {
+-            if let Some(cb) = pfn_free_func {
++            if let Some(cb) = &cb_opt {
+                 let mut svm_pointers = svm_pointers.clone();
+                 let ptr = svm_pointers.as_mut_ptr();
+                 // SAFETY: it's undefined behavior if the application screws up
+                 unsafe {
+-                    cb(command_queue, num_svm_pointers, ptr, user_data);
++                    (cb.func)(command_queue, num_svm_pointers, ptr, cb.data);
+                 }
+             } else {
+                 for &ptr in &svm_pointers {
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 2e9b518df54..31919124eea 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -53,12 +53,15 @@ macro_rules! cl_callback {
+             ///   [`clSetMemObjectDestructorCallback`] in the OpenCL specification.
+             /// - ProgramCB: `func` must be soundly callable as documented on
+             ///   [`clBuildProgram`] in the OpenCL specification.
++            /// - SVMFreeCb: `func` must be soundly callable as documented on
++            ///   [`clEnqueueSVMFree`] in the OpenCL specification.
+             ///
+             /// [`clCreateContext`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clCreateContext
+             /// [`clSetContextDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetContextDestructorCallback
+             /// [`clSetEventCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetEventCallback
+             /// [`clSetMemObjectDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetMemObjectDestructorCallback
+             /// [`clBuildProgram`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clBuildProgram
++            /// [`clEnqueueSVMFree`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clEnqueueSVMFree
+             pub unsafe fn new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Self> {
+                 let Some(func) = func else {
+                     return Err(CL_INVALID_VALUE);
+-- 
+2.42.0
+

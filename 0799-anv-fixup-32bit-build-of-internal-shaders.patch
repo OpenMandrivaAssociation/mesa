@@ -1,0 +1,126 @@
+From 3de5da7a5d6c508ee7665c827aa31bfcba09f687 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Tue, 24 Oct 2023 23:06:01 +0300
+Subject: [PATCH 799/834] anv: fixup 32bit build of internal shaders
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Fixes: 11b4c23d19 ("anv: add ring buffer mode to generated draw optimization")
+Fixes: db335d9b73 ("anv: factor out host/gpu internal shaders interfaces")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10037
+Reviewed-by: Tapani Pälli <tapani.palli@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25870>
+---
+ src/intel/vulkan/anv_internal_kernels.h | 14 +++++++-------
+ src/intel/vulkan/shaders/interface.h    | 13 +++++++------
+ 2 files changed, 14 insertions(+), 13 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_internal_kernels.h b/src/intel/vulkan/anv_internal_kernels.h
+index ce1196246ea..cfb0d700670 100644
+--- a/src/intel/vulkan/anv_internal_kernels.h
++++ b/src/intel/vulkan/anv_internal_kernels.h
+@@ -26,12 +26,9 @@
+ 
+ #include "shaders/interface.h"
+ 
+-struct anv_generated_indirect_params {
++struct PACKED anv_generated_indirect_params {
+    struct anv_generated_indirect_draw_params draw;
+ 
+-   /* Draw count value for non count variants of draw indirect commands */
+-   uint32_t draw_count;
+-
+    /* Global address of binding 0 */
+    uint64_t indirect_data_addr;
+ 
+@@ -44,6 +41,9 @@ struct anv_generated_indirect_params {
+    /* Global address of binding 3 (points to the draw_count field above) */
+    uint64_t draw_count_addr;
+ 
++   /* Draw count value for non count variants of draw indirect commands */
++   uint32_t draw_count;
++
+    /* CPU side pointer to the previous item when number of draws has to be
+     * split into smaller chunks, see while loop in
+     * genX(cmd_buffer_emit_indirect_generated_draws)
+@@ -51,7 +51,7 @@ struct anv_generated_indirect_params {
+    struct anv_generated_indirect_params *prev;
+ };
+ 
+-struct anv_query_copy_params {
++struct PACKED anv_query_copy_params {
+    struct anv_query_copy_shader_params copy;
+ 
+    uint64_t query_data_addr;
+@@ -63,12 +63,12 @@ struct anv_query_copy_params {
+  *
+  *    layout(set = 0, binding = 2) uniform block
+  */
+-struct anv_memcpy_shader_params {
++struct PACKED anv_memcpy_shader_params {
+    uint32_t num_dwords;
+    uint32_t pad;
+ };
+ 
+-struct anv_memcpy_params {
++struct PACKED anv_memcpy_params {
+    struct anv_memcpy_shader_params copy;
+ 
+    uint64_t src_addr;
+diff --git a/src/intel/vulkan/shaders/interface.h b/src/intel/vulkan/shaders/interface.h
+index e735b75ae97..58968cf94d4 100644
+--- a/src/intel/vulkan/shaders/interface.h
++++ b/src/intel/vulkan/shaders/interface.h
+@@ -28,6 +28,7 @@
+ #define BITFIELD_BIT(i) (1u << i)
+ 
+ #define uint32_t uint
++#define PACKED
+ #else
+ #include "util/macros.h"
+ 
+@@ -47,7 +48,7 @@
+ /* Whether the generation shader writes to the ring buffer */
+ #define ANV_GENERATED_FLAG_RING_MODE  BITFIELD_BIT(5)
+ 
+-struct anv_generated_indirect_draw_params {
++struct PACKED anv_generated_indirect_draw_params {
+    /* Draw ID buffer address (only used on Gfx9) */
+    uint64_t draw_id_addr;
+    /* Indirect data buffer address (only used on Gfx9) */
+@@ -63,6 +64,10 @@ struct anv_generated_indirect_draw_params {
+     * an indirect count)
+     */
+    uint32_t max_draw_count;
++   /* Number of draws to generate in the ring buffer (only useful in ring
++    * buffer mode)
++    */
++   uint32_t ring_count;
+    /* Instance multiplier for multi view */
+    uint32_t instance_multiplier;
+    /* Address where to jump at to generate further draws (used with ring mode)
+@@ -72,10 +77,6 @@ struct anv_generated_indirect_draw_params {
+     * indirect draw count variants)
+     */
+    uint64_t end_addr;
+-   /* Number of draws to generate in the ring buffer (only useful in ring
+-    * buffer mode)
+-    */
+-   uint32_t ring_count;
+ };
+ 
+ #define ANV_COPY_QUERY_FLAG_RESULT64  BITFIELD_BIT(0)
+@@ -87,7 +88,7 @@ struct anv_generated_indirect_draw_params {
+  *
+  *    layout(set = 0, binding = 2) uniform block
+  */
+-struct anv_query_copy_shader_params {
++struct PACKED anv_query_copy_shader_params {
+    /* ANV_COPY_QUERY_FLAG_* flags */
+    uint32_t flags;
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,209 @@
+From 2b6a42191525cb43484a704c0426192a5de3d863 Mon Sep 17 00:00:00 2001
+From: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Date: Thu, 17 Aug 2023 18:20:50 -0300
+Subject: [PATCH 506/834] pipe-loader: add
+ pipe_loader_get_compatible_render_capable_device_fd()
+
+pipe_loader_get_compatible_render_capable_device_fd() receives the fd of
+a KMS-only platform device, find a compatible render-only device that is
+available and returns the fd of its DRM render node.
+
+This function will be helpful to fix a long standing issue that is
+preventing us to add support for EGL_EXT_device_drm_render_node for
+split display/render SoCs. And it will also help KMSRO to select a
+render-only driver that we are sure that is compatible, because
+currently KMSRO uses whatever render-only driver is available.
+
+In sort, in the EGL GBM platform case, the GBM device may be created
+with a KMS-only device. The information of what render driver will be
+selected by KMSRO is not available before creating the EGLDevice global
+list. Without this information we don't have a render node to use in the
+EGL_EXT_device_drm_render_node query. We've tried to fix this before,
+but failed. See [1-2].
+
+For the moment, this function only works for platform KMS-only devices.
+For other types of KMS-only devices, we'll need to add more heuristics.
+
+[1] Detailed explanation of the issue:
+https://gitlab.freedesktop.org/mesa/mesa/-/issues/5591
+
+[2] Previous attempt to fix:
+https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/12796
+
+Signed-off-by: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Reviewed-by: Simon Ser <contact@emersion.fr>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24825>
+---
+ src/gallium/auxiliary/pipe-loader/meson.build | 25 +++++++++-
+ .../auxiliary/pipe-loader/pipe_loader.h       |  7 +++
+ .../auxiliary/pipe-loader/pipe_loader_drm.c   | 48 +++++++++++++++++++
+ src/gallium/winsys/kmsro/drm/meson.build      | 25 +---------
+ 4 files changed, 80 insertions(+), 25 deletions(-)
+
+diff --git a/src/gallium/auxiliary/pipe-loader/meson.build b/src/gallium/auxiliary/pipe-loader/meson.build
+index 1c768e73b62..7927515cf98 100644
+--- a/src/gallium/auxiliary/pipe-loader/meson.build
++++ b/src/gallium/auxiliary/pipe-loader/meson.build
+@@ -34,6 +34,29 @@ if dep_libdrm.found()
+   libpipe_loader_links += libloader
+ endif
+ 
++renderonly_drivers_c_args = []
++if with_gallium_etnaviv
++  renderonly_drivers_c_args += '-DGALLIUM_ETNAVIV'
++endif
++if with_gallium_lima
++  renderonly_drivers_c_args += '-DGALLIUM_LIMA'
++endif
++if with_gallium_v3d
++  renderonly_drivers_c_args += '-DGALLIUM_V3D'
++endif
++if with_gallium_vc4
++  renderonly_drivers_c_args += '-DGALLIUM_VC4'
++endif
++if with_gallium_freedreno
++  renderonly_drivers_c_args += '-DGALLIUM_FREEDRENO'
++endif
++if with_gallium_panfrost
++  renderonly_drivers_c_args += '-DGALLIUM_PANFROST'
++endif
++if with_gallium_asahi
++  renderonly_drivers_c_args += '-DGALLIUM_ASAHI'
++endif
++
+ libpipe_loader_static = static_library(
+   'pipe_loader_static',
+   files_pipe_loader,
+@@ -41,7 +64,7 @@ libpipe_loader_static = static_library(
+     inc_util, inc_loader, inc_gallium, inc_include, inc_src, inc_gallium_aux,
+     inc_gallium_winsys, inc_gallium_drivers,
+   ],
+-  c_args : [libpipe_loader_defines, '-DGALLIUM_STATIC_TARGETS=1'],
++  c_args : [libpipe_loader_defines, '-DGALLIUM_STATIC_TARGETS=1', renderonly_drivers_c_args],
+   gnu_symbol_visibility : 'hidden',
+   link_with : [libpipe_loader_links],
+   dependencies : [dep_libdrm, idep_xmlconfig, idep_mesautil],
+diff --git a/src/gallium/auxiliary/pipe-loader/pipe_loader.h b/src/gallium/auxiliary/pipe-loader/pipe_loader.h
+index b13fa9b5bb1..9a5cb3b00e6 100644
+--- a/src/gallium/auxiliary/pipe-loader/pipe_loader.h
++++ b/src/gallium/auxiliary/pipe-loader/pipe_loader.h
+@@ -226,6 +226,13 @@ int
+ pipe_loader_drm_zink_probe(struct pipe_loader_device **devs, int ndev);
+ #endif
+ 
++/**
++ * Get the fd of a render-capable device compatible with a given display-only
++ * device fd.
++ */
++int
++pipe_loader_get_compatible_render_capable_device_fd(int kms_only_fd);
++
+ /**
+  * Initialize a DRM device in an already opened fd.
+  *
+diff --git a/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c b/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
+index 44934c1255d..055c637199d 100644
+--- a/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
++++ b/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
+@@ -269,6 +269,54 @@ pipe_loader_drm_release(struct pipe_loader_device **dev)
+    pipe_loader_base_release(dev);
+ }
+ 
++int
++pipe_loader_get_compatible_render_capable_device_fd(int kms_only_fd)
++{
++   bool is_platform_device;
++   struct pipe_loader_device *dev;
++   const char * const drivers[] = {
++#if defined GALLIUM_ASAHI
++      "asahi",
++#endif
++#if defined GALLIUM_ETNAVIV
++      "etnaviv",
++#endif
++#if defined GALLIUM_FREEDRENO
++      "msm",
++#endif
++#if defined GALLIUM_LIMA
++      "lima",
++#endif
++#if defined GALLIUM_PANFROST
++      "panfrost",
++#endif
++#if defined GALLIUM_V3D
++      "v3d",
++#endif
++#if defined GALLIUM_VC4
++      "vc4",
++#endif
++   };
++
++   if (!pipe_loader_drm_probe_fd(&dev, kms_only_fd, false))
++      return -1;
++   is_platform_device = (dev->type == PIPE_LOADER_DEVICE_PLATFORM);
++   pipe_loader_release(&dev, 1);
++
++   /* For display-only devices that are not on the platform bus, we can't assume
++    * that any of the rendering devices are compatible. */
++   if (!is_platform_device)
++      return -1;
++
++   /* For platform display-only devices, we try to find a render-capable device
++    * on the platform bus and that should be compatible with the display-only
++    * device. */
++   if (ARRAY_SIZE(drivers) == 0)
++      return -1;
++
++   return loader_open_render_node_platform_device(drivers, ARRAY_SIZE(drivers));
++}
++
+ static const struct driOptionDescription *
+ pipe_loader_drm_get_driconf(struct pipe_loader_device *dev, unsigned *count)
+ {
+diff --git a/src/gallium/winsys/kmsro/drm/meson.build b/src/gallium/winsys/kmsro/drm/meson.build
+index 324435a675d..3203dd53ee1 100644
+--- a/src/gallium/winsys/kmsro/drm/meson.build
++++ b/src/gallium/winsys/kmsro/drm/meson.build
+@@ -18,29 +18,6 @@
+ # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ # SOFTWARE.
+ 
+-kmsro_c_args = []
+-if with_gallium_etnaviv
+-  kmsro_c_args += '-DGALLIUM_ETNAVIV'
+-endif
+-if with_gallium_lima
+-  kmsro_c_args += '-DGALLIUM_LIMA'
+-endif
+-if with_gallium_v3d
+-  kmsro_c_args += '-DGALLIUM_V3D'
+-endif
+-if with_gallium_vc4
+-  kmsro_c_args += '-DGALLIUM_VC4'
+-endif
+-if with_gallium_freedreno
+-  kmsro_c_args += '-DGALLIUM_FREEDRENO'
+-endif
+-if with_gallium_panfrost
+-  kmsro_c_args += '-DGALLIUM_PANFROST'
+-endif
+-if with_gallium_asahi
+-  kmsro_c_args += '-DGALLIUM_ASAHI'
+-endif
+-
+ libkmsrowinsys = static_library(
+   'kmsrowinsys',
+   files('kmsro_drm_winsys.c'),
+@@ -48,7 +25,7 @@ libkmsrowinsys = static_library(
+     inc_src, inc_include,
+     inc_gallium, inc_gallium_aux, inc_gallium_winsys,
+   ],
+-  c_args : [kmsro_c_args],
++  c_args : [renderonly_drivers_c_args],
+   gnu_symbol_visibility : 'hidden',
+   dependencies: [dep_libdrm, idep_mesautil],
+ )
+-- 
+2.42.0
+

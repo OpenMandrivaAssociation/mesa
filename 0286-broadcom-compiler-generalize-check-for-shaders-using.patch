@@ -1,0 +1,36 @@
+From 5c7224b81f96f897616deca50bbc36744ea04110 Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Fri, 8 Oct 2021 15:10:24 +0200
+Subject: [PATCH 286/834] broadcom/compiler: generalize check for shaders using
+ pixel center W
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+V3D 4.x has pixel center W in rf0 and V3D 7.x has it in rf3. We already
+account for this when we setup the c->payload_w, so use that.
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/compiler/nir_to_vir.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/broadcom/compiler/nir_to_vir.c b/src/broadcom/compiler/nir_to_vir.c
+index 5776bfcde30..27a45e452ca 100644
+--- a/src/broadcom/compiler/nir_to_vir.c
++++ b/src/broadcom/compiler/nir_to_vir.c
+@@ -4533,8 +4533,8 @@ vir_check_payload_w(struct v3d_compile *c)
+ 
+         vir_for_each_inst_inorder(inst, c) {
+                 for (int i = 0; i < vir_get_nsrc(inst); i++) {
+-                        if (inst->src[i].file == QFILE_REG &&
+-                            inst->src[i].index == 0) {
++                        if (inst->src[i].file == c->payload_w.file &&
++                            inst->src[i].index == c->payload_w.index) {
+                                 c->uses_center_w = true;
+                                 return;
+                         }
+-- 
+2.42.0
+

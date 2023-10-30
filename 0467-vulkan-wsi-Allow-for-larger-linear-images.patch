@@ -1,0 +1,63 @@
+From 7fb561eff20bf0404097ce5baf16c712809e464f Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Sat, 14 Oct 2023 09:47:50 -0500
+Subject: [PATCH 467/834] vulkan/wsi: Allow for larger linear images
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+For images of size 32768 × 32768 (which NVK allows), the linear image
+ends up being 4GB which overflows the uint32_t size as well as some of
+our alignment calculations.
+
+Reviewed-By: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25729>
+---
+ src/vulkan/wsi/wsi_common.c         | 11 ++++++-----
+ src/vulkan/wsi/wsi_common_private.h |  2 +-
+ 2 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/vulkan/wsi/wsi_common.c b/src/vulkan/wsi/wsi_common.c
+index 27fd4edeffa..a7d8e1cf659 100644
+--- a/src/vulkan/wsi/wsi_common.c
++++ b/src/vulkan/wsi/wsi_common.c
+@@ -1947,17 +1947,18 @@ wsi_configure_buffer_image(UNUSED const struct wsi_swapchain *chain,
+ 
+    const uint32_t cpp = vk_format_get_blocksize(pCreateInfo->imageFormat);
+    info->linear_stride = pCreateInfo->imageExtent.width * cpp;
+-   info->linear_stride = ALIGN_POT(info->linear_stride, stride_align);
++   info->linear_stride = align(info->linear_stride, stride_align);
+ 
+    /* Since we can pick the stride to be whatever we want, also align to the
+     * device's optimalBufferCopyRowPitchAlignment so we get efficient copies.
+     */
+    assert(wsi->optimalBufferCopyRowPitchAlignment > 0);
+-   info->linear_stride = ALIGN_POT(info->linear_stride,
+-                                   wsi->optimalBufferCopyRowPitchAlignment);
++   info->linear_stride = align(info->linear_stride,
++                               wsi->optimalBufferCopyRowPitchAlignment);
+ 
+-   info->linear_size = info->linear_stride * pCreateInfo->imageExtent.height;
+-   info->linear_size = ALIGN_POT(info->linear_size, size_align);
++   info->linear_size = (uint64_t)info->linear_stride *
++                       pCreateInfo->imageExtent.height;
++   info->linear_size = align64(info->linear_size, size_align);
+ 
+    info->finish_create = wsi_finish_create_blit_context;
+ }
+diff --git a/src/vulkan/wsi/wsi_common_private.h b/src/vulkan/wsi/wsi_common_private.h
+index 8ee9c025e96..2b36bd9526c 100644
+--- a/src/vulkan/wsi/wsi_common_private.h
++++ b/src/vulkan/wsi/wsi_common_private.h
+@@ -96,7 +96,7 @@ struct wsi_image_info {
+    uint32_t linear_stride;
+ 
+    /* For buffer blit images, the size of the buffer in bytes */
+-   uint32_t linear_size;
++   uint64_t linear_size;
+ 
+    wsi_memory_type_select_cb select_image_memory_type;
+    wsi_memory_type_select_cb select_blit_dst_memory_type;
+-- 
+2.42.0
+

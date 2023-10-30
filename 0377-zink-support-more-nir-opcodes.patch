@@ -1,0 +1,44 @@
+From 82eed326f47848fddef39b933a2ce9ab5492a4d8 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 377/834] zink: support more nir opcodes
+
+There are sadly no SPIRV variants for hadd or iadd_sat we can use, so
+lower those.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c | 1 +
+ src/gallium/drivers/zink/zink_compiler.c             | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index d1f26cbe158..b2080f6cf15 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -1834,6 +1834,7 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
+    UNOP(nir_op_f2f64, SpvOpFConvert)
+    UNOP(nir_op_bitfield_reverse, SpvOpBitReverse)
+    UNOP(nir_op_bit_count, SpvOpBitCount)
++   UNOP(nir_op_fisnormal, SpvOpIsNormal)
+ #undef UNOP
+ 
+    case nir_op_f2f16_rtz:
+diff --git a/src/gallium/drivers/zink/zink_compiler.c b/src/gallium/drivers/zink/zink_compiler.c
+index 57e8e4fdb95..d2061e492a9 100644
+--- a/src/gallium/drivers/zink/zink_compiler.c
++++ b/src/gallium/drivers/zink/zink_compiler.c
+@@ -1210,6 +1210,8 @@ zink_screen_init_compiler(struct zink_screen *screen)
+       .lower_flrp32 = true,
+       .lower_fpow = true,
+       .lower_fsat = true,
++      .lower_hadd = true,
++      .lower_iadd_sat = true,
+       .lower_extract_byte = true,
+       .lower_extract_word = true,
+       .lower_insert_byte = true,
+-- 
+2.42.0
+

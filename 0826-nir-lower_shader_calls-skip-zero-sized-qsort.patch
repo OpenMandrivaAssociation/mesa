@@ -1,0 +1,42 @@
+From 1afd0878e98aedeadd4f27186e5080bb33f55f67 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Wed, 27 Sep 2023 14:23:09 +0100
+Subject: [PATCH 826/834] nir/lower_shader_calls: skip zero-sized qsort
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes UBSan:
+src/compiler/nir/nir_lower_shader_calls.c:1681:7: runtime error: null pointer passed as argument 1, which is declared to never be null
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25853>
+---
+ src/compiler/nir/nir_lower_shader_calls.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/compiler/nir/nir_lower_shader_calls.c b/src/compiler/nir/nir_lower_shader_calls.c
+index c10f9301d64..d9e2a33966c 100644
+--- a/src/compiler/nir/nir_lower_shader_calls.c
++++ b/src/compiler/nir/nir_lower_shader_calls.c
+@@ -1678,10 +1678,12 @@ nir_opt_sort_and_pack_stack(nir_shader *shader,
+       }
+ 
+       /* Sort scratch item by component size. */
+-      qsort(util_dynarray_begin(&ops),
+-            util_dynarray_num_elements(&ops, struct scratch_item),
+-            sizeof(struct scratch_item),
+-            sort_scratch_item_by_size_and_value_id);
++      if (util_dynarray_num_elements(&ops, struct scratch_item)) {
++         qsort(util_dynarray_begin(&ops),
++               util_dynarray_num_elements(&ops, struct scratch_item),
++               sizeof(struct scratch_item),
++               sort_scratch_item_by_size_and_value_id);
++      }
+ 
+       /* Reorder things on the stack */
+       _mesa_hash_table_u64_clear(value_id_to_item);
+-- 
+2.42.0
+

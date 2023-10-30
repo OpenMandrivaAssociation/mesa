@@ -1,0 +1,37 @@
+From 7c7684c65648ef586614beb7759b21f63a18eea4 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Mon, 9 Oct 2023 19:03:48 +0200
+Subject: [PATCH 112/834] radv: fix destroying GDS/OA BOs
+
+Otherwise, we have dangling BO pointers in the global BO list. Not
+quite sure why this hasn't been triggered before.
+
+Cc: mesa-stable
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25623>
+---
+ src/amd/vulkan/radv_queue.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_queue.c b/src/amd/vulkan/radv_queue.c
+index f5bd047447a..d93fdaf8920 100644
+--- a/src/amd/vulkan/radv_queue.c
++++ b/src/amd/vulkan/radv_queue.c
+@@ -1822,12 +1822,12 @@ radv_queue_state_finish(struct radv_queue_state *queue, struct radv_device *devi
+       device->ws->buffer_destroy(device->ws, queue->attr_ring_bo);
+    }
+    if (queue->gds_bo) {
+-      device->ws->buffer_destroy(device->ws, queue->gds_bo);
+       device->ws->buffer_make_resident(device->ws, queue->gds_bo, false);
++      device->ws->buffer_destroy(device->ws, queue->gds_bo);
+    }
+    if (queue->gds_oa_bo) {
+-      device->ws->buffer_destroy(device->ws, queue->gds_oa_bo);
+       device->ws->buffer_make_resident(device->ws, queue->gds_oa_bo, false);
++      device->ws->buffer_destroy(device->ws, queue->gds_oa_bo);
+    }
+    if (queue->compute_scratch_bo) {
+       radv_rmv_log_command_buffer_bo_destroy(device, queue->compute_scratch_bo);
+-- 
+2.42.0
+

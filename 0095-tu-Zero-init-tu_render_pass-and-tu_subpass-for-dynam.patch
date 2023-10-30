@@ -1,0 +1,46 @@
+From 8fe599ed1c35e336e57b1629c3a2c76b7c379f52 Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Fri, 6 Oct 2023 16:54:21 +0200
+Subject: [PATCH 095/834] tu: Zero init tu_render_pass and tu_subpass for
+ dynamic rendering
+
+The way we init render pass related structures is dangerous with when
+structs are not zero initialized - too easy to miss a field. There
+were already at least two issues with it.
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25592>
+---
+ src/freedreno/vulkan/tu_pass.cc | 10 +++-------
+ 1 file changed, 3 insertions(+), 7 deletions(-)
+
+diff --git a/src/freedreno/vulkan/tu_pass.cc b/src/freedreno/vulkan/tu_pass.cc
+index b304ef44a8e..21b0a9ab15d 100644
+--- a/src/freedreno/vulkan/tu_pass.cc
++++ b/src/freedreno/vulkan/tu_pass.cc
+@@ -1084,19 +1084,15 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
+    struct tu_render_pass *pass = &cmd_buffer->dynamic_pass;
+    struct tu_subpass *subpass = &cmd_buffer->dynamic_subpass;
+ 
++   *pass = {};
++   *subpass = {};
++
+    pass->subpass_count = 1;
+    pass->attachments = cmd_buffer->dynamic_rp_attachments;
+ 
+    subpass->color_count = subpass->resolve_count = info->colorAttachmentCount;
+-   subpass->resolve_depth_stencil = false;
+    subpass->color_attachments = cmd_buffer->dynamic_color_attachments;
+    subpass->resolve_attachments = cmd_buffer->dynamic_resolve_attachments;
+-   subpass->feedback_invalidate = false;
+-   subpass->feedback_loop_ds = subpass->feedback_loop_color = false;
+-   subpass->input_count = 0;
+-   subpass->samples = (VkSampleCountFlagBits) 0;
+-   subpass->srgb_cntl = 0;
+-   subpass->raster_order_attachment_access = false;
+    subpass->multiview_mask = info->viewMask;
+ 
+    uint32_t a = 0;
+-- 
+2.42.0
+

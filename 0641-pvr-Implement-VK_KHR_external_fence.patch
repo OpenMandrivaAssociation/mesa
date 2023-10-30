@@ -1,0 +1,64 @@
+From 89f9724b1a071e9182341f479ace226d7429e8e3 Mon Sep 17 00:00:00 2001
+From: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Date: Mon, 11 Sep 2023 07:42:22 +0100
+Subject: [PATCH 641/834] pvr: Implement VK_KHR_external_fence
+
+In order for the tests to pass, this commit also enables
+the VK_KHR_external_fence_fd extension.
+
+Signed-off-by: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Reviewed-by: Matt Coster <matt.coster@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25784>
+---
+ docs/features.txt                   | 6 +++---
+ src/imagination/vulkan/pvr_device.c | 3 +++
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index b1e334f55b0..0873ac3280e 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -428,8 +428,8 @@ Vulkan 1.1 -- all DONE: anv, lvp, radv, tu, vn
+   VK_KHR_descriptor_update_template                     DONE (anv, dzn, hasvk, lvp, nvk, panvk, radv, tu, v3dv, vn)
+   VK_KHR_device_group                                   DONE (anv, dzn, hasvk, lvp, nvk, tu, v3dv, vn)
+   VK_KHR_device_group_creation                          DONE (anv, hasvk, nvk, dzn, lvp, tu, v3dv, vn)
+-  VK_KHR_external_fence                                 DONE (anv, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+-  VK_KHR_external_fence_capabilities                    DONE (anv, hasvk, lvp, nvk, radv, tu, v3dv, vn)
++  VK_KHR_external_fence                                 DONE (anv, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
++  VK_KHR_external_fence_capabilities                    DONE (anv, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_external_memory                                DONE (anv, dzn, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_external_memory_capabilities                   DONE (anv, dzn, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_external_semaphore                             DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+@@ -506,7 +506,7 @@ Khronos extensions that are not part of any Vulkan version:
+   VK_KHR_deferred_host_operations                       DONE (anv, hasvk, radv)
+   VK_KHR_display                                        DONE (anv, pvr, radv, tu, v3dv)
+   VK_KHR_display_swapchain                              not started
+-  VK_KHR_external_fence_fd                              DONE (anv, hasvk, nvk, radv, tu, v3dv, vn)
++  VK_KHR_external_fence_fd                              DONE (anv, hasvk, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_external_fence_win32                           not started
+   VK_KHR_external_memory_fd                             DONE (anv, dzn, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_external_memory_win32                          DONE (dzn)
+diff --git a/src/imagination/vulkan/pvr_device.c b/src/imagination/vulkan/pvr_device.c
+index cff665fd17e..5f06cbbdbe9 100644
+--- a/src/imagination/vulkan/pvr_device.c
++++ b/src/imagination/vulkan/pvr_device.c
+@@ -148,6 +148,7 @@ static const struct pvr_drm_device_config pvr_drm_configs[] = {
+ 
+ static const struct vk_instance_extension_table pvr_instance_extensions = {
+    .KHR_display = PVR_USE_WSI_PLATFORM_DISPLAY,
++   .KHR_external_fence_capabilities = true,
+    .KHR_external_memory_capabilities = true,
+    .KHR_get_display_properties2 = PVR_USE_WSI_PLATFORM_DISPLAY,
+    .KHR_get_physical_device_properties2 = true,
+@@ -168,6 +169,8 @@ static void pvr_physical_device_get_supported_extensions(
+        * test fail
+        */
+       .KHR_driver_properties = false,
++      .KHR_external_fence = true,
++      .KHR_external_fence_fd = true,
+       .KHR_external_memory = true,
+       .KHR_external_memory_fd = true,
+       .KHR_format_feature_flags2 = true,
+-- 
+2.42.0
+

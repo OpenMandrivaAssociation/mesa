@@ -1,0 +1,227 @@
+From 1d149575ea0af3ebdfe94c2839a9e114927a121d Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 10 Oct 2023 07:47:23 -0400
+Subject: [PATCH 597/834] egl: unify dri2_egl_display creation
+
+this is the same for all platforms
+
+no functional changes
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25640>
+---
+ src/egl/drivers/dri2/egl_dri2.c             | 14 +++++++++++++
+ src/egl/drivers/dri2/egl_dri2.h             |  3 +++
+ src/egl/drivers/dri2/platform_device.c      |  8 ++-----
+ src/egl/drivers/dri2/platform_drm.c         |  8 ++-----
+ src/egl/drivers/dri2/platform_surfaceless.c |  8 ++-----
+ src/egl/drivers/dri2/platform_wayland.c     | 16 ++++----------
+ src/egl/drivers/dri2/platform_x11.c         | 23 ++++++---------------
+ 7 files changed, 33 insertions(+), 47 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/egl_dri2.c b/src/egl/drivers/dri2/egl_dri2.c
+index 44cdc4f17c7..3f0c3ee9f5d 100644
+--- a/src/egl/drivers/dri2/egl_dri2.c
++++ b/src/egl/drivers/dri2/egl_dri2.c
+@@ -1220,6 +1220,20 @@ dri2_display_destroy(_EGLDisplay *disp)
+    disp->DriverData = NULL;
+ }
+ 
++struct dri2_egl_display *
++dri2_display_create(void)
++{
++   struct dri2_egl_display *dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   if (!dri2_dpy) {
++      _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return NULL;
++   }
++
++   dri2_dpy->fd_render_gpu = -1;
++   dri2_dpy->fd_display_gpu = -1;
++   return dri2_dpy;
++}
++
+ __DRIbuffer *
+ dri2_egl_surface_alloc_local_buffer(struct dri2_egl_surface *dri2_surf,
+                                     unsigned int att, unsigned int format)
+diff --git a/src/egl/drivers/dri2/egl_dri2.h b/src/egl/drivers/dri2/egl_dri2.h
+index 8b2f88b8390..bb09ceb8e93 100644
+--- a/src/egl/drivers/dri2/egl_dri2.h
++++ b/src/egl/drivers/dri2/egl_dri2.h
+@@ -644,6 +644,9 @@ dri2_set_WL_bind_wayland_display(_EGLDisplay *disp)
+ void
+ dri2_display_destroy(_EGLDisplay *disp);
+ 
++struct dri2_egl_display *
++dri2_display_create(void);
++
+ __DRIbuffer *
+ dri2_egl_surface_alloc_local_buffer(struct dri2_egl_surface *dri2_surf,
+                                     unsigned int att, unsigned int format);
+diff --git a/src/egl/drivers/dri2/platform_device.c b/src/egl/drivers/dri2/platform_device.c
+index cd5f13c34d9..f9d91e4d6ae 100644
+--- a/src/egl/drivers/dri2/platform_device.c
++++ b/src/egl/drivers/dri2/platform_device.c
+@@ -341,18 +341,14 @@ EGLBoolean
+ dri2_initialize_device(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
+    const char *err;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+    /* Extension requires a PlatformDisplay - the EGLDevice. */
+    dev = disp->PlatformDisplay;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    disp->Device = dev;
+    disp->DriverData = (void *)dri2_dpy;
+    err = "DRI2: failed to load driver";
+diff --git a/src/egl/drivers/dri2/platform_drm.c b/src/egl/drivers/dri2/platform_drm.c
+index 37623f7d7b3..ec492d5e76d 100644
+--- a/src/egl/drivers/dri2/platform_drm.c
++++ b/src/egl/drivers/dri2/platform_drm.c
+@@ -580,16 +580,12 @@ EGLBoolean
+ dri2_initialize_drm(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
+    struct gbm_device *gbm;
+    const char *err;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    disp->DriverData = (void *)dri2_dpy;
+ 
+    gbm = disp->PlatformDisplay;
+diff --git a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
+index bf23b1ec901..923eb1c919a 100644
+--- a/src/egl/drivers/dri2/platform_surfaceless.c
++++ b/src/egl/drivers/dri2/platform_surfaceless.c
+@@ -308,16 +308,12 @@ surfaceless_probe_device_sw(_EGLDisplay *disp)
+ EGLBoolean
+ dri2_initialize_surfaceless(_EGLDisplay *disp)
+ {
+-   struct dri2_egl_display *dri2_dpy;
+    const char *err;
+    bool driver_loaded = false;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    disp->DriverData = (void *)dri2_dpy;
+ 
+    /* When ForceSoftware is false, we try the HW driver.  When ForceSoftware
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index 0ec48da3094..560adfd2843 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2162,14 +2162,10 @@ static EGLBoolean
+ dri2_initialize_wayland_drm(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    disp->DriverData = (void *)dri2_dpy;
+ 
+    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
+@@ -2731,14 +2727,10 @@ static EGLBoolean
+ dri2_initialize_wayland_swrast(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    disp->DriverData = (void *)dri2_dpy;
+ 
+    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
+diff --git a/src/egl/drivers/dri2/platform_x11.c b/src/egl/drivers/dri2/platform_x11.c
+index 71d828a4053..a4c64f8fe08 100644
+--- a/src/egl/drivers/dri2/platform_x11.c
++++ b/src/egl/drivers/dri2/platform_x11.c
+@@ -1506,14 +1506,10 @@ static EGLBoolean
+ dri2_initialize_x11_swrast(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    if (!dri2_get_xcb_connection(disp, dri2_dpy))
+       goto cleanup;
+ 
+@@ -1600,14 +1596,11 @@ static EGLBoolean
+ dri2_initialize_x11_dri3(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+ 
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    if (!dri2_get_xcb_connection(disp, dri2_dpy))
+       goto cleanup;
+ 
+@@ -1713,14 +1706,10 @@ static EGLBoolean
+ dri2_initialize_x11_dri2(_EGLDisplay *disp)
+ {
+    _EGLDevice *dev;
+-   struct dri2_egl_display *dri2_dpy;
+-
+-   dri2_dpy = calloc(1, sizeof *dri2_dpy);
++   struct dri2_egl_display *dri2_dpy = dri2_display_create();
+    if (!dri2_dpy)
+-      return _eglError(EGL_BAD_ALLOC, "eglInitialize");
++      return EGL_FALSE;
+ 
+-   dri2_dpy->fd_render_gpu = -1;
+-   dri2_dpy->fd_display_gpu = -1;
+    if (!dri2_get_xcb_connection(disp, dri2_dpy))
+       goto cleanup;
+ 
+-- 
+2.42.0
+

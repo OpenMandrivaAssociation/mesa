@@ -1,0 +1,29 @@
+From 16e116365172f9c1d42072eebfa9b0b1d4f7fb7b Mon Sep 17 00:00:00 2001
+From: Friedrich Vock <friedrich.vock@gmx.de>
+Date: Sun, 22 Oct 2023 20:24:04 +0200
+Subject: [PATCH 673/834] radv/rmv: Recognize LPDDR memory
+
+Fixes: 8d0e6c02 ("radv: Add RMV tracing utilities")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25845>
+---
+ src/amd/vulkan/radv_rmv.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/amd/vulkan/radv_rmv.c b/src/amd/vulkan/radv_rmv.c
+index 08db69cd9ee..6018a4482a1 100644
+--- a/src/amd/vulkan/radv_rmv.c
++++ b/src/amd/vulkan/radv_rmv.c
+@@ -410,6 +410,10 @@ memory_type_from_vram_type(uint32_t vram_type)
+    case AMD_VRAM_TYPE_GDDR6:
+       return VK_RMV_MEMORY_TYPE_GDDR6;
+    case AMD_VRAM_TYPE_DDR5:
++      return VK_RMV_MEMORY_TYPE_DDR5;
++   case AMD_VRAM_TYPE_LPDDR4:
++      return VK_RMV_MEMORY_TYPE_LPDDR4;
++   case AMD_VRAM_TYPE_LPDDR5:
+       return VK_RMV_MEMORY_TYPE_LPDDR5;
+    default:
+       unreachable("Invalid vram type");
+-- 
+2.42.0
+

@@ -1,0 +1,147 @@
+From b20760899571c59698155c283f198e772c8e1e6a Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sat, 14 Oct 2023 19:35:35 +0300
+Subject: [PATCH 492/834] intel/ds: provide names for different events of a
+ timeline's row
+
+Previously all items on a timeline row would have the same name. This
+change uses the tracepoint names to put into the timeline instead.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25730>
+---
+ src/intel/ds/intel_driver_ds.cc   | 35 +++++++++++++++++++++----------
+ src/intel/ds/intel_driver_ds.h    |  3 +++
+ src/intel/ds/intel_tracepoints.py |  3 ++-
+ 3 files changed, 29 insertions(+), 12 deletions(-)
+
+diff --git a/src/intel/ds/intel_driver_ds.cc b/src/intel/ds/intel_driver_ds.cc
+index 50b976fbc58..8ee894bea89 100644
+--- a/src/intel/ds/intel_driver_ds.cc
++++ b/src/intel/ds/intel_driver_ds.cc
+@@ -202,13 +202,20 @@ send_descriptors(IntelRenderpassDataSource::TraceContext &ctx,
+                desc->set_iid(queue->stages[s].queue_iid);
+                desc->set_name(name);
+             }
+-            {
+-               auto desc = interned_data->add_gpu_specifications();
+-               desc->set_iid(queue->stages[s].stage_iid);
+-               desc->set_name(intel_queue_stage_desc[s].name);
+-            }
+          }
+       }
++
++      for (unsigned i = 0; i < ARRAY_SIZE(intel_tracepoint_names); i++) {
++         /* Skip the begin tracepoint, the label represent the couple of
++          * begin/end tracepoints.
++          */
++         if (strstr(intel_tracepoint_names[i], "intel_begin_") != NULL)
++            continue;
++
++         auto desc = interned_data->add_gpu_specifications();
++         desc->set_iid(device->tracepoint_iids[i]);
++         desc->set_name(intel_tracepoint_names[i] + strlen("intel_end_"));
++      }
+    }
+ 
+    device->next_clock_sync_ns = 0;
+@@ -283,7 +290,7 @@ end_event(struct intel_ds_queue *queue, uint64_t ts_ns,
+        */
+       uint64_t stage_iid = app_event ?
+          tctx.GetDataSourceLocked()->debug_marker_stage(tctx, app_event) :
+-         stage->stage_iid;
++         device->tracepoint_iids[tracepoint_idx];
+ 
+       auto packet = tctx.NewTracePacket();
+ 
+@@ -382,7 +389,7 @@ extern "C" {
+       const struct intel_ds_flush_data *flush =                         \
+          (const struct intel_ds_flush_data *) flush_data;               \
+       end_event(flush->queue, ts_ns, stage, flush->submission_id,       \
+-                NULL, payload,                                          \
++                tp_idx, NULL, payload,                                  \
+                 (trace_payload_as_extra_func)                           \
+                 &trace_payload_as_extra_intel_end_##event_name);        \
+    }                                                                    \
+@@ -438,7 +445,7 @@ intel_ds_end_cmd_buffer_annotation(struct intel_ds_device *device,
+    const struct intel_ds_flush_data *flush =
+       (const struct intel_ds_flush_data *) flush_data;
+    end_event(flush->queue, ts_ns, INTEL_DS_QUEUE_STAGE_CMD_BUFFER,
+-             flush->submission_id, payload->str, NULL, NULL);
++             flush->submission_id, tp_idx, payload->str, NULL, NULL);
+ }
+ 
+ void
+@@ -463,7 +470,7 @@ intel_ds_end_queue_annotation(struct intel_ds_device *device,
+    const struct intel_ds_flush_data *flush =
+       (const struct intel_ds_flush_data *) flush_data;
+    end_event(flush->queue, ts_ns, INTEL_DS_QUEUE_STAGE_QUEUE,
+-             flush->submission_id, payload->str, NULL, NULL);
++             flush->submission_id, tp_idx, payload->str, NULL, NULL);
+ }
+ 
+ void
+@@ -488,7 +495,7 @@ intel_ds_end_stall(struct intel_ds_device *device,
+    const struct intel_ds_flush_data *flush =
+       (const struct intel_ds_flush_data *) flush_data;
+    end_event(flush->queue, ts_ns, INTEL_DS_QUEUE_STAGE_STALL,
+-             flush->submission_id, NULL, payload,
++             flush->submission_id, tp_idx, NULL, payload,
+              (trace_payload_as_extra_func)custom_trace_payload_as_extra_end_stall);
+ }
+ 
+@@ -578,6 +585,13 @@ intel_ds_device_init(struct intel_ds_device *device,
+    device->info = *devinfo;
+    device->iid = get_iid();
+    device->api = api;
++
++#ifdef HAVE_PERFETTO
++   assert(ARRAY_SIZE(intel_tracepoint_names) < ARRAY_SIZE(device->tracepoint_iids));
++   for (unsigned i = 0; i < ARRAY_SIZE(intel_tracepoint_names); i++)
++      device->tracepoint_iids[i] = get_iid();
++#endif
++
+    list_inithead(&device->queues);
+    simple_mtx_init(&device->trace_context_mutex, mtx_plain);
+ }
+@@ -607,7 +621,6 @@ intel_ds_device_init_queue(struct intel_ds_device *device,
+ 
+    for (unsigned s = 0; s < INTEL_DS_QUEUE_STAGE_N_STAGES; s++) {
+       queue->stages[s].queue_iid = get_iid();
+-      queue->stages[s].stage_iid = get_iid();
+    }
+ 
+    list_add(&queue->link, &device->queues);
+diff --git a/src/intel/ds/intel_driver_ds.h b/src/intel/ds/intel_driver_ds.h
+index 1f9df933532..f66e7872d2b 100644
+--- a/src/intel/ds/intel_driver_ds.h
++++ b/src/intel/ds/intel_driver_ds.h
+@@ -114,6 +114,9 @@ struct intel_ds_device {
+     */
+    uint64_t event_id;
+ 
++   /* Tracepoint name perfetto identifiers for each of the events. */
++   uint64_t tracepoint_iids[64];
++
+    /* Protects submissions of u_trace data to trace_context */
+    simple_mtx_t trace_context_mutex;
+ 
+diff --git a/src/intel/ds/intel_tracepoints.py b/src/intel/ds/intel_tracepoints.py
+index 937aaa2bfa2..96b16dfbcaf 100644
+--- a/src/intel/ds/intel_tracepoints.py
++++ b/src/intel/ds/intel_tracepoints.py
+@@ -244,7 +244,8 @@ def generate_code(args):
+                     ctx_param='struct intel_ds_device *dev',
+                     trace_toggle_name='intel_gpu_tracepoint',
+                     trace_toggle_defaults=intel_default_tps)
+-    utrace_generate_perfetto_utils(hpath=args.perfetto_hdr)
++    utrace_generate_perfetto_utils(hpath=args.perfetto_hdr,
++                                   basename="intel_tracepoint")
+ 
+ 
+ def main():
+-- 
+2.42.0
+

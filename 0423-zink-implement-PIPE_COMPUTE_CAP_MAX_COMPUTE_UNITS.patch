@@ -1,0 +1,34 @@
+From d2e1bc33b00dd689e3dd1cb972f6afd756f431c1 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 15 Oct 2023 00:10:06 +0200
+Subject: [PATCH 423/834] zink: implement PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS
+
+We have to return at least 1.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25731>
+---
+ src/gallium/drivers/zink/zink_screen.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 0a6137e6035..51ac14bde52 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -464,9 +464,12 @@ zink_get_compute_param(struct pipe_screen *pscreen, enum pipe_shader_ir ir_type,
+    case PIPE_COMPUTE_CAP_MAX_GLOBAL_SIZE:
+       RET((uint64_t []) { screen->total_video_mem });
+ 
++   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
++      // no way in vulkan to retrieve this information.
++      RET((uint32_t []) { 1 });
++
+    case PIPE_COMPUTE_CAP_MAX_SUBGROUPS:
+    case PIPE_COMPUTE_CAP_MAX_CLOCK_FREQUENCY:
+-   case PIPE_COMPUTE_CAP_MAX_COMPUTE_UNITS:
+    case PIPE_COMPUTE_CAP_MAX_PRIVATE_SIZE:
+    case PIPE_COMPUTE_CAP_MAX_INPUT_SIZE:
+       // XXX: I think these are for Clover...
+-- 
+2.42.0
+

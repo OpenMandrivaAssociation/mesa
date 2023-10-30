@@ -1,0 +1,93 @@
+From e98ba3b53f823f46c17d0eaffcce80b8dbdf01fe Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 7 Sep 2023 20:03:57 -0700
+Subject: [PATCH 783/834] compiler/types: Add glsl_type_compare_no_precision()
+ and use it in C++
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 24 ++++++++++++------------
+ src/compiler/glsl_types.h      |  1 +
+ src/compiler/glsl_types_impl.h |  1 +
+ 3 files changed, 14 insertions(+), 12 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 66463bf9de3..9e6fead59ea 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -1348,35 +1348,35 @@ glsl_cmat_type(const struct glsl_cmat_description *desc)
+    return t;
+ }
+ 
+-bool
+-glsl_type::compare_no_precision(const struct glsl_type *b) const
++extern "C" bool
++glsl_type_compare_no_precision(const struct glsl_type *a, const struct glsl_type *b)
+ {
+-   if (this == b)
++   if (a == b)
+       return true;
+ 
+-   if (this->is_array()) {
+-      if (!b->is_array() || this->length != b->length)
++   if (a->is_array()) {
++      if (!b->is_array() || a->length != b->length)
+          return false;
+ 
+       const struct glsl_type *b_no_array = b->fields.array;
+ 
+-      return this->fields.array->compare_no_precision(b_no_array);
++      return a->fields.array->compare_no_precision(b_no_array);
+    }
+ 
+-   if (this->is_struct()) {
++   if (a->is_struct()) {
+       if (!b->is_struct())
+          return false;
+-   } else if (this->is_interface()) {
++   } else if (a->is_interface()) {
+       if (!b->is_interface())
+          return false;
+    } else {
+       return false;
+    }
+ 
+-   return record_compare(b,
+-                         true, /* match_name */
+-                         true, /* match_locations */
+-                         false /* match_precision */);
++   return glsl_record_compare(a, b,
++                              true, /* match_name */
++                              true, /* match_locations */
++                              false /* match_precision */);
+ }
+ 
+ extern "C" bool
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index f68500629f5..1ad5b55d8d5 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1346,6 +1346,7 @@ glsl_get_sampler_result_type(const struct glsl_type *t)
+ 
+ int glsl_get_sampler_coordinate_components(const struct glsl_type *t);
+ 
++bool glsl_type_compare_no_precision(const struct glsl_type *a, const struct glsl_type *b);
+ bool glsl_record_compare(const struct glsl_type *a, const struct glsl_type *b,
+                          bool match_name, bool match_locations,
+                          bool match_precision);
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index dd7ad1106b3..2ecd772aa94 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -57,6 +57,7 @@ inline int glsl_type::field_index(const char *n) const { return glsl_get_field_i
+ inline enum glsl_interface_packing glsl_type::get_interface_packing() const { return glsl_get_ifc_packing(this); }
+ inline enum glsl_interface_packing glsl_type::get_internal_ifc_packing(bool std430_supported) const { return glsl_get_internal_ifc_packing(this, std430_supported); }
+ 
++inline bool glsl_type::compare_no_precision(const glsl_type *b) const { return glsl_type_compare_no_precision(this, b); }
+ inline bool glsl_type::record_compare(const glsl_type *b, bool match_name, bool match_locations, bool match_precision) const { return glsl_record_compare(this, b, match_name, match_locations, match_precision); }
+ 
+ inline unsigned glsl_type::components() const { return glsl_get_components(this); }
+-- 
+2.42.0
+

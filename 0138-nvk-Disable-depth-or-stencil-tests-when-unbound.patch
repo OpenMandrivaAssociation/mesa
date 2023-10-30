@@ -1,0 +1,97 @@
+From e9747eb91f386099409ac2f473ddb970b220e363 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 10 Oct 2023 11:29:18 -0500
+Subject: [PATCH 138/834] nvk: Disable depth or stencil tests when unbound
+
+Dynamic rendering requires that the client be able to bind just one
+aspect of a depth/stencil image.  Because we only have interleaved
+depth/stencil on NVIDIA and no actual disable bits, this means we need
+to implicitly AND any enables with a vk_format != UNDEFINED check.  In
+future, we might want to do that with a macro but we'll keep it simple
+for today.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25653>
+---
+ src/nouveau/vulkan/nvk_cmd_draw.c | 35 ++++++++++++++++++++++++-------
+ 1 file changed, 27 insertions(+), 8 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_cmd_draw.c b/src/nouveau/vulkan/nvk_cmd_draw.c
+index 43e68bfb241..a54e42f7d0f 100644
+--- a/src/nouveau/vulkan/nvk_cmd_draw.c
++++ b/src/nouveau/vulkan/nvk_cmd_draw.c
+@@ -546,6 +546,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
+ {
+    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+    struct nvk_rendering_state *render = &cmd->state.gfx.render;
++   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+ 
+    memset(render, 0, sizeof(*render));
+ 
+@@ -569,6 +570,11 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
+    nvk_attachment_init(&render->stencil_att,
+                        pRenderingInfo->pStencilAttachment);
+ 
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE);
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE);
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE);
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE);
++
+    /* If we don't have any attachments, emit a dummy color attachment */
+    if (render->color_att_count == 0 &&
+        render->depth_att.iview == NULL &&
+@@ -1368,22 +1374,32 @@ nvk_flush_ds_state(struct nvk_cmd_buffer *cmd)
+ {
+    struct nv_push *p = nvk_cmd_buffer_push(cmd, 35);
+ 
++   const struct nvk_rendering_state *render = &cmd->state.gfx.render;
+    const struct vk_dynamic_graphics_state *dyn =
+       &cmd->vk.dynamic_graphics_state;
+ 
+-   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE))
+-      P_IMMD(p, NV9097, SET_DEPTH_TEST, dyn->ds.depth.test_enable);
++   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE)) {
++      bool enable = dyn->ds.depth.test_enable &&
++                    render->depth_att.vk_format != VK_FORMAT_UNDEFINED;
++      P_IMMD(p, NV9097, SET_DEPTH_TEST, enable);
++   }
+ 
+-   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE))
+-      P_IMMD(p, NV9097, SET_DEPTH_WRITE, dyn->ds.depth.write_enable);
++   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE)) {
++      bool enable = dyn->ds.depth.write_enable &&
++                    render->depth_att.vk_format != VK_FORMAT_UNDEFINED;
++      P_IMMD(p, NV9097, SET_DEPTH_WRITE, enable);
++   }
+ 
+    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_COMPARE_OP)) {
+       const uint32_t func = vk_to_nv9097_compare_op(dyn->ds.depth.compare_op);
+       P_IMMD(p, NV9097, SET_DEPTH_FUNC, func);
+    }
+ 
+-   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE))
+-      P_IMMD(p, NV9097, SET_DEPTH_BOUNDS_TEST, dyn->ds.depth.bounds_test.enable);
++   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE)) {
++      bool enable = dyn->ds.depth.bounds_test.enable &&
++                    render->depth_att.vk_format != VK_FORMAT_UNDEFINED;
++      P_IMMD(p, NV9097, SET_DEPTH_BOUNDS_TEST, enable);
++   }
+ 
+    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_BOUNDS)) {
+       P_MTHD(p, NV9097, SET_DEPTH_BOUNDS_MIN);
+@@ -1391,8 +1407,11 @@ nvk_flush_ds_state(struct nvk_cmd_buffer *cmd)
+       P_NV9097_SET_DEPTH_BOUNDS_MAX(p, fui(dyn->ds.depth.bounds_test.max));
+    }
+ 
+-   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE))
+-      P_IMMD(p, NV9097, SET_STENCIL_TEST, dyn->ds.stencil.test_enable);
++   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE)) {
++      bool enable = dyn->ds.stencil.test_enable &&
++                    render->stencil_att.vk_format != VK_FORMAT_UNDEFINED;
++      P_IMMD(p, NV9097, SET_STENCIL_TEST, enable);
++   }
+ 
+    const struct vk_stencil_test_face_state *front = &dyn->ds.stencil.front;
+    const struct vk_stencil_test_face_state *back = &dyn->ds.stencil.back;
+-- 
+2.42.0
+

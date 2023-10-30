@@ -1,0 +1,54 @@
+From 375a14234f6cd9ad90fa4fb79f0e107659931ca0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Mon, 25 Sep 2023 14:27:45 +0200
+Subject: [PATCH 547/834] ac/gpu_info: Add some SDMA related information.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+SDMA only supports sparse resources on GFX9+.
+SDMA only supports DCC and HTILE on GFX10+.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25769>
+---
+ src/amd/common/ac_gpu_info.c | 6 ++++++
+ src/amd/common/ac_gpu_info.h | 3 +++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 57d31a67eee..665279ec391 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -1263,6 +1263,12 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+                                  info->register_shadowing_required &&
+                                  info->has_dedicated_vram;
+ 
++   /* GFX6-8 SDMA can't ignore page faults on unmapped sparse resources. */
++   info->sdma_supports_sparse = info->gfx_level >= GFX9;
++
++   /* GFX10+ SDMA supports DCC and HTILE, but Navi 10 has issues with it according to PAL. */
++   info->sdma_supports_compression = info->gfx_level >= GFX10 && info->family != CHIP_NAVI10;
++
+    /* Get the number of good compute units. */
+    info->num_cu = 0;
+    for (i = 0; i < info->max_se; i++) {
+diff --git a/src/amd/common/ac_gpu_info.h b/src/amd/common/ac_gpu_info.h
+index 54ca2a6da9a..404dac55d35 100644
+--- a/src/amd/common/ac_gpu_info.h
++++ b/src/amd/common/ac_gpu_info.h
+@@ -113,6 +113,9 @@ struct radeon_info {
+    bool has_vrs_ds_export_bug;
+    bool has_taskmesh_indirect0_bug;
+    bool has_set_pairs_packets;
++   bool sdma_supports_sparse;      /* Whether SDMA can safely access sparse resources. */
++   bool sdma_supports_compression; /* Whether SDMA supports DCC and HTILE. */
++
+ 
+    /* conformant_trunc_coord is equal to TA_CNTL2.TRUNCATE_COORD_MODE, which exists since gfx11.
+     *
+-- 
+2.42.0
+

@@ -1,0 +1,41 @@
+From 74315051a9497dc2b971d5b15e72cc48968ed10a Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Fri, 20 Oct 2023 12:11:13 +0200
+Subject: [PATCH 762/834] ci_run_n_monitor: Always resolve --rev arguments for
+ looking up pipelines.
+
+Otherwise you'd loop forever never finding it with --rev <paste from
+gitlab UI> or --rev <branch name>
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25824>
+---
+ bin/ci/ci_run_n_monitor.py | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index 5779e4a11d4..5d36b86b24a 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -276,7 +276,7 @@ def parse_args() -> None:
+ 
+     mutex_group1 = parser.add_mutually_exclusive_group()
+     mutex_group1.add_argument(
+-        "--rev", metavar="revision", help="repository git revision (default: HEAD)"
++        "--rev", default="HEAD", metavar="revision", help="repository git revision (default: HEAD)"
+     )
+     mutex_group1.add_argument(
+         "--pipeline-url",
+@@ -339,8 +339,8 @@ if __name__ == "__main__":
+             pipe = cur_project.pipelines.get(pipeline_id)
+             REV = pipe.sha
+         else:
+-            if not REV:
+-                REV = check_output(['git', 'rev-parse', 'HEAD']).decode('ascii').strip()
++            REV = check_output(['git', 'rev-parse', REV]).decode('ascii').strip()
++
+             mesa_project = gl.projects.get("mesa/mesa")
+             user_project = get_gitlab_project(gl, args.project)
+             (pipe, cur_project) = wait_for_pipeline([mesa_project, user_project], REV)
+-- 
+2.42.0
+

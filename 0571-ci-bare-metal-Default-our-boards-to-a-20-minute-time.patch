@@ -1,0 +1,132 @@
+From 40be79dc9f21d0c11ca6e9f64fa979b6c632a8f8 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 15:34:59 +0200
+Subject: [PATCH 571/834] ci/bare-metal: Default our boards to a 20-minute
+ timeout for the whole job.
+
+If the test time is 10 minutes, and boot is 1.5 minutes, that gives you
+8.5 minutes of slop for intermittent costs like container download.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25790>
+---
+ src/broadcom/ci/gitlab-ci.yml                    | 5 +----
+ src/etnaviv/ci/gitlab-ci.yml                     | 3 +++
+ src/freedreno/ci/gitlab-ci-inc.yml               | 3 +++
+ src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml | 1 +
+ 4 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/src/broadcom/ci/gitlab-ci.yml b/src/broadcom/ci/gitlab-ci.yml
+index f27c9522063..49a2c504cd9 100644
+--- a/src/broadcom/ci/gitlab-ci.yml
++++ b/src/broadcom/ci/gitlab-ci.yml
+@@ -67,6 +67,7 @@
+   variables:
+     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
+     FLAKES_CHANNEL: "#videocore-ci"
++  timeout: 20m
+ 
+ .broadcom-test:arm64:
+   extends:
+@@ -88,7 +89,6 @@ vc4-rpi3-gl:arm32:
+     - .vc4-rules
+   tags:
+     - igalia-rpi3
+-  timeout: 30m  # standard run time between 8 and 10 minutes
+   parallel: 4
+   variables:
+     GPU_VERSION: broadcom-rpi3
+@@ -102,7 +102,6 @@ v3d-rpi4-gl:arm32:
+     - .v3d-rules
+   tags:
+     - igalia-rpi4
+-  timeout: 30m  # standard run time between 8 and 11 minutes
+   parallel: 10
+   variables:
+     GPU_VERSION: broadcom-rpi4
+@@ -116,7 +115,6 @@ v3d-rpi4-traces:arm64:
+     - .piglit-traces-test
+     - .broadcom-test:arm64
+     - .v3d-rules
+-  timeout: 30m  # standard run time between 5 and 8 minutes
+   variables:
+     GPU_VERSION: broadcom-rpi4
+     HWCI_KERNEL_MODULES: v3d,vc4
+@@ -132,7 +130,6 @@ v3dv-rpi4-vk:arm64:
+     - .broadcom-test:arm64
+     - .v3dv-rules
+   parallel: 10
+-  timeout: 30m  # standard run time between 9 and 13 minutes
+   variables:
+     HWCI_TEST_SCRIPT: "/install/deqp-runner.sh"
+     DEQP_EXPECTED_RENDERER: "V3D.4.2"
+diff --git a/src/etnaviv/ci/gitlab-ci.yml b/src/etnaviv/ci/gitlab-ci.yml
+index 924f4a300f0..bbff6ba85e7 100644
+--- a/src/etnaviv/ci/gitlab-ci.yml
++++ b/src/etnaviv/ci/gitlab-ci.yml
+@@ -28,6 +28,7 @@
+     - .etnaviv-rules
+   script:
+     - ./install/bare-metal/fastboot.sh
++  timeout: 20m
+   variables:
+     BM_CMDLINE: "ip=dhcp console=ttymxc0,115200n8 root=/dev/nfs rw nfsrootdebug init=/init $BM_KERNELARGS"
+     BM_KERNEL: zImage
+@@ -39,6 +40,7 @@
+     - .etnaviv-rules
+   script:
+     - ./install/bare-metal/fastboot.sh
++  timeout: 20m
+   variables:
+     BM_CMDLINE: "ip=dhcp console=ttymxc0,115200n8 root=/dev/nfs rw nfsrootdebug init=/init $BM_KERNELARGS"
+     BM_KERNEL: Image
+@@ -89,6 +91,7 @@ gc2000_piglit:
+     PIGLIT_PLATFORM: gbm
+     PIGLIT_PROFILES: gpu
+     TEST_PHASE_TIMEOUT: 40
++  timeout: 40m
+ 
+ gc7000_gles2:
+   extends:
+diff --git a/src/freedreno/ci/gitlab-ci-inc.yml b/src/freedreno/ci/gitlab-ci-inc.yml
+index c0a982b7718..845b4ec16ed 100644
+--- a/src/freedreno/ci/gitlab-ci-inc.yml
++++ b/src/freedreno/ci/gitlab-ci-inc.yml
+@@ -202,6 +202,7 @@
+     BM_KERNEL: Image.gz
+     BM_DTB: apq8016-sbc
+     GPU_VERSION: freedreno-a307
++  timeout: 20m
+   tags:
+     - google-freedreno-db410c
+ 
+@@ -232,6 +233,7 @@
+     BM_KERNEL: Image.gz
+     BM_DTB: apq8096-db820c
+     GPU_VERSION: freedreno-a530
++  timeout: 20m
+   tags:
+     - google-freedreno-db820c
+ 
+@@ -309,6 +311,7 @@
+     BM_KERNEL: cheza-kernel
+     BM_CMDLINE: "ip=dhcp console=ttyMSM0,115200n8 root=/dev/nfs rw nfsrootdebug nfsroot=,tcp,nfsvers=4.2 init=/init"
+     GPU_VERSION: freedreno-a630
++  timeout: 20m
+   tags:
+     - google-freedreno-cheza
+   script:
+diff --git a/src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml b/src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml
+index 40bb321f947..8e0ec18d0fa 100644
+--- a/src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml
++++ b/src/gallium/drivers/nouveau/ci/gitlab-ci-inc.yml
+@@ -30,6 +30,7 @@
+     # We package nouveau as a module so that we can load it after the firmware is
+     # available on NFS.
+     HWCI_KERNEL_MODULES: tegra-drm,nouveau
++  timeout: 20m
+   script:
+     - ./install/bare-metal/poe-powered.sh
+ 
+-- 
+2.42.0
+

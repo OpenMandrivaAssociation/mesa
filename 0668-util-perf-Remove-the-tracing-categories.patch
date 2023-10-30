@@ -1,0 +1,321 @@
+From d64765c200104320577b9410616e8189f31c58d9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Wed, 20 Sep 2023 17:41:05 +0200
+Subject: [PATCH 668/834] util/perf: Remove the tracing categories
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The slow category remains unused in Mesa currently, readd it once we have
+a use for it.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/util/perf/cpu_trace.h   | 73 ++++++++++++++-----------------------
+ src/util/perf/u_perfetto.cc | 61 +++++++------------------------
+ src/util/perf/u_perfetto.h  | 25 ++++---------
+ 3 files changed, 49 insertions(+), 110 deletions(-)
+
+diff --git a/src/util/perf/cpu_trace.h b/src/util/perf/cpu_trace.h
+index 796dcaf0f3c..cfa75849e38 100644
+--- a/src/util/perf/cpu_trace.h
++++ b/src/util/perf/cpu_trace.h
+@@ -13,19 +13,19 @@
+ 
+ #if defined(HAVE_PERFETTO)
+ 
+-/* note that util_perfetto_is_category_enabled always returns false util
++/* note that util_perfetto_is_tracing_enabled always returns false util
+  * util_perfetto_init is called
+  */
+-#define _MESA_TRACE_BEGIN(category, name)                                    \
++#define _MESA_TRACE_BEGIN(name)                                              \
+    do {                                                                      \
+-      if (unlikely(util_perfetto_is_category_enabled(category)))             \
+-         util_perfetto_trace_begin(category, name);                          \
++      if (unlikely(util_perfetto_is_tracing_enabled()))                      \
++         util_perfetto_trace_begin(name);                                    \
+    } while (0)
+ 
+-#define _MESA_TRACE_END(category)                                            \
++#define _MESA_TRACE_END()                                                    \
+    do {                                                                      \
+-      if (unlikely(util_perfetto_is_category_enabled(category)))             \
+-         util_perfetto_trace_end(category);                                  \
++      if (unlikely(util_perfetto_is_tracing_enabled()))                      \
++         util_perfetto_trace_end();                                          \
+    } while (0)
+ 
+ /* NOTE: for now disable atrace for C++ to workaround a ndk bug with ordering
+@@ -37,14 +37,14 @@
+ 
+ #include <cutils/trace.h>
+ 
+-#define _MESA_TRACE_BEGIN(category, name)                                    \
++#define _MESA_TRACE_BEGIN(name)                                              \
+    atrace_begin(ATRACE_TAG_GRAPHICS, name)
+-#define _MESA_TRACE_END(category) atrace_end(ATRACE_TAG_GRAPHICS)
++#define _MESA_TRACE_END() atrace_end(ATRACE_TAG_GRAPHICS)
+ 
+ #else
+ 
+-#define _MESA_TRACE_BEGIN(category, name)
+-#define _MESA_TRACE_END(category)
++#define _MESA_TRACE_BEGIN(name)
++#define _MESA_TRACE_END()
+ 
+ #endif /* HAVE_PERFETTO */
+ 
+@@ -61,16 +61,16 @@
+ #endif /* HAVE_GPUVIS */
+ 
+ 
+-#define _MESA_COMBINED_TRACE_BEGIN(category, name)                           \
++#define _MESA_COMBINED_TRACE_BEGIN(name)                                     \
+    do {                                                                      \
+-      _MESA_TRACE_BEGIN(category, name);                                     \
++      _MESA_TRACE_BEGIN(name);                                               \
+       _MESA_GPUVIS_TRACE_BEGIN(name);                                        \
+    } while (0)
+ 
+-#define _MESA_COMBINED_TRACE_END(category)                                   \
++#define _MESA_COMBINED_TRACE_END()                                           \
+    do {                                                                      \
+       _MESA_GPUVIS_TRACE_END();                                              \
+-      _MESA_TRACE_END(category);                                             \
++      _MESA_TRACE_END();                                                     \
+    } while (0)
+ 
+ #if __has_attribute(cleanup) && __has_attribute(unused)
+@@ -86,53 +86,34 @@
+  *
+  * to work.
+  */
+-#define _MESA_TRACE_SCOPE(category, name)                                    \
++#define _MESA_TRACE_SCOPE(name)                                              \
+    int _MESA_TRACE_SCOPE_VAR(__LINE__)                                       \
+       __attribute__((cleanup(_mesa_trace_scope_end), unused)) =              \
+-         _mesa_trace_scope_begin(category, name)
++         _mesa_trace_scope_begin(name)
+ 
+ static inline int
+-_mesa_trace_scope_begin(enum util_perfetto_category category,
+-                        const char *name)
++_mesa_trace_scope_begin(const char *name)
+ {
+-   _MESA_COMBINED_TRACE_BEGIN(category, name);
+-   return category;
++   _MESA_COMBINED_TRACE_BEGIN(name);
++   return 0;
+ }
+ 
+ static inline void
+-_mesa_trace_scope_end(int *scope)
++_mesa_trace_scope_end(UNUSED int *scope)
+ {
+-   /* we save the category in the scope variable */
+-   _MESA_COMBINED_TRACE_END((enum util_perfetto_category) * scope);
++   _MESA_COMBINED_TRACE_END();
+ }
+ 
+ #else
+ 
+-#define _MESA_TRACE_SCOPE(category, name)
++#define _MESA_TRACE_SCOPE(name)
+ 
+ #endif /* __has_attribute(cleanup) && __has_attribute(unused) */
+ 
+-/* These use the default category.  Drivers or subsystems can use these, or
+- * define their own categories/macros.
+- */
+-#define MESA_TRACE_BEGIN(name)                                               \
+-   _MESA_COMBINED_TRACE_BEGIN(UTIL_PERFETTO_CATEGORY_DEFAULT, name)
+-#define MESA_TRACE_END()                                                     \
+-  _MESA_COMBINED_TRACE_END(UTIL_PERFETTO_CATEGORY_DEFAULT)
+-#define MESA_TRACE_SCOPE(name)                                               \
+-   _MESA_TRACE_SCOPE(UTIL_PERFETTO_CATEGORY_DEFAULT, name)
+-#define MESA_TRACE_FUNC()                                                    \
+-   _MESA_TRACE_SCOPE(UTIL_PERFETTO_CATEGORY_DEFAULT, __func__)
+-
+-/* these use the slow category */
+-#define MESA_TRACE_BEGIN_SLOW(name)                                          \
+-   _MESA_COMBINED_TRACE_BEGIN(UTIL_PERFETTO_CATEGORY_SLOW, name)
+-#define MESA_TRACE_END_SLOW()                                                \
+-  _MESA_COMBINED_TRACE_END(UTIL_PERFETTO_CATEGORY_SLOW)
+-#define MESA_TRACE_SCOPE_SLOW(name)                                          \
+-   _MESA_TRACE_SCOPE(UTIL_PERFETTO_CATEGORY_SLOW, name)
+-#define MESA_TRACE_FUNC_SLOW()                                               \
+-   _MESA_TRACE_SCOPE(UTIL_PERFETTO_CATEGORY_SLOW, __func__)
++#define MESA_TRACE_BEGIN(name) _MESA_COMBINED_TRACE_BEGIN(name)
++#define MESA_TRACE_END() _MESA_COMBINED_TRACE_END()
++#define MESA_TRACE_SCOPE(name) _MESA_TRACE_SCOPE(name)
++#define MESA_TRACE_FUNC() _MESA_TRACE_SCOPE(__func__)
+ 
+ static inline void
+ util_cpu_trace_init()
+diff --git a/src/util/perf/u_perfetto.cc b/src/util/perf/u_perfetto.cc
+index 10facb38645..897e29cc4f8 100644
+--- a/src/util/perf/u_perfetto.cc
++++ b/src/util/perf/u_perfetto.cc
+@@ -30,69 +30,36 @@
+ 
+ /* perfetto requires string literals */
+ #define UTIL_PERFETTO_CATEGORY_DEFAULT_STR "mesa.default"
+-#define UTIL_PERFETTO_CATEGORY_SLOW_STR "mesa.slow"
+ 
+ PERFETTO_DEFINE_CATEGORIES(
+    perfetto::Category(UTIL_PERFETTO_CATEGORY_DEFAULT_STR)
+-      .SetDescription("Mesa default events"),
+-   perfetto::Category(UTIL_PERFETTO_CATEGORY_SLOW_STR)
+-      .SetDescription("Mesa slow events")
+-      .SetTags("slow"));
++      .SetDescription("Mesa default events"));
+ 
+ PERFETTO_TRACK_EVENT_STATIC_STORAGE();
+ 
+-int util_perfetto_category_states[UTIL_PERFETTO_CATEGORY_COUNT];
++int util_perfetto_tracing_state;
+ 
+ static void
+-util_perfetto_update_category_states(void)
++util_perfetto_update_tracing_state(void)
+ {
+-#define UPDATE_CATEGORY(cat)                                                 \
+-   p_atomic_set(                                                             \
+-      &util_perfetto_category_states[UTIL_PERFETTO_CATEGORY_##cat],          \
+-      TRACE_EVENT_CATEGORY_ENABLED(UTIL_PERFETTO_CATEGORY_##cat##_STR))
+-   UPDATE_CATEGORY(DEFAULT);
+-   UPDATE_CATEGORY(SLOW);
+-#undef UPDATE_CATEGORY
++   p_atomic_set(&util_perfetto_tracing_state,
++                TRACE_EVENT_CATEGORY_ENABLED(UTIL_PERFETTO_CATEGORY_DEFAULT_STR));
+ }
+ 
+ void
+-util_perfetto_trace_begin(enum util_perfetto_category category,
+-                          const char *name)
++util_perfetto_trace_begin(const char *name)
+ {
+-#define TRACE_BEGIN(cat, name)                                               \
+-   TRACE_EVENT_BEGIN(                                                        \
+-      UTIL_PERFETTO_CATEGORY_##cat##_STR, nullptr,                           \
+-      [&](perfetto::EventContext ctx) { ctx.event()->set_name(name); })
+-   switch (category) {
+-   case UTIL_PERFETTO_CATEGORY_DEFAULT:
+-      TRACE_BEGIN(DEFAULT, name);
+-      break;
+-   case UTIL_PERFETTO_CATEGORY_SLOW:
+-      TRACE_BEGIN(SLOW, name);
+-      break;
+-   default:
+-      unreachable("bad perfetto category");
+-   }
+-#undef TRACE_BEGIN
++   TRACE_EVENT_BEGIN(
++      UTIL_PERFETTO_CATEGORY_DEFAULT_STR, nullptr,
++      [&](perfetto::EventContext ctx) { ctx.event()->set_name(name); });
+ }
+ 
+ void
+-util_perfetto_trace_end(enum util_perfetto_category category)
++util_perfetto_trace_end(void)
+ {
+-#define TRACE_END(cat) TRACE_EVENT_END(UTIL_PERFETTO_CATEGORY_##cat##_STR)
+-   switch (category) {
+-   case UTIL_PERFETTO_CATEGORY_DEFAULT:
+-      TRACE_END(DEFAULT);
+-      break;
+-   case UTIL_PERFETTO_CATEGORY_SLOW:
+-      TRACE_END(SLOW);
+-      break;
+-   default:
+-      unreachable("bad perfetto category");
+-   }
+-#undef TRACE_END
++   TRACE_EVENT_END(UTIL_PERFETTO_CATEGORY_DEFAULT_STR);
+ 
+-   util_perfetto_update_category_states();
++   util_perfetto_update_tracing_state();
+ }
+ 
+ class UtilPerfettoObserver : public perfetto::TrackEventSessionObserver {
+@@ -101,11 +68,11 @@ class UtilPerfettoObserver : public perfetto::TrackEventSessionObserver {
+ 
+    void OnStart(const perfetto::DataSourceBase::StartArgs &) override
+    {
+-      util_perfetto_update_category_states();
++      util_perfetto_update_tracing_state();
+    }
+ 
+    /* XXX There is no PostStop callback.  We have to call
+-    * util_perfetto_update_category_states occasionally to poll.
++    * util_perfetto_update_tracing_state occasionally to poll.
+     */
+ };
+ 
+diff --git a/src/util/perf/u_perfetto.h b/src/util/perf/u_perfetto.h
+index d90c33a061d..75ae00186a0 100644
+--- a/src/util/perf/u_perfetto.h
++++ b/src/util/perf/u_perfetto.h
+@@ -30,29 +30,21 @@
+ extern "C" {
+ #endif
+ 
+-enum util_perfetto_category {
+-   UTIL_PERFETTO_CATEGORY_DEFAULT,
+-   UTIL_PERFETTO_CATEGORY_SLOW,
+-
+-   UTIL_PERFETTO_CATEGORY_COUNT,
+-};
+-
+ #ifdef HAVE_PERFETTO
+ 
+-extern int util_perfetto_category_states[UTIL_PERFETTO_CATEGORY_COUNT];
++extern int util_perfetto_tracing_state;
+ 
+ void util_perfetto_init(void);
+ 
+ static inline bool
+-util_perfetto_is_category_enabled(enum util_perfetto_category category)
++util_perfetto_is_tracing_enabled(void)
+ {
+-   return p_atomic_read_relaxed(&util_perfetto_category_states[category]);
++   return p_atomic_read_relaxed(&util_perfetto_tracing_state);
+ }
+ 
+-void util_perfetto_trace_begin(enum util_perfetto_category category,
+-                               const char *name);
++void util_perfetto_trace_begin(const char *name);
+ 
+-void util_perfetto_trace_end(enum util_perfetto_category category);
++void util_perfetto_trace_end(void);
+ 
+ #else /* HAVE_PERFETTO */
+ 
+@@ -62,19 +54,18 @@ util_perfetto_init(void)
+ }
+ 
+ static inline bool
+-util_perfetto_is_category_enabled(enum util_perfetto_category category)
++util_perfetto_is_tracing_enabled(void)
+ {
+    return false;
+ }
+ 
+ static inline void
+-util_perfetto_trace_begin(enum util_perfetto_category category,
+-                          const char *name)
++util_perfetto_trace_begin(const char *name)
+ {
+ }
+ 
+ static inline void
+-util_perfetto_trace_end(enum util_perfetto_category category)
++util_perfetto_trace_end(void)
+ {
+ }
+ 
+-- 
+2.42.0
+

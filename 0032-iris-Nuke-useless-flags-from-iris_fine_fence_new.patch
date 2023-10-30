@@ -1,0 +1,130 @@
+From c8c1109bc6cc2b0910e4e502cb8a2dbebae2d4da Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jos=C3=A9=20Roberto=20de=20Souza?= <jose.souza@intel.com>
+Date: Tue, 3 Oct 2023 12:58:40 -0700
+Subject: [PATCH 032/834] iris: Nuke useless flags from iris_fine_fence_new()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Only IRIS_FENCE_TOP_OF_PIPE was changing the PIPE_CONTROL flags but it
+was not set in any caller.
+So we can remove IRIS_FENCE_* and flags from iris_fine_fence struct.
+
+Signed-off-by: José Roberto de Souza <jose.souza@intel.com>
+Reviewed-by: Paulo Zanoni <paulo.r.zanoni@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25571>
+---
+ src/gallium/drivers/iris/iris_batch.c      |  2 +-
+ src/gallium/drivers/iris/iris_fence.c      |  4 +---
+ src/gallium/drivers/iris/iris_fine_fence.c | 23 +++++++++-------------
+ src/gallium/drivers/iris/iris_fine_fence.h |  9 +--------
+ 4 files changed, 12 insertions(+), 26 deletions(-)
+
+diff --git a/src/gallium/drivers/iris/iris_batch.c b/src/gallium/drivers/iris/iris_batch.c
+index 4cb138cd8a8..d1f75a5981d 100644
+--- a/src/gallium/drivers/iris/iris_batch.c
++++ b/src/gallium/drivers/iris/iris_batch.c
+@@ -618,7 +618,7 @@ add_aux_map_bos_to_batch(struct iris_batch *batch)
+ static void
+ finish_seqno(struct iris_batch *batch)
+ {
+-   struct iris_fine_fence *sq = iris_fine_fence_new(batch, IRIS_FENCE_END);
++   struct iris_fine_fence *sq = iris_fine_fence_new(batch);
+    if (!sq)
+       return;
+ 
+diff --git a/src/gallium/drivers/iris/iris_fence.c b/src/gallium/drivers/iris/iris_fence.c
+index c16edf30002..da4cfd09fa4 100644
+--- a/src/gallium/drivers/iris/iris_fence.c
++++ b/src/gallium/drivers/iris/iris_fence.c
+@@ -288,8 +288,7 @@ iris_fence_flush(struct pipe_context *ctx,
+       unsigned b = batch->name;
+ 
+       if (deferred && iris_batch_bytes_used(batch) > 0) {
+-         struct iris_fine_fence *fine =
+-            iris_fine_fence_new(batch, IRIS_FENCE_BOTTOM_OF_PIPE);
++         struct iris_fine_fence *fine = iris_fine_fence_new(batch);
+          iris_fine_fence_reference(screen, &fence->fine[b], fine);
+          iris_fine_fence_reference(screen, &fine, NULL);
+       } else {
+@@ -566,7 +565,6 @@ iris_fence_create_fd(struct pipe_context *ctx,
+    fine->seqno = UINT32_MAX;
+    fine->map = &zero;
+    fine->syncobj = syncobj;
+-   fine->flags = IRIS_FENCE_END;
+    pipe_reference_init(&fine->reference, 1);
+ 
+    struct pipe_fence_handle *fence = calloc(1, sizeof(*fence));
+diff --git a/src/gallium/drivers/iris/iris_fine_fence.c b/src/gallium/drivers/iris/iris_fine_fence.c
+index 5ec9fc45780..bdeffdd2053 100644
+--- a/src/gallium/drivers/iris/iris_fine_fence.c
++++ b/src/gallium/drivers/iris/iris_fine_fence.c
+@@ -42,7 +42,7 @@ iris_fine_fence_destroy(struct iris_screen *screen,
+ }
+ 
+ struct iris_fine_fence *
+-iris_fine_fence_new(struct iris_batch *batch, unsigned flags)
++iris_fine_fence_new(struct iris_batch *batch)
+ {
+    struct iris_fine_fence *fine = calloc(1, sizeof(*fine));
+    if (!fine)
+@@ -58,21 +58,16 @@ iris_fine_fence_new(struct iris_batch *batch, unsigned flags)
+    pipe_resource_reference(&fine->ref.res, batch->fine_fences.ref.res);
+    fine->ref.offset = batch->fine_fences.ref.offset;
+    fine->map = batch->fine_fences.map;
+-   fine->flags = flags;
+ 
+-   unsigned pc;
+-   if (flags & IRIS_FENCE_TOP_OF_PIPE) {
+-      pc = PIPE_CONTROL_WRITE_IMMEDIATE | PIPE_CONTROL_CS_STALL;
+-   } else {
+-      pc = PIPE_CONTROL_WRITE_IMMEDIATE |
+-           PIPE_CONTROL_RENDER_TARGET_FLUSH |
+-           PIPE_CONTROL_TILE_CACHE_FLUSH |
+-           PIPE_CONTROL_DEPTH_CACHE_FLUSH |
+-           PIPE_CONTROL_DATA_CACHE_FLUSH;
++   unsigned pc = PIPE_CONTROL_WRITE_IMMEDIATE |
++                 PIPE_CONTROL_RENDER_TARGET_FLUSH |
++                 PIPE_CONTROL_TILE_CACHE_FLUSH |
++                 PIPE_CONTROL_DEPTH_CACHE_FLUSH |
++                 PIPE_CONTROL_DATA_CACHE_FLUSH;
++
++   if (batch->name == IRIS_BATCH_COMPUTE)
++      pc &= ~PIPE_CONTROL_GRAPHICS_BITS;
+ 
+-      if (batch->name == IRIS_BATCH_COMPUTE)
+-         pc &= ~PIPE_CONTROL_GRAPHICS_BITS;
+-   }
+    iris_emit_pipe_control_write(batch, "fence: fine", pc,
+                                 iris_resource_bo(fine->ref.res),
+                                 fine->ref.offset,
+diff --git a/src/gallium/drivers/iris/iris_fine_fence.h b/src/gallium/drivers/iris/iris_fine_fence.h
+index 68846a99cb3..aca99560c2d 100644
+--- a/src/gallium/drivers/iris/iris_fine_fence.h
++++ b/src/gallium/drivers/iris/iris_fine_fence.h
+@@ -59,13 +59,6 @@ struct iris_fine_fence {
+     */
+    struct iris_syncobj *syncobj;
+ 
+-#define IRIS_FENCE_BOTTOM_OF_PIPE 0x0 /**< Written by bottom-of-pipe flush */
+-#define IRIS_FENCE_TOP_OF_PIPE    0x1 /**< Written by top-of-pipe flush */
+-#define IRIS_FENCE_END            0x2 /**< Written at the end of a batch */
+-
+-   /** Information about the type of flush involved (see IRIS_FENCE_*) */
+-   uint32_t flags;
+-
+    /**
+     * Sequence number expected to be written by the flush we inserted
+     * when creating this fence.  The iris_fine_fence is 'signaled' when *@map
+@@ -76,7 +69,7 @@ struct iris_fine_fence {
+ 
+ void iris_fine_fence_init(struct iris_batch *batch);
+ 
+-struct iris_fine_fence *iris_fine_fence_new(struct iris_batch *batch, unsigned flags);
++struct iris_fine_fence *iris_fine_fence_new(struct iris_batch *batch);
+ 
+ void iris_fine_fence_destroy(struct iris_screen *screen, struct iris_fine_fence *sq);
+ 
+-- 
+2.42.0
+

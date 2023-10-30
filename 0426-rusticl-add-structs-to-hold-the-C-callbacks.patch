@@ -1,0 +1,85 @@
+From e461944060140f75b61af0aea1e0e1cf77acc01e Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Wed, 11 Oct 2023 21:26:05 +0200
+Subject: [PATCH 426/834] rusticl: add structs to hold the C callbacks
+
+Keeps function pointers and their provided user data together. Since these callbacks are guaranteed
+to be thread-safe by the OpenCL spec, they are marked Send and Sync.
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/types.rs | 50 ++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index b4a4c1ac7aa..b5486a7e522 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -1,6 +1,9 @@
++use crate::api::icd::CLResult;
++
+ use rusticl_opencl_gen::*;
+ 
+ use std::borrow::Borrow;
++use std::ffi::c_void;
+ use std::iter::Product;
+ 
+ #[macro_export]
+@@ -22,6 +25,53 @@ macro_rules! cl_callback {
+         pub type $fn_alias = unsafe extern "C" fn(
+             $($p: $ty,)*
+         );
++
++        // INVARIANT:
++        // All safety requirements on `func` and `data` documented on `$cb::new` are invariants.
++        pub struct $cb {
++            pub func: $fn_alias,
++            pub data: *mut c_void,
++        }
++
++        #[allow(dead_code)]
++        impl $cb {
++            /// Creates a new `$cb`. Returns `Err(CL_INVALID_VALUE)` if `func` is `None`.
++            ///
++            /// # SAFETY:
++            ///
++            /// If `func` is `None`, there are no safety requirements. Otherwise:
++            ///
++            /// - `func` must be a thread-safe fn.
++            /// - Passing `data` as the last parameter to `func` must not cause unsoundness.
++            pub unsafe fn new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Self> {
++                let Some(func) = func else {
++                    return Err(CL_INVALID_VALUE);
++                };
++                Ok(Self { func, data })
++            }
++
++            /// Creates a new Option(`$cb`). Returns:
++            /// - `Ok(Some($cb)) if `func` is `Some(_)`.
++            /// - `Ok(None)` if `func` is `None` and `data` is `null`.
++            /// - `Err(CL_INVALID_VALUE)` if `func` is `None` and `data` is not `null`.
++            ///
++            /// # SAFETY:
++            ///
++            /// The safety requirements are identical to those of [`new`].
++            pub unsafe fn try_new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Option<Self>> {
++                let Some(func) = func else {
++                    return if data.is_null() {
++                        Ok(None)
++                    } else {
++                        Err(CL_INVALID_VALUE)
++                    };
++                };
++                Ok(Some(Self { func, data }))
++            }
++        }
++
++        unsafe impl Send for $cb {}
++        unsafe impl Sync for $cb {}
+     }
+ }
+ 
+-- 
+2.42.0
+

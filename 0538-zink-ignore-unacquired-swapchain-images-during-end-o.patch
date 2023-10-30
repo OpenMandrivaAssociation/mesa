@@ -1,0 +1,32 @@
+From 084e22cfd8d79afb12b806fa0539c8f2b07f4a16 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 18 Oct 2023 08:15:18 -0400
+Subject: [PATCH 538/834] zink: ignore unacquired swapchain images during
+ end-of-frame flush
+
+> Use of a presentable image must: occur only after the image is returned by flink:vkAcquireNextImageKHR, and before it is released by flink:vkQueuePresentKHR.
+> This includes transitioning the image layout and rendering commands.
+
+fixes #10005
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25787>
+---
+ src/gallium/drivers/zink/zink_context.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_context.c b/src/gallium/drivers/zink/zink_context.c
+index e83b94875e0..ca228da24cf 100644
+--- a/src/gallium/drivers/zink/zink_context.c
++++ b/src/gallium/drivers/zink/zink_context.c
+@@ -3776,7 +3776,7 @@ zink_flush(struct pipe_context *pctx,
+ #ifdef HAVE_RENDERDOC_APP_H
+       p_atomic_inc(&screen->renderdoc_frame);
+ #endif
+-      if (ctx->needs_present && ctx->needs_present->obj->image &&
++      if (ctx->needs_present && ctx->needs_present->obj->dt_idx != UINT32_MAX &&
+           zink_is_swapchain(ctx->needs_present)) {
+          zink_kopper_readback_update(ctx, ctx->needs_present);
+          screen->image_barrier(ctx, ctx->needs_present, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+-- 
+2.42.0
+

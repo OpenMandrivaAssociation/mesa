@@ -1,0 +1,52 @@
+From 6499c43cc7b876fd4b42207c3b75b1aeb3af64c3 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sat, 14 Oct 2023 22:14:43 +0300
+Subject: [PATCH 491/834] u_trace: generate tracepoint name array in perfetto
+ header
+
+The driver glue doesn't have access to that information in a
+centralized place. If you want to generate perfetto iid, you need
+access to all names.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25730>
+---
+ src/util/perf/u_trace.py | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/util/perf/u_trace.py b/src/util/perf/u_trace.py
+index 90c2c8a4c9d..3d00e4219dc 100644
+--- a/src/util/perf/u_trace.py
++++ b/src/util/perf/u_trace.py
+@@ -568,6 +568,12 @@ perfetto_utils_hdr_template = """\
+ #include "${header.hdr}"
+ % endfor
+ 
++UNUSED static const char *${basename}_names[] = {
++% for trace_name, trace in TRACEPOINTS.items():
++   "${trace_name}",
++% endfor
++};
++
+ % for trace_name, trace in TRACEPOINTS.items():
+ static void UNUSED
+ trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEvent *event,
+@@ -598,11 +604,12 @@ trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEve
+ #endif /* ${guard_name} */
+ """
+ 
+-def utrace_generate_perfetto_utils(hpath):
++def utrace_generate_perfetto_utils(hpath,basename="tracepoint"):
+     if hpath is not None:
+         hdr = os.path.basename(hpath)
+         with open(hpath, 'wb') as f:
+             f.write(Template(perfetto_utils_hdr_template, output_encoding='utf-8').render(
++                basename=basename,
+                 hdrname=hdr.rstrip('.h').upper(),
+                 HEADERS=[h for h in HEADERS if h.scope & HeaderScope.PERFETTO],
+                 TRACEPOINTS=TRACEPOINTS))
+-- 
+2.42.0
+

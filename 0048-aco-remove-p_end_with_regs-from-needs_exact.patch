@@ -1,0 +1,57 @@
+From 67244fc88af134e03019b5b292dcd00fbb7f94ba Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Fri, 25 Aug 2023 14:25:20 +0800
+Subject: [PATCH 048/834] aco: remove p_end_with_regs from needs_exact()
+
+ps needs to handle wqm:
+1. main part may compute with args from prolog in wqm mode, so
+   prolog need to compute these args in wqm mode too.
+2. prolog and main part need to end with exact exec, so next
+   shader part which inherit previous shader part's exec won't
+   do valid job for helper threads
+
+1 need p_end_with_regs to operate in wqm mode and itself can't
+be exact, otherwise some move instruction added by it won't be
+in wqm mode so helper threads' compute result is not passed to
+next shader part as args.
+
+2 is done by p_end_wqm added by finish_program automatically
+after p_end_with_regs.
+
+Piglit tests can trigger the problem:
+
+1. gl-2.1-polygon-stipple-fs
+  a. ps prolog call discard_if
+  b. ps main pass wqm exec to epilog
+  c. ps epilog export color for discarded pixel
+
+2. fs-fwidth-color.shader_test
+  a. ps prolog need to pass args computed in wqm mode
+  b. set p_end_with_regs to exact will end wqm mode before
+     the move instructions, so helper threads's result is not
+     passed to next shader part
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/compiler/aco_insert_exec_mask.cpp | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/amd/compiler/aco_insert_exec_mask.cpp b/src/amd/compiler/aco_insert_exec_mask.cpp
+index 6053874308a..d20bc29b120 100644
+--- a/src/amd/compiler/aco_insert_exec_mask.cpp
++++ b/src/amd/compiler/aco_insert_exec_mask.cpp
+@@ -89,8 +89,7 @@ needs_exact(aco_ptr<Instruction>& instr)
+        * epilog without considering the exec mask.
+        */
+       return instr->isEXP() || instr->opcode == aco_opcode::p_jump_to_epilog ||
+-             instr->opcode == aco_opcode::p_dual_src_export_gfx11 ||
+-             instr->opcode == aco_opcode::p_end_with_regs;
++             instr->opcode == aco_opcode::p_dual_src_export_gfx11;
+    }
+ }
+ 
+-- 
+2.42.0
+

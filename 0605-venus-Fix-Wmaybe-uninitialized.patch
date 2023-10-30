@@ -1,0 +1,38 @@
+From 904f31edffcb23246975e4b3521092d544f32798 Mon Sep 17 00:00:00 2001
+From: Lina Versace <linyaa@google.com>
+Date: Wed, 18 Oct 2023 16:18:33 -0700
+Subject: [PATCH 605/834] venus: Fix -Wmaybe-uninitialized
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+  src/virtio/vulkan/vn_ring.c: In function ‘vn_ring_submit’:
+  src/virtio/vulkan/vn_ring.c:259:4: warning: ‘cur_seqno’ may be used uninitialized [-Wmaybe-uninitialized]
+    259 |    vn_ring_retire_submits(ring, cur_seqno);
+        |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Signed-off-by: Lina Versace <linyaa@google.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25797>
+---
+ src/virtio/vulkan/vn_ring.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/virtio/vulkan/vn_ring.c b/src/virtio/vulkan/vn_ring.c
+index 76fca337ab0..eec832ba1d5 100644
+--- a/src/virtio/vulkan/vn_ring.c
++++ b/src/virtio/vulkan/vn_ring.c
+@@ -242,7 +242,10 @@ vn_ring_submit(struct vn_ring *ring,
+ {
+    /* write cs to the ring */
+    assert(!vn_cs_encoder_is_empty(cs));
+-   uint32_t cur_seqno;
++
++   /* avoid -Wmaybe-unitialized */
++   uint32_t cur_seqno = 0;
++
+    for (uint32_t i = 0; i < cs->buffer_count; i++) {
+       const struct vn_cs_encoder_buffer *buf = &cs->buffers[i];
+       cur_seqno = vn_ring_wait_space(ring, buf->committed_size);
+-- 
+2.42.0
+

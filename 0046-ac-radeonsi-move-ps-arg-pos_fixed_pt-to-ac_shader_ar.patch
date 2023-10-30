@@ -1,0 +1,88 @@
+From 38530b808e01f39c8cf9dadf37787427723ca03d Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Tue, 8 Aug 2023 13:14:19 +0800
+Subject: [PATCH 046/834] ac,radeonsi: move ps arg pos_fixed_pt to
+ ac_shader_args
+
+It's a HW init reg, not driver spec user sgpr. radv just
+doesn't use it. Move it to amd common for aco ps prolog
+usage.
+
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/common/ac_shader_args.h                   | 1 +
+ src/gallium/drivers/radeonsi/si_nir_lower_abi.c   | 4 ++--
+ src/gallium/drivers/radeonsi/si_shader.c          | 6 +++---
+ src/gallium/drivers/radeonsi/si_shader_internal.h | 1 -
+ 4 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/amd/common/ac_shader_args.h b/src/amd/common/ac_shader_args.h
+index 3c4ae916dfc..1b2b6b30dea 100644
+--- a/src/amd/common/ac_shader_args.h
++++ b/src/amd/common/ac_shader_args.h
+@@ -142,6 +142,7 @@ struct ac_shader_args {
+    struct ac_arg linear_sample;
+    struct ac_arg linear_center;
+    struct ac_arg linear_centroid;
++   struct ac_arg pos_fixed_pt;
+ 
+    /* CS */
+    struct ac_arg local_invocation_ids;
+diff --git a/src/gallium/drivers/radeonsi/si_nir_lower_abi.c b/src/gallium/drivers/radeonsi/si_nir_lower_abi.c
+index 5f99e28e50a..9d15e17faa9 100644
+--- a/src/gallium/drivers/radeonsi/si_nir_lower_abi.c
++++ b/src/gallium/drivers/radeonsi/si_nir_lower_abi.c
+@@ -108,10 +108,10 @@ fetch_framebuffer(nir_builder *b, struct si_shader_args *args,
+    unsigned chan = 0;
+    nir_def *vec[4] = {undef, undef, undef, undef};
+ 
+-   vec[chan++] = ac_nir_unpack_arg(b, &args->ac, args->pos_fixed_pt, 0, 16);
++   vec[chan++] = ac_nir_unpack_arg(b, &args->ac, args->ac.pos_fixed_pt, 0, 16);
+ 
+    if (!key->ps.mono.fbfetch_is_1D)
+-      vec[chan++] = ac_nir_unpack_arg(b, &args->ac, args->pos_fixed_pt, 16, 16);
++      vec[chan++] = ac_nir_unpack_arg(b, &args->ac, args->ac.pos_fixed_pt, 16, 16);
+ 
+    /* Get the current render target layer index. */
+    if (key->ps.mono.fbfetch_layered)
+diff --git a/src/gallium/drivers/radeonsi/si_shader.c b/src/gallium/drivers/radeonsi/si_shader.c
+index 8cc852c3f38..488cd6c84fd 100644
+--- a/src/gallium/drivers/radeonsi/si_shader.c
++++ b/src/gallium/drivers/radeonsi/si_shader.c
+@@ -668,7 +668,7 @@ void si_init_shader_args(struct si_shader *shader, struct si_shader_args *args)
+                          SI_PARAM_ANCILLARY);
+       si_add_arg_checked(&args->ac, AC_ARG_VGPR, 1, AC_ARG_FLOAT, &args->ac.sample_coverage,
+                          SI_PARAM_SAMPLE_COVERAGE);
+-      si_add_arg_checked(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->pos_fixed_pt,
++      si_add_arg_checked(&args->ac, AC_ARG_VGPR, 1, AC_ARG_INT, &args->ac.pos_fixed_pt,
+                          SI_PARAM_POS_FIXED_PT);
+ 
+       if (shader->use_aco) {
+@@ -2139,8 +2139,8 @@ static void si_nir_emit_polygon_stipple(nir_shader *nir, struct si_shader_args *
+     * Since the stipple pattern is 32x32 and it repeats, just get 5 bits
+     * per coordinate to get the repeating effect.
+     */
+-   nir_def *pos_x = ac_nir_unpack_arg(b, &args->ac, args->pos_fixed_pt, 0, 5);
+-   nir_def *pos_y = ac_nir_unpack_arg(b, &args->ac, args->pos_fixed_pt, 16, 5);
++   nir_def *pos_x = ac_nir_unpack_arg(b, &args->ac, args->ac.pos_fixed_pt, 0, 5);
++   nir_def *pos_y = ac_nir_unpack_arg(b, &args->ac, args->ac.pos_fixed_pt, 16, 5);
+ 
+    nir_def *zero = nir_imm_int(b, 0);
+    /* The stipple pattern is 32x32, each row has 32 bits. */
+diff --git a/src/gallium/drivers/radeonsi/si_shader_internal.h b/src/gallium/drivers/radeonsi/si_shader_internal.h
+index 95d8c3dfbe7..d4d201092c5 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_internal.h
++++ b/src/gallium/drivers/radeonsi/si_shader_internal.h
+@@ -57,7 +57,6 @@ struct si_shader_args {
+    /* API TCS & TES */
+    struct ac_arg tes_offchip_addr;
+    /* PS */
+-   struct ac_arg pos_fixed_pt;
+    struct ac_arg alpha_reference;
+    struct ac_arg color_start;
+    /* CS */
+-- 
+2.42.0
+

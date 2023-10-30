@@ -1,0 +1,36 @@
+From 4518c3a50ce1ef3b3c68d8f461c965c536ab639d Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Fri, 22 Sep 2023 10:11:09 +0100
+Subject: [PATCH 019/834] pvr: Adjust EOT PBE state to account for the iview's
+ base array layer
+
+Fixes various dEQP array tests.
+E.g.
+  dEQP-VK.pipeline.monolithic.framebuffer_attachment
+    .1d_array_32_64_4
+
+Reported-by: James Glanville <james.glanville@imgtec.com>
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25348>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index f7ae345f885..317e59cd565 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -973,6 +973,9 @@ static void pvr_setup_pbe_state(
+    surface_params.addr =
+       PVR_DEV_ADDR_OFFSET(image->vma->dev_addr,
+                           image->mip_levels[iview->vk.base_mip_level].offset);
++   surface_params.addr =
++      PVR_DEV_ADDR_OFFSET(surface_params.addr,
++                          iview->vk.base_array_layer * image->layer_size);
+ 
+    surface_params.mem_layout = image->memlayout;
+    surface_params.stride = pvr_stride_from_pitch(level_pitch, iview->vk.format);
+-- 
+2.42.0
+

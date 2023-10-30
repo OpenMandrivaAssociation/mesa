@@ -1,0 +1,56 @@
+From d57611fe25f45c63b6bcd774e844a4e32c9c9cf3 Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Fri, 25 Aug 2023 18:09:39 -0400
+Subject: [PATCH 683/834] intel/isl: Add scores for GEN12_RC_CCS and MTL_RC_CCS
+
+Now that these CCS-enabled modifiers have non-zero scores, anv is
+enabled to use them.
+
+We found this to improve the performance of Borderlands 3 by 18.73%.
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/6701
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Tested-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/isl/isl_drm.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/intel/isl/isl_drm.c b/src/intel/isl/isl_drm.c
+index b4bcf9cb1d4..499acf7921b 100644
+--- a/src/intel/isl/isl_drm.c
++++ b/src/intel/isl/isl_drm.c
+@@ -214,6 +214,14 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
+       if (INTEL_DEBUG(DEBUG_NO_CCS))
+          return 0;
+ 
++      return 4;
++   case I915_FORMAT_MOD_Y_TILED_GEN12_RC_CCS:
++      if (devinfo->verx10 != 120)
++         return 0;
++
++      if (INTEL_DEBUG(DEBUG_NO_CCS))
++         return 0;
++
+       return 4;
+    case I915_FORMAT_MOD_4_TILED:
+       /* Gfx12.5 introduces Tile4. */
+@@ -228,6 +236,14 @@ isl_drm_modifier_get_score(const struct intel_device_info *devinfo,
+       if (INTEL_DEBUG(DEBUG_NO_CCS))
+          return 0;
+ 
++      return 4;
++   case I915_FORMAT_MOD_4_TILED_MTL_RC_CCS:
++      if (!intel_device_info_is_mtl(devinfo))
++         return 0;
++
++      if (INTEL_DEBUG(DEBUG_NO_CCS))
++         return 0;
++
+       return 4;
+    }
+ }
+-- 
+2.42.0
+

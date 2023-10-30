@@ -1,0 +1,313 @@
+From 9a3bd255b62fb3efa11f0885d32aac6503c23799 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Mon, 9 Oct 2023 14:24:35 +0200
+Subject: [PATCH 459/834] docs/relnotes: escape some at-symbols
+
+These are not e-mail addresses, and shouldn't have mailto links...
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25712>
+---
+ docs/relnotes/10.6.0.rst | 2 +-
+ docs/relnotes/10.6.9.rst | 6 +++---
+ docs/relnotes/11.0.0.rst | 2 +-
+ docs/relnotes/11.0.4.rst | 6 +++---
+ docs/relnotes/11.1.0.rst | 6 +++---
+ docs/relnotes/19.1.0.rst | 2 +-
+ docs/relnotes/20.1.5.rst | 2 +-
+ docs/relnotes/20.2.0.rst | 4 ++--
+ docs/relnotes/21.1.0.rst | 2 +-
+ docs/relnotes/21.2.0.rst | 4 ++--
+ docs/relnotes/21.3.0.rst | 2 +-
+ docs/relnotes/22.0.0.rst | 2 +-
+ docs/relnotes/22.1.0.rst | 2 +-
+ docs/relnotes/22.2.0.rst | 6 +++---
+ docs/relnotes/22.3.0.rst | 6 +++---
+ docs/relnotes/23.1.0.rst | 4 ++--
+ 16 files changed, 29 insertions(+), 29 deletions(-)
+
+diff --git a/docs/relnotes/10.6.0.rst b/docs/relnotes/10.6.0.rst
+index c17992249af..6e40242eff2 100644
+--- a/docs/relnotes/10.6.0.rst
++++ b/docs/relnotes/10.6.0.rst
+@@ -327,7 +327,7 @@ This list is likely incomplete.
+    Register spilling clobbers registers used elsewhere in the shader
+ -  `Bug 90547 <https://bugs.freedesktop.org/show_bug.cgi?id=90547>`__ -
+    [BDW/BSW/SKL
+-   Bisected]Piglit/glean@vertprog1-rsq_test_2_(reciprocal_square_root_of_negative_value)
++   Bisected]Piglit/glean\@vertprog1-rsq_test_2_(reciprocal_square_root_of_negative_value)
+    fais
+ -  `Bug 90580 <https://bugs.freedesktop.org/show_bug.cgi?id=90580>`__ -
+    [HSW bisected] integer multiplication bug
+diff --git a/docs/relnotes/10.6.9.rst b/docs/relnotes/10.6.9.rst
+index 89dda305580..e75bcd49ef2 100644
+--- a/docs/relnotes/10.6.9.rst
++++ b/docs/relnotes/10.6.9.rst
+@@ -34,9 +34,9 @@ This list is likely incomplete.
+ -  `Bug 55552 <https://bugs.freedesktop.org/show_bug.cgi?id=55552>`__ -
+    Compile errors with --enable-mangling
+ -  `Bug 86281 <https://bugs.freedesktop.org/show_bug.cgi?id=86281>`__ -
+-   brw_meta_fast_clear (brw=brw@entry=0x7fffd4097a08,
+-   fb=fb@entry=0x7fffd40fa900, buffers=buffers@entry=2,
+-   partial_clear=partial_clear@entry=false)
++   brw_meta_fast_clear (brw=brw\@entry=0x7fffd4097a08,
++   fb=fb\@entry=0x7fffd40fa900, buffers=buffers\@entry=2,
++   partial_clear=partial_clear\@entry=false)
+ -  `Bug 91970 <https://bugs.freedesktop.org/show_bug.cgi?id=91970>`__ -
+    [BSW regression]
+    dEQP-GLES3.functional.shaders.precision.int.highp_mul_vertex
+diff --git a/docs/relnotes/11.0.0.rst b/docs/relnotes/11.0.0.rst
+index b5b2e0a487d..83de06cc0b1 100644
+--- a/docs/relnotes/11.0.0.rst
++++ b/docs/relnotes/11.0.0.rst
+@@ -127,7 +127,7 @@ This list is likely incomplete.
+    (rscreen->ws->buffer_from_handle returns NULL)
+ -  `Bug 90547 <https://bugs.freedesktop.org/show_bug.cgi?id=90547>`__ -
+    [BDW/BSW/SKL
+-   Bisected]Piglit/glean@vertprog1-rsq_test_2_(reciprocal_square_root_of_negative_value)
++   Bisected]Piglit/glean\@vertprog1-rsq_test_2_(reciprocal_square_root_of_negative_value)
+    fais
+ -  `Bug 90580 <https://bugs.freedesktop.org/show_bug.cgi?id=90580>`__ -
+    [HSW bisected] integer multiplication bug
+diff --git a/docs/relnotes/11.0.4.rst b/docs/relnotes/11.0.4.rst
+index 3e9b30475f2..95be7f62e71 100644
+--- a/docs/relnotes/11.0.4.rst
++++ b/docs/relnotes/11.0.4.rst
+@@ -30,9 +30,9 @@ Bug fixes
+ This list is likely incomplete.
+ 
+ -  `Bug 86281 <https://bugs.freedesktop.org/show_bug.cgi?id=86281>`__ -
+-   brw_meta_fast_clear (brw=brw@entry=0x7fffd4097a08,
+-   fb=fb@entry=0x7fffd40fa900, buffers=buffers@entry=2,
+-   partial_clear=partial_clear@entry=false)
++   brw_meta_fast_clear (brw=brw\@entry=0x7fffd4097a08,
++   fb=fb\@entry=0x7fffd40fa900, buffers=buffers\@entry=2,
++   partial_clear=partial_clear\@entry=false)
+ -  `Bug 86720 <https://bugs.freedesktop.org/show_bug.cgi?id=86720>`__ -
+    [radeon] Europa Universalis 4 freezing during game start (10.3.3+,
+    still broken on 11.0.2)
+diff --git a/docs/relnotes/11.1.0.rst b/docs/relnotes/11.1.0.rst
+index d373bb126a3..78b44a36a57 100644
+--- a/docs/relnotes/11.1.0.rst
++++ b/docs/relnotes/11.1.0.rst
+@@ -91,9 +91,9 @@ This list is likely incomplete.
+ -  `Bug 84677 <https://bugs.freedesktop.org/show_bug.cgi?id=84677>`__ -
+    Triangle disappears with glPolygonMode GL_LINE
+ -  `Bug 86281 <https://bugs.freedesktop.org/show_bug.cgi?id=86281>`__ -
+-   brw_meta_fast_clear (brw=brw@entry=0x7fffd4097a08,
+-   fb=fb@entry=0x7fffd40fa900, buffers=buffers@entry=2,
+-   partial_clear=partial_clear@entry=false)
++   brw_meta_fast_clear (brw=brw\@entry=0x7fffd4097a08,
++   fb=fb\@entry=0x7fffd40fa900, buffers=buffers\@entry=2,
++   partial_clear=partial_clear\@entry=false)
+ -  `Bug 86469 <https://bugs.freedesktop.org/show_bug.cgi?id=86469>`__ -
+    Unreal Engine demo doesn't run
+ -  `Bug 86720 <https://bugs.freedesktop.org/show_bug.cgi?id=86720>`__ -
+diff --git a/docs/relnotes/19.1.0.rst b/docs/relnotes/19.1.0.rst
+index 0098a2d0cc5..00ee4ee82df 100644
+--- a/docs/relnotes/19.1.0.rst
++++ b/docs/relnotes/19.1.0.rst
+@@ -1118,7 +1118,7 @@ Connor Abbott (6):
+ Daniel Schürmann (2):
+ 
+ -  nir: Define shifts according to SM5 specification.
+--  nir: Use SM5 properties to optimize shift(a@32, iand(31, b))
++-  nir: Use SM5 properties to optimize shift(a\@32, iand(31, b))
+ 
+ Daniel Stone (2):
+ 
+diff --git a/docs/relnotes/20.1.5.rst b/docs/relnotes/20.1.5.rst
+index 44a23258bd5..71d4f89013a 100644
+--- a/docs/relnotes/20.1.5.rst
++++ b/docs/relnotes/20.1.5.rst
+@@ -35,7 +35,7 @@ Bug fixes
+ - VRAM leak with vuilkan external memory + opengl memory objects
+ - Possible array out of bounds in brw_vec4_nir.cpp
+ - [tgl][bisected][regression][iris] failure on dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_default
+-- Multiply defined symbols compiling with gcc@10.1.0
++- Multiply defined symbols compiling with gcc\@10.1.0
+ - shrinking descriptor pool on intel+vulkan
+ - dEQP-VK.renderpass2.dedicated_allocation.attachment.1.12 fails on NAVI14
+ 
+diff --git a/docs/relnotes/20.2.0.rst b/docs/relnotes/20.2.0.rst
+index 2ad0b186e59..4cd7558b3ff 100644
+--- a/docs/relnotes/20.2.0.rst
++++ b/docs/relnotes/20.2.0.rst
+@@ -130,7 +130,7 @@ Bug fixes
+ - Possible array out of bounds in brw_vec4_nir.cpp
+ - freedreno/a6xx: incorrect rendering in asphalt 9
+ - [tgl][bisected][regression][iris] failure on dEQP-EGL.functional.wide_color.pbuffer_8888_colorspace_default
+-- Multiply defined symbols compiling with gcc@10.1.0
++- Multiply defined symbols compiling with gcc\@10.1.0
+ - shrinking descriptor pool on intel+vulkan
+ - dEQP-VK.renderpass2.dedicated_allocation.attachment.1.12 fails on NAVI14
+ - turnip: binning and indirect dependency
+@@ -184,7 +184,7 @@ Bug fixes
+ - Missing render Information on Stellaris
+ - freedreno/ir3: allow copy-propagate from array
+ - Zink + GALLIUM_HUD SIGSEGV
+-- piglit spec@egl_ext_device_base@conformance fails LLVM 11 Git assertion since "llvmpipe/fs: add caching support"
++- piglit spec\@egl_ext_device_base\@conformance fails LLVM 11 Git assertion since "llvmpipe/fs: add caching support"
+ - llvmpipe: 1x1 framebuffer with a 2x2 viewport
+ - [regression] nir build failure
+ - ci: need to end baremetal tests after kernel panic/instaboot
+diff --git a/docs/relnotes/21.1.0.rst b/docs/relnotes/21.1.0.rst
+index 3874a7f5c45..eb04611e004 100644
+--- a/docs/relnotes/21.1.0.rst
++++ b/docs/relnotes/21.1.0.rst
+@@ -1867,7 +1867,7 @@ Eric Anholt (207):
+ - ci/freedreno: Switch the piglit testing to the new piglit runner.
+ - ci/bare-metal: Restart a run on intermittent kernel lockups.
+ - ci/freedreno: Mark an a630 piglit flake from async shader compiling.
+-- ci/freedreno: Mark the rest of the glx_arb_sync_control@timing as flakes.
++- ci/freedreno: Mark the rest of the glx_arb_sync_control\@timing as flakes.
+ - nir_to_tgsi: Respect PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED.
+ - freedreno/a5xx: Fix stream-output binning handling.
+ - freedreno/ir3: Demote centroid usage to pixel on non-msaa.
+diff --git a/docs/relnotes/21.2.0.rst b/docs/relnotes/21.2.0.rst
+index caa6d16e761..3bf1b3e20e5 100644
+--- a/docs/relnotes/21.2.0.rst
++++ b/docs/relnotes/21.2.0.rst
+@@ -2048,7 +2048,7 @@ Emma Anholt (251):
+ - ci: Add a flakes IRC channel for llvmpipe/softpipe.
+ - ci/deqp: Skip dEQP-VK.wsi.display.get_display_plane_capabilities
+ - ci/piglit: Move the WGL skip to a common skips file.
+-- ci/piglit: Skip glx_arb_sync_control@timing.* on all systems.
++- ci/piglit: Skip glx_arb_sync_control\@timing.* on all systems.
+ - freedreno: Drop batch-cache orphan tracking.
+ - freedreno: Make a bunch of the batch cache take ctx as the arg.
+ - freedreno: Drop a bit of indirection around the batch cache flush path.
+@@ -5075,7 +5075,7 @@ Tomeu Vizoso (51):
+ - ci/zink: Add nearest_linear_mirror_l8_pot flake
+ - ci/freedreno: Fix name of flake
+ - ci/freedreno: Add new flake after "ci: Configure DUTs for max performance"
+-- ci/freedreno: Add spec@arb_copy_buffer@dlist flake on a530
++- ci/freedreno: Add spec\@arb_copy_buffer\@dlist flake on a530
+ - Partial revert of "ci: Add a manual job for tracking the performance of Freedreno"
+ - ci/freedreno: Skip Portal 2 trace on a630, due to flakiness
+ - Revert "ci/freedreno: Skip Portal 2 trace on a630, due to flakiness"
+diff --git a/docs/relnotes/21.3.0.rst b/docs/relnotes/21.3.0.rst
+index b73e6b9a1b7..eb1374d5fe6 100644
+--- a/docs/relnotes/21.3.0.rst
++++ b/docs/relnotes/21.3.0.rst
+@@ -3255,7 +3255,7 @@ Mike Blumenkrantz (480):
+ - zink: stop leaking resource surface cache hash tables
+ - zink: rework in-use batch states hash table to be a singly-linked list
+ - zink: ci updates
+-- zink: move glx@glx-multi-window-single-context to flakes
++- zink: move glx\@glx-multi-window-single-context to flakes
+ - radv: don't use invalid stride for triggering vertex state change
+ - radv: dynamically calculate misaligned_mask for dynamic vertex input
+ - radv: pre-calc "simple" dynamic vertex input values
+diff --git a/docs/relnotes/22.0.0.rst b/docs/relnotes/22.0.0.rst
+index b2a58407514..bf54fd2d839 100644
+--- a/docs/relnotes/22.0.0.rst
++++ b/docs/relnotes/22.0.0.rst
+@@ -63,7 +63,7 @@ Bug fixes
+ - [REGRESSION][BISECTED] iris: Qutebrowser/QtWebEngine sporadically flashes the window in white
+ - Flickering Intel Uhd 620 Graphics
+ - Vulkan Wayland WSI returns empty surface formats
+-- [radeon, rs690] piglit spec@glsl-1.10@execution@built-in-functions@fs-atan-float + 10 other 'atan' tests crash (mesa-22dev)
++- [radeon, rs690] piglit spec\@glsl-1.10\@execution\@built-in-functions\@fs-atan-float + 10 other 'atan' tests crash (mesa-22dev)
+ - [bisected] artifacts in vaapi h.264 playback
+ - [bisected] artifacts in vaapi h.264 playback
+ - radv: msaa regression
+diff --git a/docs/relnotes/22.1.0.rst b/docs/relnotes/22.1.0.rst
+index 33800178dbc..0629b3938b3 100644
+--- a/docs/relnotes/22.1.0.rst
++++ b/docs/relnotes/22.1.0.rst
+@@ -110,7 +110,7 @@ Bug fixes
+ - android: don't sync_wait() on in fence
+ - va: incorrect frame_num logic causes corrupt h.264 encoding
+ - Performance slowdown by ~20% in Unigine sanctuary with nir_to_tgsi
+-- !15098 broke 4 piglit spec@ext_external_objects tests
++- !15098 broke 4 piglit spec\@ext_external_objects tests
+ - anv: Unable to import I915_FORMAT_MOD_Y_TILED surfaces produced by iHD vaapi driver
+ - anv doesn't always resolve aux buffers with private bindings on transition to external queue
+ - Square Artifacts Dragons Dogma
+diff --git a/docs/relnotes/22.2.0.rst b/docs/relnotes/22.2.0.rst
+index bce031643e0..5b258978cbe 100644
+--- a/docs/relnotes/22.2.0.rst
++++ b/docs/relnotes/22.2.0.rst
+@@ -229,7 +229,7 @@ Bug fixes
+ - dEQP-GLES31.functional.shaders.builtin_functions.integer.[i|u]mulextended.* fail
+ - Radv leaks a descriptor set layout
+ - radeonsi: KHR_debug thread safety
+-- [radeon, rv370] Running piglit shaders@glsl-vs-raytrace-bug26691 test causes hard lockup & reboot
++- [radeon, rv370] Running piglit shaders\@glsl-vs-raytrace-bug26691 test causes hard lockup & reboot
+ - clover: Assertion \`NumContainedTys && "Attempting to get element type of opaque pointer"' failed
+ - wsi/x11: Avoid using xcb_wait_for_special_event in FIFO modes causes memory leak in Apex Legends
+ - v3d: port v3dv workaround for GFXH-1918
+@@ -1617,7 +1617,7 @@ David Heidelberg (58):
+ - ci/etnaviv: add recent flakes for gc2000
+ - ci/etnaviv: gc2000: drop flakes from fails
+ - ci/freedreno: add Blender, Warzone2100, Freedoom and Unvanquished traces
+-- ci/freedreno: fix A530 glmark2@ideas:speed=10000 trace
++- ci/freedreno: fix A530 glmark2\@ideas:speed=10000 trace
+ - ci/llvmpipe: add Blender, Warzone2100, Freedoom and Unvanquished traces
+ - ci/iris: add Blender, Warzone2100, Freedoom and Unvanquished traces
+ - ci/virgl: add Blender, Warzone2100, Freedoom and Unvanquished traces
+@@ -5582,7 +5582,7 @@ Samuel Pitoiset (213):
+ 
+ Sarah Walker (2):
+ 
+-- pvr: Update for firmware 1.17@6256262
++- pvr: Update for firmware 1.17\@6256262
+ - pvr: Move BRN 44079, 48492 and 66011 code into pvrsrvkm specific directory
+ 
+ Sathishkumar S (2):
+diff --git a/docs/relnotes/22.3.0.rst b/docs/relnotes/22.3.0.rst
+index cb6ed9961fd..5242ea51dd4 100644
+--- a/docs/relnotes/22.3.0.rst
++++ b/docs/relnotes/22.3.0.rst
+@@ -2137,7 +2137,7 @@ Gert Wollny (95):
+ - r600/sfn: lower uniforms to UBOs
+ - r600/sfn: remove load_uniform handling
+ - etnaviv: Create MSAA surfaces with PE compatible tiling
+-- nir/algeraic_opt: use double options too for lowering ftrunc@64
++- nir/algeraic_opt: use double options too for lowering ftrunc\@64
+ - r600/sfn: Fix source modifiers for ffract64
+ - r600/sfn: Fix f2u32 and remove backend lowring of f2u64 and f2i64
+ - r600/sfn: Honor shader key w.r.t. atomic counter layout
+@@ -3438,7 +3438,7 @@ Marek Olšák (135):
+ - Revert "mesa: implement a display list / glBitmap texture atlas"
+ - mesa: create glBitmap textures while creating display lists
+ - st/mesa: fix potential use-after-free in draw_bitmap_quad
+-- ci: update pass/fail results for spec@!opengl 1.0@gl-1.0-dlist-bitmap
++- ci: update pass/fail results for spec\@!opengl 1.0\@gl-1.0-dlist-bitmap
+ - winsys/amdgpu: use cached GTT for command buffers and don't set the 32BIT flag
+ - ci: disable the freedreno farm.
+ - radeonsi/ci: add skips of tests not built on Linux
+@@ -3467,7 +3467,7 @@ Marek Olšák (135):
+ - frontend/dri: sync glthread when calling from the app side
+ - radeonsi: simplify radeonsi_zerovram implementation
+ - driconf: disable glthread for DeusEx:MD and F1 2015 due to a perf drop
+-- radeonsi/ci: add glx@glx-swap-event_async to CI failures for glthread
++- radeonsi/ci: add glx\@glx-swap-event_async to CI failures for glthread
+ - radeonsi: don't flush asynchronously for fence_server_signal
+ - glthread: execute glSignalSemaphoreEXT synchronously
+ - radeonsi: enable glthread by default
+diff --git a/docs/relnotes/23.1.0.rst b/docs/relnotes/23.1.0.rst
+index 767b2e572d7..3ad38ac514e 100644
+--- a/docs/relnotes/23.1.0.rst
++++ b/docs/relnotes/23.1.0.rst
+@@ -145,7 +145,7 @@ Bug fixes
+ - radv: Resident Evil Revelations 2 artifacts on 7900XTX with DCC
+ - radv: Prototype 2 black textures on RDNA 3 when DCC is enabled
+ - Mesa 23.0.0 crashes immediately with indirect rendering
+-- virpipe-on-gl: arb_enhanced_layouts@matching_fp64_types crashes
++- virpipe-on-gl: arb_enhanced_layouts\@matching_fp64_types crashes
+ - [RADV] Returnal - pistol muzzle flash fills whole screen (graphical artifact)
+ - ACO: dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_geom_buffers1_sets3_imm_samplers hangs on NAVI10
+ - Build failures with recent lld
+@@ -3512,7 +3512,7 @@ Martin Roukala (né Peres) (22):
+ - zink/ci/radv: remove a test from the fails list
+ - zink/ci: add a fail to the VG flake list
+ - zink/ci: relocate radv testing from radv's gitlab-ci.yml
+-- zink/ci: add spec@!opengl 1.1@line-smooth-stipple to the fails list
++- zink/ci: add spec\@!opengl 1.1\@line-smooth-stipple to the fails list
+ - ci/b2c: uprev to b2c v0.9.9
+ - ci/debian/x86_test-vk: drop an outdated dependency
+ - ci/core-manual-rules: enclose the whole condition in quotes
+-- 
+2.42.0
+

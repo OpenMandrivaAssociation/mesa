@@ -1,0 +1,370 @@
+From 6c268cdf051ecbcf7fa10c17508b50d566ae0c40 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 387/834] pipe-loader: allow to load multiple zink devices
+
+Rusticl needs to be able to create a zink_screen on all renderer nodes.
+This adds the infrastructure of doing so.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Acked-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ .../auxiliary/pipe-loader/pipe_loader.c       |  7 +++-
+ .../auxiliary/pipe-loader/pipe_loader.h       | 23 ++++++++++---
+ .../auxiliary/pipe-loader/pipe_loader_drm.c   | 33 ++++++++++++++-----
+ src/gallium/auxiliary/vl/vl_winsys_dri.c      |  2 +-
+ src/gallium/auxiliary/vl/vl_winsys_dri3.c     |  2 +-
+ src/gallium/auxiliary/vl/vl_winsys_drm.c      |  2 +-
+ src/gallium/drivers/zink/zink_screen.c        |  4 +--
+ .../frontends/clover/core/platform.cpp        |  4 +--
+ src/gallium/frontends/dri/dri2.c              |  2 +-
+ src/gallium/frontends/dri/kopper.c            |  2 +-
+ .../frontends/rusticl/mesa/pipe/device.rs     |  4 +--
+ src/gallium/frontends/xa/xa_tracker.c         |  2 +-
+ src/gallium/targets/d3dadapter9/drm.c         |  2 +-
+ src/gallium/tests/trivial/quad-tex.c          |  2 +-
+ src/gallium/tests/trivial/tri.c               |  2 +-
+ 15 files changed, 63 insertions(+), 30 deletions(-)
+
+diff --git a/src/gallium/auxiliary/pipe-loader/pipe_loader.c b/src/gallium/auxiliary/pipe-loader/pipe_loader.c
+index 5b69599ee4f..ec8a0e0b28d 100644
+--- a/src/gallium/auxiliary/pipe-loader/pipe_loader.c
++++ b/src/gallium/auxiliary/pipe-loader/pipe_loader.c
+@@ -56,13 +56,18 @@ const driOptionDescription gallium_driconf[] = {
+ };
+ 
+ int
+-pipe_loader_probe(struct pipe_loader_device **devs, int ndev)
++pipe_loader_probe(struct pipe_loader_device **devs, int ndev, bool with_zink)
+ {
+    int i, n = 0;
+ 
+    for (i = 0; i < ARRAY_SIZE(backends); i++)
+       n += backends[i](&devs[n], MAX2(0, ndev - n));
+ 
++#if defined(HAVE_ZINK) && defined(HAVE_LIBDRM)
++   if (with_zink)
++      n += pipe_loader_drm_zink_probe(&devs[n], MAX2(0, ndev - n));
++#endif
++
+    return n;
+ }
+ 
+diff --git a/src/gallium/auxiliary/pipe-loader/pipe_loader.h b/src/gallium/auxiliary/pipe-loader/pipe_loader.h
+index eb3c691c702..b13fa9b5bb1 100644
+--- a/src/gallium/auxiliary/pipe-loader/pipe_loader.h
++++ b/src/gallium/auxiliary/pipe-loader/pipe_loader.h
+@@ -74,13 +74,14 @@ struct pipe_loader_device {
+ /**
+  * Get a list of known devices.
+  *
+- * \param devs Array that will be filled with pointers to the devices
+- *             available in the system.
+- * \param ndev Maximum number of devices to return.
++ * \param devs      Array that will be filled with pointers to the devices
++ *                  available in the system.
++ * \param ndev      Maximum number of devices to return.
++ * \param with_zink If devices should also be loaded with zink.
+  * \return Number of devices available in the system.
+  */
+ int
+-pipe_loader_probe(struct pipe_loader_device **devs, int ndev);
++pipe_loader_probe(struct pipe_loader_device **devs, int ndev, bool with_zink);
+ 
+ /**
+  * Create a pipe_screen for the specified device.
+@@ -213,6 +214,18 @@ pipe_loader_sw_probe_wrapped(struct pipe_loader_device **dev,
+ int
+ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev);
+ 
++#ifdef HAVE_ZINK
++/**
++ * Get a list of known DRM devices compatible with zink.
++ *
++ * This function is platform-specific.
++ *
++ * \sa pipe_loader_probe
++ */
++int
++pipe_loader_drm_zink_probe(struct pipe_loader_device **devs, int ndev);
++#endif
++
+ /**
+  * Initialize a DRM device in an already opened fd.
+  *
+@@ -221,7 +234,7 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev);
+  * \sa pipe_loader_probe
+  */
+ bool
+-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd);
++pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd, bool zink);
+ 
+ /**
+  * Get the dri options used for the DRM driver of the given name, if any.
+diff --git a/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c b/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
+index b27858ab467..44934c1255d 100644
+--- a/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
++++ b/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
+@@ -121,7 +121,7 @@ get_driver_descriptor(const char *driver_name, struct util_dl_library **plib)
+ }
+ 
+ static bool
+-pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd)
++pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zink)
+ {
+    struct pipe_loader_drm_device *ddev = CALLOC_STRUCT(pipe_loader_drm_device);
+    int vendor_id, chip_id;
+@@ -139,7 +139,10 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd)
+    ddev->base.ops = &pipe_loader_drm_ops;
+    ddev->fd = fd;
+ 
+-   ddev->base.driver_name = loader_get_driver_for_fd(fd);
++   if (zink)
++      ddev->base.driver_name = strdup("zink");
++   else
++      ddev->base.driver_name = loader_get_driver_for_fd(fd);
+    if (!ddev->base.driver_name)
+       goto fail;
+ 
+@@ -163,7 +166,7 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd)
+       goto fail;
+ 
+    /* kmsro supports lots of drivers, try as a fallback */
+-   if (!ddev->dd)
++   if (!ddev->dd && !zink)
+       ddev->dd = get_driver_descriptor("kmsro", plib);
+ 
+    if (!ddev->dd)
+@@ -183,7 +186,7 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd)
+ }
+ 
+ bool
+-pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
++pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd, bool zink)
+ {
+    bool ret;
+    int new_fd;
+@@ -191,7 +194,7 @@ pipe_loader_drm_probe_fd(struct pipe_loader_device **dev, int fd)
+    if (fd < 0 || (new_fd = os_dupfd_cloexec(fd)) < 0)
+      return false;
+ 
+-   ret = pipe_loader_drm_probe_fd_nodup(dev, new_fd);
++   ret = pipe_loader_drm_probe_fd_nodup(dev, new_fd, zink);
+    if (!ret)
+       close(new_fd);
+ 
+@@ -207,8 +210,8 @@ open_drm_render_node_minor(int minor)
+    return loader_open_device(path);
+ }
+ 
+-int
+-pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
++static int
++pipe_loader_drm_probe_internal(struct pipe_loader_device **devs, int ndev, bool zink)
+ {
+    int i, j, fd;
+ 
+@@ -220,7 +223,7 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
+       if (fd < 0)
+          continue;
+ 
+-      if (!pipe_loader_drm_probe_fd_nodup(&dev, fd)) {
++      if (!pipe_loader_drm_probe_fd_nodup(&dev, fd, zink)) {
+          close(fd);
+          continue;
+       }
+@@ -237,6 +240,20 @@ pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
+    return j;
+ }
+ 
++int
++pipe_loader_drm_probe(struct pipe_loader_device **devs, int ndev)
++{
++   return pipe_loader_drm_probe_internal(devs, ndev, false);
++}
++
++#ifdef HAVE_ZINK
++int
++pipe_loader_drm_zink_probe(struct pipe_loader_device **devs, int ndev)
++{
++   return pipe_loader_drm_probe_internal(devs, ndev, true);
++}
++#endif
++
+ static void
+ pipe_loader_drm_release(struct pipe_loader_device **dev)
+ {
+diff --git a/src/gallium/auxiliary/vl/vl_winsys_dri.c b/src/gallium/auxiliary/vl/vl_winsys_dri.c
+index 091395d27f3..0abc90a13a7 100644
+--- a/src/gallium/auxiliary/vl/vl_winsys_dri.c
++++ b/src/gallium/auxiliary/vl/vl_winsys_dri.c
+@@ -458,7 +458,7 @@ vl_dri2_screen_create(Display *display, int screen)
+    if (authenticate == NULL || !authenticate->authenticated)
+       goto free_authenticate;
+ 
+-   if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd))
++   if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd, false))
+       scrn->base.pscreen = pipe_loader_create_screen(scrn->base.dev);
+ 
+    if (!scrn->base.pscreen)
+diff --git a/src/gallium/auxiliary/vl/vl_winsys_dri3.c b/src/gallium/auxiliary/vl/vl_winsys_dri3.c
+index 073630e5579..af851fa5ee0 100644
+--- a/src/gallium/auxiliary/vl/vl_winsys_dri3.c
++++ b/src/gallium/auxiliary/vl/vl_winsys_dri3.c
+@@ -842,7 +842,7 @@ vl_dri3_screen_create(Display *display, int screen)
+    scrn->base.color_depth = geom_reply->depth;
+    free(geom_reply);
+ 
+-   if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd))
++   if (pipe_loader_drm_probe_fd(&scrn->base.dev, fd, false))
+       scrn->base.pscreen = pipe_loader_create_screen(scrn->base.dev);
+ 
+    if (!scrn->base.pscreen)
+diff --git a/src/gallium/auxiliary/vl/vl_winsys_drm.c b/src/gallium/auxiliary/vl/vl_winsys_drm.c
+index bae0405e1f6..a35c8072908 100644
+--- a/src/gallium/auxiliary/vl/vl_winsys_drm.c
++++ b/src/gallium/auxiliary/vl/vl_winsys_drm.c
+@@ -46,7 +46,7 @@ vl_drm_screen_create(int fd)
+    if (!vscreen)
+       return NULL;
+ 
+-   if (pipe_loader_drm_probe_fd(&vscreen->dev, fd))
++   if (pipe_loader_drm_probe_fd(&vscreen->dev, fd, false))
+       vscreen->pscreen = pipe_loader_create_screen(vscreen->dev);
+ 
+    if (!vscreen->pscreen)
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index c36fd3c05ac..0a6137e6035 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -1557,9 +1557,7 @@ zink_get_display_device(const struct zink_screen *screen, uint32_t pdev_count,
+          return i;
+    }
+ 
+-   mesa_loge("ZINK: could not find the Display GPU, choosing default device!");
+-
+-   return 0;
++   return -1;
+ }
+ 
+ static int
+diff --git a/src/gallium/frontends/clover/core/platform.cpp b/src/gallium/frontends/clover/core/platform.cpp
+index c37a5341628..581d13a4bf4 100644
+--- a/src/gallium/frontends/clover/core/platform.cpp
++++ b/src/gallium/frontends/clover/core/platform.cpp
+@@ -26,14 +26,14 @@
+ using namespace clover;
+ 
+ platform::platform() : adaptor_range(evals(), devs) {
+-   int n = pipe_loader_probe(NULL, 0);
++   int n = pipe_loader_probe(NULL, 0, false);
+    std::vector<pipe_loader_device *> ldevs(n);
+ 
+    unsigned major = 1, minor = 1;
+    debug_get_version_option("CLOVER_PLATFORM_VERSION_OVERRIDE", &major, &minor);
+    version = CL_MAKE_VERSION(major, minor, 0);
+ 
+-   pipe_loader_probe(&ldevs.front(), n);
++   pipe_loader_probe(&ldevs.front(), n, false);
+ 
+    for (pipe_loader_device *ldev : ldevs) {
+       try {
+diff --git a/src/gallium/frontends/dri/dri2.c b/src/gallium/frontends/dri/dri2.c
+index 1f71081725a..e37ff4d9a3f 100644
+--- a/src/gallium/frontends/dri/dri2.c
++++ b/src/gallium/frontends/dri/dri2.c
+@@ -2381,7 +2381,7 @@ dri2_init_screen(struct dri_screen *screen)
+ 
+    (void) mtx_init(&screen->opencl_func_mutex, mtx_plain);
+ 
+-   if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd))
++   if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false))
+       pscreen = pipe_loader_create_screen(screen->dev);
+ 
+    if (!pscreen)
+diff --git a/src/gallium/frontends/dri/kopper.c b/src/gallium/frontends/dri/kopper.c
+index e83102881bf..34b2567a88b 100644
+--- a/src/gallium/frontends/dri/kopper.c
++++ b/src/gallium/frontends/dri/kopper.c
+@@ -126,7 +126,7 @@ kopper_init_screen(struct dri_screen *screen)
+ 
+    bool success;
+    if (screen->fd != -1)
+-      success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd);
++      success = pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false);
+    else
+       success = pipe_loader_vk_probe_dri(&screen->dev, NULL);
+ 
+diff --git a/src/gallium/frontends/rusticl/mesa/pipe/device.rs b/src/gallium/frontends/rusticl/mesa/pipe/device.rs
+index bcde91c1794..83046aed60d 100644
+--- a/src/gallium/frontends/rusticl/mesa/pipe/device.rs
++++ b/src/gallium/frontends/rusticl/mesa/pipe/device.rs
+@@ -39,10 +39,10 @@ impl Drop for PipeLoaderDevice {
+ }
+ 
+ fn load_devs() -> Vec<PipeLoaderDevice> {
+-    let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0) };
++    let n = unsafe { pipe_loader_probe(ptr::null_mut(), 0, true) };
+     let mut devices: Vec<*mut pipe_loader_device> = vec![ptr::null_mut(); n as usize];
+     unsafe {
+-        pipe_loader_probe(devices.as_mut_ptr(), n);
++        pipe_loader_probe(devices.as_mut_ptr(), n, true);
+     }
+ 
+     devices
+diff --git a/src/gallium/frontends/xa/xa_tracker.c b/src/gallium/frontends/xa/xa_tracker.c
+index ad798740531..7686a9b84b8 100644
+--- a/src/gallium/frontends/xa/xa_tracker.c
++++ b/src/gallium/frontends/xa/xa_tracker.c
+@@ -171,7 +171,7 @@ xa_tracker_create(int drm_fd)
+     if (!xa)
+ 	return NULL;
+ 
+-    if (pipe_loader_drm_probe_fd(&xa->dev, drm_fd))
++    if (pipe_loader_drm_probe_fd(&xa->dev, drm_fd, false))
+ 	xa->screen = pipe_loader_create_screen(xa->dev);
+ 
+     if (!xa->screen)
+diff --git a/src/gallium/targets/d3dadapter9/drm.c b/src/gallium/targets/d3dadapter9/drm.c
+index 9d3e6a947c7..09345483425 100644
+--- a/src/gallium/targets/d3dadapter9/drm.c
++++ b/src/gallium/targets/d3dadapter9/drm.c
+@@ -235,7 +235,7 @@ drm_create_adapter( int fd,
+     ctx->fd = fd;
+     ctx->base.linear_framebuffer = different_device;
+ 
+-    if (!pipe_loader_drm_probe_fd(&ctx->dev, fd)) {
++    if (!pipe_loader_drm_probe_fd(&ctx->dev, fd, false)) {
+         ERR("Failed to probe drm fd %d.\n", fd);
+         FREE(ctx);
+         close(fd);
+diff --git a/src/gallium/tests/trivial/quad-tex.c b/src/gallium/tests/trivial/quad-tex.c
+index 43c5ac4f8a5..c07fa5ecc8a 100644
+--- a/src/gallium/tests/trivial/quad-tex.c
++++ b/src/gallium/tests/trivial/quad-tex.c
+@@ -93,7 +93,7 @@ static void init_prog(struct program *p)
+ 	ASSERTED int ret;
+ 
+ 	/* find a hardware device */
+-	ret = pipe_loader_probe(&p->dev, 1);
++	ret = pipe_loader_probe(&p->dev, 1, false);
+ 	assert(ret);
+ 
+ 	/* init a pipe screen */
+diff --git a/src/gallium/tests/trivial/tri.c b/src/gallium/tests/trivial/tri.c
+index a56b2bce9cc..94572e80d25 100644
+--- a/src/gallium/tests/trivial/tri.c
++++ b/src/gallium/tests/trivial/tri.c
+@@ -87,7 +87,7 @@ static void init_prog(struct program *p)
+ 	ASSERTED int ret;
+ 
+ 	/* find a hardware device */
+-	ret = pipe_loader_probe(&p->dev, 1);
++	ret = pipe_loader_probe(&p->dev, 1, false);
+ 	assert(ret);
+ 
+ 	/* init a pipe screen */
+-- 
+2.42.0
+

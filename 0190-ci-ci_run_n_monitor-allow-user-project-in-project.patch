@@ -1,0 +1,59 @@
+From 57fa35f19c05c9cf29c12f4dfc60e82d703ae8d3 Mon Sep 17 00:00:00 2001
+From: Helen Koike <helen.koike@collabora.com>
+Date: Fri, 29 Sep 2023 22:41:58 -0300
+Subject: [PATCH 190/834] ci/ci_run_n_monitor: allow <user>/<project> in
+ --project
+
+Allow to monitor pipelines in any <user>/<project> on gitlab.fdo.
+
+If developers want to monitor MR pipelines, they can run with
+--project mesa/mesa to force it to be picked from mesa username.
+
+Signed-off-by: Helen Koike <helen.koike@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25473>
+---
+ bin/ci/ci_run_n_monitor.py |  6 +++++-
+ bin/ci/gitlab_common.py    | 10 +++++++---
+ 2 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index 83d437263f6..8940733c41b 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -240,7 +240,11 @@ def parse_args() -> None:
+         "--force-manual", action="store_true", help="Force jobs marked as manual"
+     )
+     parser.add_argument("--stress", action="store_true", help="Stresstest job(s)")
+-    parser.add_argument("--project", default="mesa", help="GitLab project name")
++    parser.add_argument(
++        "--project",
++        default="mesa",
++        help="GitLab project in the format <user>/<project> or just <project>",
++    )
+ 
+     mutex_group1 = parser.add_mutually_exclusive_group()
+     mutex_group1.add_argument(
+diff --git a/bin/ci/gitlab_common.py b/bin/ci/gitlab_common.py
+index 4b16878e8b0..7d20cc9df5c 100644
+--- a/bin/ci/gitlab_common.py
++++ b/bin/ci/gitlab_common.py
+@@ -14,9 +14,13 @@ from typing import Optional
+ 
+ def get_gitlab_project(glab, name: str):
+     """Finds a specified gitlab project for given user"""
+-    glab.auth()
+-    username = glab.user.username
+-    return glab.projects.get(f"{username}/{name}")
++    if "/" in name:
++        project_path = name
++    else:
++        glab.auth()
++        username = glab.user.username
++        project_path = f"{username}/{name}"
++    return glab.projects.get(project_path)
+ 
+ 
+ def read_token(token_arg: Optional[str]) -> str:
+-- 
+2.42.0
+

@@ -1,0 +1,48 @@
+From 6e2bb716b0c7cbe6454cc0f472ff684d8770a51f Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Mon, 16 Oct 2023 10:02:50 -0700
+Subject: [PATCH 525/834] util: improve BITFIELD_MASK and BITFIELD64_MASK on
+ clang
+
+gcc is able to optimize away either the modulo or the logical and.  This
+makes no difference to gcc.
+
+clang is only able to optimize away the logical and.  This allows clang
+to generate faster code for BITFIELD_MASK.
+
+As for BITFIELD64_MASK, this also makes no difference to clang except it
+fixes a compile error for BITFIELD64_MASK(64):
+
+  error: shift count >= width of type [-Werror,-Wshift-count-overflow]
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9989
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25757>
+---
+ src/util/macros.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/util/macros.h b/src/util/macros.h
+index 42f3acaf84c..cfcda53ac0f 100644
+--- a/src/util/macros.h
++++ b/src/util/macros.h
+@@ -388,7 +388,7 @@ do {                       \
+ #define BITFIELD_BIT(b)      (1u << (b))
+ /** Set all bits up to excluding bit b */
+ #define BITFIELD_MASK(b)      \
+-   ((b) == 32 ? (~0u) : BITFIELD_BIT((b) % 32) - 1)
++   ((b) == 32 ? (~0u) : BITFIELD_BIT((b) & 31) - 1)
+ /** Set count bits starting from bit b  */
+ #define BITFIELD_RANGE(b, count) \
+    (BITFIELD_MASK((b) + (count)) & ~BITFIELD_MASK(b))
+@@ -397,7 +397,7 @@ do {                       \
+ #define BITFIELD64_BIT(b)      (1ull << (b))
+ /** Set all bits up to excluding bit b */
+ #define BITFIELD64_MASK(b)      \
+-   ((b) == 64 ? (~0ull) : BITFIELD64_BIT(b) - 1)
++   ((b) == 64 ? (~0ull) : BITFIELD64_BIT((b) & 63) - 1)
+ /** Set count bits starting from bit b  */
+ #define BITFIELD64_RANGE(b, count) \
+    (BITFIELD64_MASK((b) + (count)) & ~BITFIELD64_MASK(b))
+-- 
+2.42.0
+

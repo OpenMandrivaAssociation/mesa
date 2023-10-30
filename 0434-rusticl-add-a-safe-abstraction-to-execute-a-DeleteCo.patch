@@ -1,0 +1,62 @@
+From d9e2463ef329d5c229e51a33daec1041fccd3340 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Thu, 12 Oct 2023 01:10:51 +0200
+Subject: [PATCH 434/834] rusticl: add a safe abstraction to execute a
+ DeleteContextCB
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/types.rs    | 11 +++++++++++
+ src/gallium/frontends/rusticl/core/context.rs |  5 ++---
+ 2 files changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 31919124eea..d117402c80c 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -1,4 +1,6 @@
+ use crate::api::icd::CLResult;
++use crate::api::icd::ReferenceCountedAPIPointer;
++use crate::core::context::Context;
+ 
+ use rusticl_opencl_gen::*;
+ 
+@@ -110,6 +112,15 @@ cl_callback!(
+     }
+ );
+ 
++impl DeleteContextCB {
++    pub fn call(self, ctx: &Context) {
++        let cl = cl_context::from_ptr(ctx);
++        // SAFETY: `cl` must have pointed to an OpenCL context, which is where we just got it from.
++        // All other requirements are covered by this callback's type invariants.
++        unsafe { (self.func)(cl, self.data) };
++    }
++}
++
+ cl_callback!(
+     EventCB(FuncEventCB) {
+         event: cl_event,
+diff --git a/src/gallium/frontends/rusticl/core/context.rs b/src/gallium/frontends/rusticl/core/context.rs
+index 5cc0ec82cf1..42163d8f17d 100644
+--- a/src/gallium/frontends/rusticl/core/context.rs
++++ b/src/gallium/frontends/rusticl/core/context.rs
+@@ -203,12 +203,11 @@ impl Context {
+ 
+ impl Drop for Context {
+     fn drop(&mut self) {
+-        let cl = cl_context::from_ptr(self);
+         self.dtors
+             .lock()
+             .unwrap()
+-            .iter()
++            .drain(..)
+             .rev()
+-            .for_each(|cb| unsafe { (cb.func)(cl, cb.data) });
++            .for_each(|cb| cb.call(self));
+     }
+ }
+-- 
+2.42.0
+

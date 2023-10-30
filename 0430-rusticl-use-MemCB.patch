@@ -1,0 +1,88 @@
+From 07ca0df72e0b272e344c4259aae055c8ba0b5bb3 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Wed, 11 Oct 2023 23:55:31 +0200
+Subject: [PATCH 430/834] rusticl: use MemCB
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/memory.rs  | 13 ++++---------
+ src/gallium/frontends/rusticl/api/types.rs   |  3 +++
+ src/gallium/frontends/rusticl/core/memory.rs |  4 ++--
+ 3 files changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/memory.rs b/src/gallium/frontends/rusticl/api/memory.rs
+index fa53d305638..13cb29da3e4 100644
+--- a/src/gallium/frontends/rusticl/api/memory.rs
++++ b/src/gallium/frontends/rusticl/api/memory.rs
+@@ -8,7 +8,6 @@ use crate::core::context::Context;
+ use crate::core::device::*;
+ use crate::core::format::*;
+ use crate::core::memory::*;
+-use crate::*;
+ 
+ use mesa_rust_util::properties::Properties;
+ use mesa_rust_util::ptr::*;
+@@ -355,15 +354,11 @@ fn set_mem_object_destructor_callback(
+ ) -> CLResult<()> {
+     let m = memobj.get_ref()?;
+ 
+-    // CL_INVALID_VALUE if pfn_notify is NULL.
+-    if pfn_notify.is_none() {
+-        return Err(CL_INVALID_VALUE);
+-    }
++    // SAFETY: The requirements on `MemCB::new` match the requirements
++    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
++    let cb = unsafe { MemCB::new(pfn_notify, user_data)? };
+ 
+-    m.cbs
+-        .lock()
+-        .unwrap()
+-        .push(cl_closure!(|m| pfn_notify(m, user_data)));
++    m.cbs.lock().unwrap().push(cb);
+     Ok(())
+ }
+ 
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 544d674b532..26072253353 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -49,10 +49,13 @@ macro_rules! cl_callback {
+             ///   [`clSetContextDestructorCallback`] in the OpenCL specification.
+             /// - EventCB: `func` must be soundly callable as documented on
+             ///   [`clSetEventCallback`] in the OpenCL specification.
++            /// - MemCB: `func` must be soundly callable as documented on
++            ///   [`clSetMemObjectDestructorCallback`] in the OpenCL specification.
+             ///
+             /// [`clCreateContext`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clCreateContext
+             /// [`clSetContextDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetContextDestructorCallback
+             /// [`clSetEventCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetEventCallback
++            /// [`clSetMemObjectDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetMemObjectDestructorCallback
+             pub unsafe fn new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Self> {
+                 let Some(func) = func else {
+                     return Err(CL_INVALID_VALUE);
+diff --git a/src/gallium/frontends/rusticl/core/memory.rs b/src/gallium/frontends/rusticl/core/memory.rs
+index d361111de79..a6b4ddb4d4c 100644
+--- a/src/gallium/frontends/rusticl/core/memory.rs
++++ b/src/gallium/frontends/rusticl/core/memory.rs
+@@ -116,7 +116,7 @@ pub struct Mem {
+     pub image_desc: cl_image_desc,
+     pub image_elem_size: u8,
+     pub props: Vec<cl_mem_properties>,
+-    pub cbs: Mutex<Vec<Box<dyn Fn(cl_mem)>>>,
++    pub cbs: Mutex<Vec<MemCB>>,
+     res: Option<HashMap<&'static Device, Arc<PipeResource>>>,
+     maps: Mutex<Mappings>,
+ }
+@@ -1240,7 +1240,7 @@ impl Drop for Mem {
+             .unwrap()
+             .iter()
+             .rev()
+-            .for_each(|cb| cb(cl));
++            .for_each(|cb| unsafe { (cb.func)(cl, cb.data) });
+ 
+         for (d, tx) in self.maps.get_mut().unwrap().tx.drain() {
+             d.helper_ctx().unmap(tx.tx);
+-- 
+2.42.0
+

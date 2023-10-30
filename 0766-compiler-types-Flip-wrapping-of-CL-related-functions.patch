@@ -1,0 +1,164 @@
+From 418e3be14cf67eae88c98f9079961ec326ef364c Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 2 Sep 2023 11:04:49 -0700
+Subject: [PATCH 766/834] compiler/types: Flip wrapping of CL related functions
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 52 ++++++++++++++++++++--------------
+ src/compiler/glsl_types.h      |  4 +--
+ src/compiler/glsl_types_impl.h |  3 ++
+ src/compiler/nir_types.cpp     | 20 -------------
+ 4 files changed, 35 insertions(+), 44 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 2dcfcb14e5c..83e0ef378b7 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -3292,22 +3292,22 @@ decode_type_from_blob(struct blob_reader *blob)
+    }
+ }
+ 
+-unsigned
+-glsl_type::cl_alignment() const
++extern "C" unsigned
++glsl_get_cl_alignment(const struct glsl_type *t)
+ {
+    /* vectors unlike arrays are aligned to their size */
+-   if (this->is_scalar() || this->is_vector())
+-      return this->cl_size();
+-   else if (this->is_array())
+-      return this->fields.array->cl_alignment();
+-   else if (this->is_struct()) {
++   if (t->is_scalar() || t->is_vector())
++      return t->cl_size();
++   else if (t->is_array())
++      return t->fields.array->cl_alignment();
++   else if (t->is_struct()) {
+       /* Packed Structs are 0x1 aligned despite their size. */
+-      if (this->packed)
++      if (t->packed)
+          return 1;
+ 
+       unsigned res = 1;
+-      for (unsigned i = 0; i < this->length; ++i) {
+-         const struct glsl_struct_field *field = &this->fields.structure[i];
++      for (unsigned i = 0; i < t->length; ++i) {
++         const struct glsl_struct_field *field = &t->fields.structure[i];
+          res = MAX2(res, field->type->cl_alignment());
+       }
+       return res;
+@@ -3315,22 +3315,22 @@ glsl_type::cl_alignment() const
+    return 1;
+ }
+ 
+-unsigned
+-glsl_type::cl_size() const
++extern "C" unsigned
++glsl_get_cl_size(const struct glsl_type *t)
+ {
+-   if (this->is_scalar() || this->is_vector()) {
+-      return util_next_power_of_two(this->vector_elements) *
+-             explicit_type_scalar_byte_size(this);
+-   } else if (this->is_array()) {
+-      unsigned size = this->fields.array->cl_size();
+-      return size * this->length;
+-   } else if (this->is_struct()) {
++   if (t->is_scalar() || t->is_vector()) {
++      return util_next_power_of_two(t->vector_elements) *
++             explicit_type_scalar_byte_size(t);
++   } else if (t->is_array()) {
++      unsigned size = t->fields.array->cl_size();
++      return size * t->length;
++   } else if (t->is_struct()) {
+       unsigned size = 0;
+       unsigned max_alignment = 1;
+-      for (unsigned i = 0; i < this->length; ++i) {
+-         const struct glsl_struct_field *field = &this->fields.structure[i];
++      for (unsigned i = 0; i < t->length; ++i) {
++         const struct glsl_struct_field *field = &t->fields.structure[i];
+          /* if a struct is packed, members don't get aligned */
+-         if (!this->packed) {
++         if (!t->packed) {
+             unsigned alignment = field->type->cl_alignment();
+             max_alignment = MAX2(max_alignment, alignment);
+             size = align(size, alignment);
+@@ -3347,6 +3347,14 @@ glsl_type::cl_size() const
+ 
+ extern "C" {
+ 
++void
++glsl_get_cl_type_size_align(const struct glsl_type *t,
++                            unsigned *size, unsigned *align)
++{
++   *size = glsl_get_cl_size(t);
++   *align = glsl_get_cl_alignment(t);
++}
++
+ int
+ glsl_get_sampler_dim_coordinate_components(enum glsl_sampler_dim dim)
+ {
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 486e5d56306..1c9bd458ebe 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1453,8 +1453,8 @@ unsigned glsl_get_component_slots_aligned(const struct glsl_type *t, unsigned of
+ unsigned glsl_varying_count(const struct glsl_type *t);
+ unsigned glsl_count_attribute_slots(const struct glsl_type *t, bool is_gl_vertex_input);
+ 
+-int glsl_get_cl_size(const struct glsl_type *t);
+-int glsl_get_cl_alignment(const struct glsl_type *t);
++unsigned glsl_get_cl_size(const struct glsl_type *t);
++unsigned glsl_get_cl_alignment(const struct glsl_type *t);
+ void glsl_get_cl_type_size_align(const struct glsl_type *t,
+                                  unsigned *size, unsigned *align);
+ 
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index bd196de350c..3aa9fc8754a 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -54,6 +54,9 @@ glsl_type::components() const
+ inline int glsl_type::array_size() const { return glsl_array_size(this); }
+ inline const glsl_type *glsl_type::without_array() const { return glsl_without_array(this); }
+ 
++inline unsigned glsl_type::cl_size() const { return glsl_get_cl_size(this); }
++inline unsigned glsl_type::cl_alignment() const { return glsl_get_cl_alignment(this); }
++
+ inline const glsl_type *glsl_type::get_bare_type() const { return glsl_get_bare_type(this); }
+ 
+ inline unsigned
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index 102588df491..5f52e0c7734 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -538,26 +538,6 @@ glsl_atomic_size(const struct glsl_type *type)
+    return type->atomic_size();
+ }
+ 
+-int
+-glsl_get_cl_size(const struct glsl_type *type)
+-{
+-   return type->cl_size();
+-}
+-
+-int
+-glsl_get_cl_alignment(const struct glsl_type *type)
+-{
+-   return type->cl_alignment();
+-}
+-
+-void
+-glsl_get_cl_type_size_align(const struct glsl_type *type,
+-                            unsigned *size, unsigned *align)
+-{
+-   *size = glsl_get_cl_size(type);
+-   *align = glsl_get_cl_alignment(type);
+-}
+-
+ static unsigned
+ glsl_type_count(const struct glsl_type *type, enum glsl_base_type base_type)
+ {
+-- 
+2.42.0
+

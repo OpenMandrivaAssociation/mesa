@@ -1,0 +1,36 @@
+From 503d084d01b595226004f98d8ced82a1d8890e8a Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Sun, 9 Jul 2023 14:30:33 +0200
+Subject: [PATCH 441/834] rusticl/api: remove cl_closure macro
+
+Reviewed-by: @LingMan
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/types.rs | 11 -----------
+ 1 file changed, 11 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 3b7e0f08945..ec1c7ed01f6 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -13,17 +13,6 @@ use std::ffi::c_void;
+ use std::ffi::CStr;
+ use std::iter::Product;
+ 
+-#[macro_export]
+-macro_rules! cl_closure {
+-    (|$obj:ident| $cb:ident($($arg:ident$(,)?)*)) => {
+-        Box::new(
+-            unsafe {
+-                move|$obj| $cb.unwrap()($($arg,)*)
+-            }
+-        )
+-    }
+-}
+-
+ macro_rules! cl_callback {
+     ($cb:ident($fn_alias:ident) {
+         $($p:ident : $ty:ty,)*
+-- 
+2.42.0
+

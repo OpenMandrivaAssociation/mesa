@@ -1,0 +1,36 @@
+From 042d256c1e215feeb7520bcffa8cad16ff18a548 Mon Sep 17 00:00:00 2001
+From: Eric Engestrom <eric@igalia.com>
+Date: Fri, 13 Oct 2023 17:29:54 +0100
+Subject: [PATCH 456/834] util/xmlconfig: inline datadir
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21808>
+---
+ src/util/xmlconfig.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/util/xmlconfig.c b/src/util/xmlconfig.c
+index fbd034e6552..7a753e37e05 100644
+--- a/src/util/xmlconfig.c
++++ b/src/util/xmlconfig.c
+@@ -1173,7 +1173,6 @@ initOptionCache(driOptionCache *cache, const driOptionCache *info)
+ #define DATADIR "/usr/share"
+ #endif
+ 
+-static const char *datadir = DATADIR "/drirc.d";
+ static const char *execname;
+ 
+ void
+@@ -1216,7 +1215,7 @@ driParseConfigFiles(driOptionCache *cache, const driOptionCache *info,
+    if ((configdir = getenv("DRIRC_CONFIGDIR")))
+       parseConfigDir(&userData, configdir);
+    else {
+-      parseConfigDir(&userData, datadir);
++      parseConfigDir(&userData, DATADIR "/drirc.d");
+       parseOneConfigFile(&userData, SYSCONFDIR "/drirc");
+    }
+ 
+-- 
+2.42.0
+

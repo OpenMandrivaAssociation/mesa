@@ -1,0 +1,192 @@
+From 72cb85b77860e9fb796e49ce017a3ac81eacdf82 Mon Sep 17 00:00:00 2001
+From: Yiwei Zhang <zzyiwei@chromium.org>
+Date: Mon, 9 Oct 2023 00:28:17 -0700
+Subject: [PATCH 045/834] venus: make device memory alloc async
+
+Add a new perf option NO_ASYNC_MEM_ALLOC. Track the ring seqno of the
+memory alloc command, and do async ring wait to ensure:
+- memory allocation is before resource creation
+- memory import is before resource destroy
+
+Signed-off-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25611>
+---
+ src/virtio/vulkan/vn_common.c        |  1 +
+ src/virtio/vulkan/vn_common.h        |  1 +
+ src/virtio/vulkan/vn_device_memory.c | 74 +++++++++++++++++++++++-----
+ src/virtio/vulkan/vn_device_memory.h | 15 ++++++
+ 4 files changed, 78 insertions(+), 13 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_common.c b/src/virtio/vulkan/vn_common.c
+index 90620f10447..2dddd7670b3 100644
+--- a/src/virtio/vulkan/vn_common.c
++++ b/src/virtio/vulkan/vn_common.c
+@@ -48,6 +48,7 @@ static const struct debug_control vn_perf_options[] = {
+    { "no_cmd_batching", VN_PERF_NO_CMD_BATCHING },
+    { "no_timeline_sem_feedback", VN_PERF_NO_TIMELINE_SEM_FEEDBACK },
+    { "no_query_feedback", VN_PERF_NO_QUERY_FEEDBACK },
++   { "no_async_mem_alloc", VN_PERF_NO_ASYNC_MEM_ALLOC },
+    { NULL, 0 },
+    /* clang-format on */
+ };
+diff --git a/src/virtio/vulkan/vn_common.h b/src/virtio/vulkan/vn_common.h
+index 774d344ea4c..7c51c61a370 100644
+--- a/src/virtio/vulkan/vn_common.h
++++ b/src/virtio/vulkan/vn_common.h
+@@ -118,6 +118,7 @@ enum vn_perf {
+    VN_PERF_NO_CMD_BATCHING = 1ull << 6,
+    VN_PERF_NO_TIMELINE_SEM_FEEDBACK = 1ull << 7,
+    VN_PERF_NO_QUERY_FEEDBACK = 1ull << 8,
++   VN_PERF_NO_ASYNC_MEM_ALLOC = 1ull << 9,
+ };
+ 
+ typedef uint64_t vn_object_id;
+diff --git a/src/virtio/vulkan/vn_device_memory.c b/src/virtio/vulkan/vn_device_memory.c
+index 41499908ba5..cfb32c7bee5 100644
+--- a/src/virtio/vulkan/vn_device_memory.c
++++ b/src/virtio/vulkan/vn_device_memory.c
+@@ -28,8 +28,20 @@ vn_device_memory_alloc_simple(struct vn_device *dev,
+ {
+    VkDevice dev_handle = vn_device_to_handle(dev);
+    VkDeviceMemory mem_handle = vn_device_memory_to_handle(mem);
+-   return vn_call_vkAllocateMemory(dev->instance, dev_handle, alloc_info,
+-                                   NULL, &mem_handle);
++   if (VN_PERF(NO_ASYNC_MEM_ALLOC)) {
++      return vn_call_vkAllocateMemory(dev->instance, dev_handle, alloc_info,
++                                      NULL, &mem_handle);
++   }
++
++   struct vn_instance_submit_command instance_submit;
++   vn_submit_vkAllocateMemory(dev->instance, 0, dev_handle, alloc_info, NULL,
++                              &mem_handle, &instance_submit);
++   if (!instance_submit.ring_seqno_valid)
++      return VK_ERROR_OUT_OF_HOST_MEMORY;
++
++   mem->bo_ring_seqno_valid = true;
++   mem->bo_ring_seqno = instance_submit.ring_seqno;
++   return VK_SUCCESS;
+ }
+ 
+ static inline void
+@@ -41,6 +53,48 @@ vn_device_memory_free_simple(struct vn_device *dev,
+    vn_async_vkFreeMemory(dev->instance, dev_handle, mem_handle, NULL);
+ }
+ 
++static VkResult
++vn_device_memory_wait_alloc(struct vn_device *dev,
++                            struct vn_device_memory *mem)
++{
++   if (!mem->bo_ring_seqno_valid)
++      return VK_SUCCESS;
++
++   /* fine to false it here since renderer submission failure is fatal */
++   mem->bo_ring_seqno_valid = false;
++
++   uint32_t local_data[8];
++   struct vn_cs_encoder local_enc =
++      VN_CS_ENCODER_INITIALIZER_LOCAL(local_data, sizeof(local_data));
++   vn_encode_vkWaitRingSeqnoMESA(&local_enc, 0, dev->instance->ring.id,
++                                 mem->bo_ring_seqno);
++   return vn_renderer_submit_simple(dev->renderer, local_data,
++                                    vn_cs_encoder_get_len(&local_enc));
++}
++
++static inline VkResult
++vn_device_memory_bo_init(struct vn_device *dev,
++                         struct vn_device_memory *mem,
++                         VkExternalMemoryHandleTypeFlags external_handles)
++{
++   VkResult result = vn_device_memory_wait_alloc(dev, mem);
++   if (result != VK_SUCCESS)
++      return result;
++
++   return vn_renderer_bo_create_from_device_memory(
++      dev->renderer, mem->size, mem->base.id, mem->type.propertyFlags,
++      external_handles, &mem->base_bo);
++}
++
++static inline void
++vn_device_memory_bo_fini(struct vn_device *dev, struct vn_device_memory *mem)
++{
++   if (mem->base_bo) {
++      vn_device_memory_wait_alloc(dev, mem);
++      vn_renderer_bo_unref(dev->renderer, mem->base_bo);
++   }
++}
++
+ static VkResult
+ vn_device_memory_pool_grow_alloc(struct vn_device *dev,
+                                  uint32_t mem_type_index,
+@@ -68,9 +122,7 @@ vn_device_memory_pool_grow_alloc(struct vn_device *dev,
+    if (result != VK_SUCCESS)
+       goto obj_fini;
+ 
+-   result = vn_renderer_bo_create_from_device_memory(
+-      dev->renderer, mem->size, mem->base.id, mem->type.propertyFlags, 0,
+-      &mem->base_bo);
++   result = vn_device_memory_bo_init(dev, mem, 0);
+    if (result != VK_SUCCESS)
+       goto mem_free;
+ 
+@@ -342,9 +394,7 @@ vn_device_memory_alloc_export(struct vn_device *dev,
+    if (result != VK_SUCCESS)
+       return result;
+ 
+-   result = vn_renderer_bo_create_from_device_memory(
+-      dev->renderer, mem->size, mem->base.id, mem->type.propertyFlags,
+-      external_handles, &mem->base_bo);
++   result = vn_device_memory_bo_init(dev, mem, external_handles);
+    if (result != VK_SUCCESS) {
+       vn_device_memory_free_simple(dev, mem);
+       return result;
+@@ -587,8 +637,8 @@ vn_FreeMemory(VkDevice device,
+    if (mem->base_memory) {
+       vn_device_memory_pool_unref(dev, mem->base_memory);
+    } else {
+-      if (mem->base_bo)
+-         vn_renderer_bo_unref(dev->renderer, mem->base_bo);
++      /* ensure renderer side import still sees the resource */
++      vn_device_memory_bo_fini(dev, mem);
+ 
+       if (mem->bo_roundtrip_seqno_valid)
+          vn_instance_wait_roundtrip(dev->instance, mem->bo_roundtrip_seqno);
+@@ -646,9 +696,7 @@ vn_MapMemory(VkDevice device,
+     * the extension.
+     */
+    if (need_bo) {
+-      result = vn_renderer_bo_create_from_device_memory(
+-         dev->renderer, mem->size, mem->base.id, mem->type.propertyFlags, 0,
+-         &mem->base_bo);
++      result = vn_device_memory_bo_init(dev, mem, 0);
+       if (result != VK_SUCCESS)
+          return vn_error(dev->instance, result);
+    }
+diff --git a/src/virtio/vulkan/vn_device_memory.h b/src/virtio/vulkan/vn_device_memory.h
+index cc4d4708045..3e0e0c0d32a 100644
+--- a/src/virtio/vulkan/vn_device_memory.h
++++ b/src/virtio/vulkan/vn_device_memory.h
+@@ -32,6 +32,21 @@ struct vn_device_memory {
+    /* non-NULL when mappable or external */
+    struct vn_renderer_bo *base_bo;
+ 
++   /* ensure renderer side resource create is called after vkAllocateMemory
++    *
++    * 1. driver submits vkAllocateMemory (alloc) via ring for a ring seqno
++    * 2. driver submits via vq to wait for above ring to reach the seqno
++    * 3. driver creates virtgpu bo from renderer VkDeviceMemory
++    *
++    * ensure renderer side resource destroy is called after vkAllocateMemory
++    *
++    * 1. driver submits vkAllocateMemory (import) via ring for a ring seqno
++    * 2. driver submits via vq to wait for above ring to reach the seqno
++    * 3. driver destroys virtgpu bo
++    */
++   bool bo_ring_seqno_valid;
++   uint32_t bo_ring_seqno;
++
+    /* ensure renderer side vkFreeMemory is called after vkGetMemoryFdKHR
+     *
+     * 1. driver creates virtgpu bo from renderer VkDeviceMemory
+-- 
+2.42.0
+

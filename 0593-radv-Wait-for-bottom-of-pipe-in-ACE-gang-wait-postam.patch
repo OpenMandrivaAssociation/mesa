@@ -1,0 +1,37 @@
+From 4752b188dc0c48e32a5662509c99b2c1cde29b27 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Wed, 18 Oct 2023 15:41:40 +0200
+Subject: [PATCH 593/834] radv: Wait for bottom of pipe in ACE gang wait
+ postamble.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This makes sure that the semaphore is only written when all work
+on the compute queue is finished.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25770>
+---
+ src/amd/vulkan/radv_queue.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/amd/vulkan/radv_queue.c b/src/amd/vulkan/radv_queue.c
+index e6eee92e5bf..7894930f015 100644
+--- a/src/amd/vulkan/radv_queue.c
++++ b/src/amd/vulkan/radv_queue.c
+@@ -1298,7 +1298,9 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
+     */
+    radv_cp_wait_mem(leader_post_cs, queue->state.qf, WAIT_REG_MEM_GREATER_OR_EQUAL, leader_wait_va, 1, 0xffffffff);
+    radv_cs_write_data(device, leader_post_cs, queue->state.qf, V_370_ME, leader_wait_va, 1, &zero, false);
+-   radv_cs_write_data(device, ace_post_cs, RADV_QUEUE_COMPUTE, V_370_ME, leader_wait_va, 1, &one, false);
++   si_cs_emit_write_event_eop(ace_post_cs, device->physical_device->rad_info.gfx_level, RADV_QUEUE_COMPUTE,
++                              V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, leader_wait_va,
++                              1, 0);
+ 
+    r = ws->cs_finalize(leader_pre_cs);
+    if (r != VK_SUCCESS)
+-- 
+2.42.0
+

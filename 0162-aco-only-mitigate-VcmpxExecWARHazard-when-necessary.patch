@@ -1,0 +1,38 @@
+From ce27875f09ddbbeb11c8e4e8da61f46a7c6f9daa Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 22 Sep 2023 16:44:33 +0100
+Subject: [PATCH 162/834] aco: only mitigate VcmpxExecWARHazard when necessary
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+fossil-db (navi10):
+Totals from 5059 (8.03% of 63015) affected shaders:
+Instrs: 7384947 -> 7351196 (-0.46%)
+CodeSize: 39393180 -> 39299196 (-0.24%); split: -0.28%, +0.04%
+Latency: 119683018 -> 119585224 (-0.08%); split: -0.08%, +0.00%
+InvThroughput: 29647188 -> 29623895 (-0.08%); split: -0.08%, +0.00%
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Daniel Schürmann <daniel@schuermann.dev>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25374>
+---
+ src/amd/compiler/aco_insert_NOPs.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/amd/compiler/aco_insert_NOPs.cpp b/src/amd/compiler/aco_insert_NOPs.cpp
+index fd4f5acbc62..a03b90000e9 100644
+--- a/src/amd/compiler/aco_insert_NOPs.cpp
++++ b/src/amd/compiler/aco_insert_NOPs.cpp
+@@ -906,7 +906,7 @@ handle_instruction_gfx10(State& state, NOP_ctx_gfx10& ctx, aco_ptr<Instruction>&
+     */
+    if (!instr->isVALU() && instr->reads_exec()) {
+       ctx.has_nonVALU_exec_read = true;
+-   } else if (instr->isVALU()) {
++   } else if (instr->isVALU() && ctx.has_nonVALU_exec_read) {
+       if (instr->writes_exec()) {
+          ctx.has_nonVALU_exec_read = false;
+ 
+-- 
+2.42.0
+

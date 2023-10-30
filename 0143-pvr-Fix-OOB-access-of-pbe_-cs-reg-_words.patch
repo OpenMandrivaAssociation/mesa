@@ -1,0 +1,35 @@
+From 9d1fc4de725599fb942d8497a0005be166254f4f Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Wed, 27 Sep 2023 19:17:20 +0100
+Subject: [PATCH 143/834] pvr: Fix OOB access of pbe_{cs,reg}_words
+
+`hw_render->eot_surface_count` also includes surface which don't
+need an emit. Using `i` was leading to OOB access when there were
+surfaces that didn't need emits, and in total there were
+`> PVR_MAX_COLOR_ATTACHMENTS` surfaces.
+
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25584>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index 212bd7f6b47..445dbd9d2f4 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -1357,8 +1357,8 @@ pvr_setup_emit_state(const struct pvr_device_info *dev_info,
+                           &render_pass_info->render_area,
+                           surface->need_resolve,
+                           samples,
+-                          emit_state->pbe_cs_words[i],
+-                          emit_state->pbe_reg_words[i]);
++                          emit_state->pbe_cs_words[emit_state->emit_count],
++                          emit_state->pbe_reg_words[emit_state->emit_count]);
+       emit_state->emit_count += 1;
+    }
+ 
+-- 
+2.42.0
+

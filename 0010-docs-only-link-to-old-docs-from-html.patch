@@ -1,0 +1,98 @@
+From 527e17a0c4fac4b0910c367da7b0f5416c117b04 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 11:29:46 +0200
+Subject: [PATCH 010/834] docs: only link to old docs from html
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Only the HTML builder knows about these files, so we can't really link
+to them when using other builders. This only matter to the link-checker
+right now, because that's the only other builder we use.
+
+It's a bit sad that we can't linkcheck files like these, but it doesn't
+work either way. Another way of making it work could be to use the
+download-role for these files. I'm not sure I think that's any better,
+as that makes the code read a bit more confusingly to me; the intent
+isn't to *download* the files, but to view them as raw-text.
+
+I could go either way here, though. Neither is fantastic IMO, but
+neither is a disaster either.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/relnotes.rst | 56 ++++++++++++++++++++++++-----------------------
+ 1 file changed, 29 insertions(+), 27 deletions(-)
+
+diff --git a/docs/relnotes.rst b/docs/relnotes.rst
+index 03363c6e4e8..3c772398c25 100644
+--- a/docs/relnotes.rst
++++ b/docs/relnotes.rst
+@@ -367,34 +367,36 @@ The release notes summarize what's new or changed in each Mesa release.
+ -  :doc:`6.4.1 release notes <relnotes/6.4.1>`
+ -  :doc:`6.4 release notes <relnotes/6.4>`
+ 
+-Versions of Mesa prior to 6.4 are summarized in the following
+-release notes, or in the `old docs`_.
++.. only:: builder_html
+ 
+--  `6.3.2 release notes <relnotes/6.3.2>`__
+--  `6.3.1 release notes <relnotes/6.3.1>`__
+--  `6.3 release notes <relnotes/6.3>`__
+--  `6.2.1 release notes <relnotes/6.2.1>`__
+--  `6.2 release notes <relnotes/6.2>`__
+--  `6.1 release notes <relnotes/6.1>`__
+--  `6.0.1 release notes <relnotes/6.0.1>`__
+--  `6.0 release notes <relnotes/6.0>`__
+--  `5.1 release notes <relnotes/5.1>`__
+--  `5.0.2 release notes <relnotes/5.0.2>`__
+--  `5.0.1 release notes <relnotes/5.0.1>`__
+--  `5.0 release notes <relnotes/5.0>`__
+--  `4.1 release notes <relnotes/4.1>`__
+--  `4.0.3 release notes <relnotes/4.0.3>`__
+--  `4.0.2 release notes <relnotes/4.0.2>`__
+--  `4.0.1 release notes <relnotes/4.0.1>`__
+--  `4.0 release notes <relnotes/4.0>`__
+--  `3.5 release notes <relnotes/3.5>`__
+--  `3.4.2 release notes <relnotes/3.4.2>`__
+--  `3.4.1 release notes <relnotes/3.4.1>`__
+--  `3.4 release notes <relnotes/3.4>`__
+--  `3.3 release notes <relnotes/3.3>`__
+--  `3.2.1 release notes <relnotes/3.2.1>`__
+--  `3.2 release notes <relnotes/3.2>`__
+--  `3.1 release notes <relnotes/3.1>`__
++   Versions of Mesa prior to 6.4 are summarized in the following
++   release notes, or in the `old docs`_.
++
++   -  `6.3.2 release notes <relnotes/6.3.2>`__
++   -  `6.3.1 release notes <relnotes/6.3.1>`__
++   -  `6.3 release notes <relnotes/6.3>`__
++   -  `6.2.1 release notes <relnotes/6.2.1>`__
++   -  `6.2 release notes <relnotes/6.2>`__
++   -  `6.1 release notes <relnotes/6.1>`__
++   -  `6.0.1 release notes <relnotes/6.0.1>`__
++   -  `6.0 release notes <relnotes/6.0>`__
++   -  `5.1 release notes <relnotes/5.1>`__
++   -  `5.0.2 release notes <relnotes/5.0.2>`__
++   -  `5.0.1 release notes <relnotes/5.0.1>`__
++   -  `5.0 release notes <relnotes/5.0>`__
++   -  `4.1 release notes <relnotes/4.1>`__
++   -  `4.0.3 release notes <relnotes/4.0.3>`__
++   -  `4.0.2 release notes <relnotes/4.0.2>`__
++   -  `4.0.1 release notes <relnotes/4.0.1>`__
++   -  `4.0 release notes <relnotes/4.0>`__
++   -  `3.5 release notes <relnotes/3.5>`__
++   -  `3.4.2 release notes <relnotes/3.4.2>`__
++   -  `3.4.1 release notes <relnotes/3.4.1>`__
++   -  `3.4 release notes <relnotes/3.4>`__
++   -  `3.3 release notes <relnotes/3.3>`__
++   -  `3.2.1 release notes <relnotes/3.2.1>`__
++   -  `3.2 release notes <relnotes/3.2>`__
++   -  `3.1 release notes <relnotes/3.1>`__
+ 
+ .. toctree::
+    :maxdepth: 1
+-- 
+2.42.0
+

@@ -1,0 +1,41 @@
+From 830597a884d49201353810c72c8cdfda47dd3f9c Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 10:50:14 +0200
+Subject: [PATCH 005/834] docs: link to upstream etnaviv
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The Wiki in this repo has been removed, and the about section mentions
+that this is laanwj's personal fork, and not the upstream. So let's
+update the link to the upstream repo instead.
+
+There's no wiki there either, but the main repo itself contains a readme
+file with some docs. Most of this is pretty stale, but it seems better
+than nothing.
+
+In the longer run, we should probably create a page about etnaviv in the
+drivers directory of these docs, and try to keep that up to date.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/systems.rst | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/systems.rst b/docs/systems.rst
+index 6bd82f92662..93359cc208d 100644
+--- a/docs/systems.rst
++++ b/docs/systems.rst
+@@ -24,7 +24,7 @@ Hardware drivers include:
+ -  ARM Mali Utgard. See :doc:`Lima <drivers/lima>`
+ -  ARM Mali Midgard, Bifrost. See :doc:`Panfrost <drivers/panfrost>`
+ -  Vivante GCxxx. See `Etnaviv
+-   Wiki <https://github.com/laanwj/etna_viv/wiki>`__
++   Wiki <https://github.com/etnaviv/etna_viv>`__
+ -  NVIDIA Tegra (K1 and later).
+ 
+ Layered driver include:
+-- 
+2.42.0
+

@@ -1,0 +1,80 @@
+From 8aadd4745cb9d03f0283f68f593ccb5ee7d33c11 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Wed, 20 Sep 2023 22:38:42 +0300
+Subject: [PATCH 629/834] anv: move generation shader return instruction to
+ last draw lane
+
+If we dispatch exactly a multiple of 8192 items, there is additional
+lane left to generate the jump instruction.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Fixes: c950fe97a0 ("anv: implement generated (indexed) indirect draws")
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ .../vulkan/shaders/common_generated_draws.glsl    | 15 +++++++++++++++
+ .../vulkan/shaders/gfx11_generated_draws.glsl     |  7 ++-----
+ .../vulkan/shaders/gfx9_generated_draws.glsl      |  7 ++-----
+ 3 files changed, 19 insertions(+), 10 deletions(-)
+
+diff --git a/src/intel/vulkan/shaders/common_generated_draws.glsl b/src/intel/vulkan/shaders/common_generated_draws.glsl
+index 06ea7781cf4..09a84984065 100644
+--- a/src/intel/vulkan/shaders/common_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/common_generated_draws.glsl
+@@ -131,3 +131,18 @@ void write_MI_BATCH_BUFFER_START(uint write_offset,
+    commands[write_offset + 1] = uint(addr & 0xffffffff);
+    commands[write_offset + 2] = uint(addr >> 32);
+ }
++
++void end_generated_draws(uint cmd_idx, uint draw_id, uint draw_count)
++{
++   uint _3dprim_dw_size = (flags >> 16) & 0xff;
++   /* We can have an indirect draw count = 0. */
++   uint last_draw_id = draw_count == 0 ? 0 : (min(draw_count, max_draw_count) - 1);
++   uint jump_offset = draw_count == 0 ? 0 : _3dprim_dw_size;
++
++   if (draw_id == last_draw_id && draw_count < max_draw_count) {
++      /* Only write a jump forward in the batch if we have fewer elements than
++       * the max draw count.
++       */
++      write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, end_addr);
++   }
++}
+diff --git a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+index 8745f7babde..efa273d2917 100644
+--- a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+@@ -76,10 +76,7 @@ void main()
+                                     first_instance,
+                                     draw_id);
+       }
+-   } else if (draw_id == draw_count && draw_id < max_draw_count) {
+-      /* Only write a jump forward in the batch if we have fewer elements than
+-       * the max draw count.
+-       */
+-      write_MI_BATCH_BUFFER_START(cmd_idx, end_addr);
+    }
++
++   end_generated_draws(cmd_idx, draw_id, draw_count);
+ }
+diff --git a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+index 9850b19c38c..b9624c9bfeb 100644
+--- a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+@@ -135,10 +135,7 @@ void main()
+                            first_instance,
+                            0 /* base_vertex_location */);
+       }
+-   } else if (draw_id == draw_count && draw_id < max_draw_count) {
+-      /* Only write a jump forward in the batch if we have fewer elements than
+-       * the max draw count.
+-       */
+-      write_MI_BATCH_BUFFER_START(cmd_idx, end_addr);
+    }
++
++   end_generated_draws(cmd_idx, draw_id, draw_count);
+ }
+-- 
+2.42.0
+

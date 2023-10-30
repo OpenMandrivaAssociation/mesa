@@ -1,0 +1,60 @@
+From 389b0ce6040cbfea333d759c87cc8870eb1a1f1e Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Tue, 17 Oct 2023 12:14:48 +0200
+Subject: [PATCH 647/834] zink: wrap shared memory blocks in a struct
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Acked-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25763>
+---
+ .../drivers/zink/nir_to_spirv/nir_to_spirv.c    | 17 +++++++++++++++--
+ 1 file changed, 15 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index bb944fdafa4..048619ff437 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -88,6 +88,7 @@ struct ntv_context {
+    SpvId loop_break, loop_cont;
+ 
+    SpvId shared_block_var[5]; //8, 16, 32, unused, 64
++   SpvId shared_block_arr_type[5]; //8, 16, 32, unused, 64
+    SpvId scratch_block_var[5]; //8, 16, 32, unused, 64
+ 
+    SpvId front_face_var, instance_id_var, vertex_id_var,
+@@ -684,10 +685,15 @@ create_shared_block(struct ntv_context *ctx, unsigned bit_size)
+       array = spirv_builder_type_array(&ctx->builder, type, emit_uint_const(ctx, 32, block_size));
+    }
+ 
++   ctx->shared_block_arr_type[idx] = array;
+    spirv_builder_emit_array_stride(&ctx->builder, array, bit_size / 8);
++
++   /* Create wrapper struct for Block, Offset and Aliased decorations. */
++   SpvId block = spirv_builder_type_struct(&ctx->builder, &array, 1);
++
+    SpvId ptr_type = spirv_builder_type_pointer(&ctx->builder,
+                                                SpvStorageClassWorkgroup,
+-                                               array);
++                                               block);
+    ctx->shared_block_var[idx] = spirv_builder_emit_var(&ctx->builder, ptr_type, SpvStorageClassWorkgroup);
+    if (ctx->spirv_1_4_interfaces) {
+       assert(ctx->num_entry_ifaces < ARRAY_SIZE(ctx->entry_ifaces));
+@@ -709,7 +715,14 @@ get_shared_block(struct ntv_context *ctx, unsigned bit_size)
+       if (ctx->shared_block_var[1])
+          spirv_builder_emit_cap(&ctx->builder, SpvCapabilityWorkgroupMemoryExplicitLayout16BitAccessKHR);
+    }
+-   return ctx->shared_block_var[idx];
++
++   SpvId ptr_type = spirv_builder_type_pointer(&ctx->builder,
++                                               SpvStorageClassWorkgroup,
++                                               ctx->shared_block_arr_type[idx]);
++   SpvId zero = emit_uint_const(ctx, 32, 0);
++
++   return spirv_builder_emit_access_chain(&ctx->builder, ptr_type,
++                                          ctx->shared_block_var[idx], &zero, 1);
+ }
+ 
+ #define HANDLE_EMIT_BUILTIN(SLOT, BUILTIN) \
+-- 
+2.42.0
+

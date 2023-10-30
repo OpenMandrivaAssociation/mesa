@@ -1,0 +1,49 @@
+From b1b0ca1acb028b29d2b476557d181bf4936e6dc6 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Sat, 14 Oct 2023 00:03:52 +0200
+Subject: [PATCH 438/834] rusticl: add a safe abstraction to execute a
+ CreateContextCB
+
+Since running CreateContextCBs isn't implemented yet, it's unused for now.
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/types.rs | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 0e8c7082cb3..cdca8f30078 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -9,6 +9,7 @@ use rusticl_opencl_gen::*;
+ 
+ use std::borrow::Borrow;
+ use std::ffi::c_void;
++use std::ffi::CStr;
+ use std::iter::Product;
+ 
+ #[macro_export]
+@@ -108,6 +109,19 @@ cl_callback!(
+     }
+ );
+ 
++impl CreateContextCB {
++    pub fn _call(self, err_msg: &CStr, private_info: &[u8]) {
++        let err_msg_ptr = err_msg.as_ptr();
++        let private_info_ptr = private_info.as_ptr().cast::<c_void>();
++        // SAFETY: The first parameter must be a valid pointer to a NUL-terminated C string. We
++        // know this is satisfied since that is `CStr`'s type invariant.
++        // The second parameter must be a valid pointer to binary data with the length given in the
++        // thrid parameter. We know both of these are correct since we just got them from a byte slice.
++        // All other requirements are covered by this callback's type invariants.
++        unsafe { (self.func)(err_msg_ptr, private_info_ptr, private_info.len(), self.data) };
++    }
++}
++
+ cl_callback!(
+     DeleteContextCB(FuncDeleteContextCB) {
+         context: cl_context,
+-- 
+2.42.0
+

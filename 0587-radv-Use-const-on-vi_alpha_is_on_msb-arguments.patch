@@ -1,0 +1,45 @@
+From 614bb47cbf8cfdcd67c7af546f82f7b7ecfe31bb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Fri, 29 Sep 2023 14:12:01 +0200
+Subject: [PATCH 587/834] radv: Use const on vi_alpha_is_on_msb arguments.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25770>
+---
+ src/amd/vulkan/radv_image.c   | 2 +-
+ src/amd/vulkan/radv_private.h | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_image.c b/src/amd/vulkan/radv_image.c
+index 6100bd27e8d..a528ddeb63b 100644
+--- a/src/amd/vulkan/radv_image.c
++++ b/src/amd/vulkan/radv_image.c
+@@ -966,7 +966,7 @@ gfx9_border_color_swizzle(const struct util_format_description *desc)
+ }
+ 
+ bool
+-vi_alpha_is_on_msb(struct radv_device *device, VkFormat format)
++vi_alpha_is_on_msb(const struct radv_device *device, const VkFormat format)
+ {
+    if (device->physical_device->rad_info.gfx_level >= GFX11)
+       return false;
+diff --git a/src/amd/vulkan/radv_private.h b/src/amd/vulkan/radv_private.h
+index 8d5082b8b05..45ab956cdd7 100644
+--- a/src/amd/vulkan/radv_private.h
++++ b/src/amd/vulkan/radv_private.h
+@@ -2938,7 +2938,7 @@ VkResult radv_image_create(VkDevice _device, const struct radv_image_create_info
+ bool radv_are_formats_dcc_compatible(const struct radv_physical_device *pdev, const void *pNext, VkFormat format,
+                                      VkImageCreateFlags flags, bool *sign_reinterpret);
+ 
+-bool vi_alpha_is_on_msb(struct radv_device *device, VkFormat format);
++bool vi_alpha_is_on_msb(const struct radv_device *device, const VkFormat format);
+ 
+ VkResult radv_image_from_gralloc(VkDevice device_h, const VkImageCreateInfo *base_info,
+                                  const VkNativeBufferANDROID *gralloc_info, const VkAllocationCallbacks *alloc,
+-- 
+2.42.0
+

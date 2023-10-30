@@ -1,0 +1,64 @@
+From 802fb8f7f3201dafbb97745b7a2873925ce6641f Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Fri, 30 Jun 2023 13:01:06 -0400
+Subject: [PATCH 108/834] nir/opt_preamble: Unify foreach_use logic
+
+Deduplication in prep for reconstructing if's.
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Connor Abbott <cwabbott0@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/compiler/nir/nir_opt_preamble.c | 29 +++++++++++++++--------------
+ 1 file changed, 15 insertions(+), 14 deletions(-)
+
+diff --git a/src/compiler/nir/nir_opt_preamble.c b/src/compiler/nir/nir_opt_preamble.c
+index 64a5e472ba1..7e69c29ceb7 100644
+--- a/src/compiler/nir/nir_opt_preamble.c
++++ b/src/compiler/nir/nir_opt_preamble.c
+@@ -416,27 +416,28 @@ nir_opt_preamble(nir_shader *shader, const nir_opt_preamble_options *options,
+          bool is_candidate = !avoid_instr(instr, options);
+          state->candidate = false;
+          state->must_stay = false;
+-         nir_foreach_use(use, def) {
+-            nir_def *use_def = nir_instr_def(nir_src_parent_instr(use));
+-            if (!use_def || !ctx.states[use_def->index].can_move ||
+-                ctx.states[use_def->index].must_stay) {
++         nir_foreach_use_including_if(use, def) {
++            bool is_can_move_user;
++
++            if (nir_src_is_if(use)) {
++               is_can_move_user = false;
++            } else {
++               nir_def *use_def = nir_instr_def(nir_src_parent_instr(use));
++               is_can_move_user = use_def != NULL &&
++                                  ctx.states[use_def->index].can_move &&
++                                  !ctx.states[use_def->index].must_stay;
++            }
++
++            if (is_can_move_user) {
++               state->can_move_users++;
++            } else {
+                if (is_candidate)
+                   state->candidate = true;
+                else
+                   state->must_stay = true;
+-            } else {
+-               state->can_move_users++;
+             }
+          }
+ 
+-         nir_foreach_if_use(use, def) {
+-            if (is_candidate)
+-               state->candidate = true;
+-            else
+-               state->must_stay = true;
+-            break;
+-         }
+-
+          if (state->candidate)
+             num_candidates++;
+       }
+-- 
+2.42.0
+

@@ -1,0 +1,188 @@
+From 1b0fbcbe1c7cbe37c68d072010517c3a517dc1b6 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Tue, 24 Oct 2023 09:29:41 +0200
+Subject: [PATCH 817/834] radv: remove outdated RADV_DEBUG=vmfaults support
+
+It's been a very long time since this was useless because dmesg
+required sudo access for a while.
+
+This will be replaced by the new GPUVM fault interface which allows
+to query from the kernel directly instead of trying to parse dmesg.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/23238>
+---
+ docs/envvars.rst               |  2 -
+ src/amd/vulkan/radv_debug.c    | 11 ++----
+ src/amd/vulkan/radv_debug.h    | 67 +++++++++++++++++-----------------
+ src/amd/vulkan/radv_instance.c |  1 -
+ src/amd/vulkan/radv_private.h  |  3 --
+ 5 files changed, 36 insertions(+), 48 deletions(-)
+
+diff --git a/docs/envvars.rst b/docs/envvars.rst
+index 4e3a047cf29..4be7a1fe1f2 100644
+--- a/docs/envvars.rst
++++ b/docs/envvars.rst
+@@ -1291,8 +1291,6 @@ RADV driver environment variables
+       display info at startup
+    ``syncshaders``
+       synchronize shaders after all draws/dispatches
+-   ``vmfaults``
+-      check for VM memory faults via dmesg
+    ``zerovram``
+       initialize all memory allocated in VRAM as zero
+ 
+diff --git a/src/amd/vulkan/radv_debug.c b/src/amd/vulkan/radv_debug.c
+index 8f683d998db..ebb6ffa4ee5 100644
+--- a/src/amd/vulkan/radv_debug.c
++++ b/src/amd/vulkan/radv_debug.c
+@@ -84,8 +84,6 @@ radv_init_trace(struct radv_device *device)
+    if (!device->trace_id_ptr)
+       return false;
+ 
+-   ac_vm_fault_occurred(device->physical_device->rad_info.gfx_level, &device->dmesg_timestamp, NULL);
+-
+    return true;
+ }
+ 
+@@ -701,16 +699,11 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
+ {
+    struct radv_device *device = queue->device;
+    enum amd_ip_type ring;
+-   uint64_t addr;
+ 
+    ring = radv_queue_ring(queue);
+ 
+    bool hang_occurred = radv_gpu_hang_occurred(queue, ring);
+-   bool vm_fault_occurred = false;
+-   if (queue->device->instance->debug_flags & RADV_DEBUG_VM_FAULTS)
+-      vm_fault_occurred =
+-         ac_vm_fault_occurred(device->physical_device->rad_info.gfx_level, &device->dmesg_timestamp, &addr);
+-   if (!hang_occurred && !vm_fault_occurred)
++   if (!hang_occurred)
+       return;
+ 
+    fprintf(stderr, "radv: GPU hang detected...\n");
+@@ -795,6 +788,7 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
+       fclose(f);
+    }
+ 
++#if 0
+    /* Dump VM fault info. */
+    if (vm_fault_occurred) {
+       snprintf(dump_path, sizeof(dump_path), "%s/%s", dump_dir, "vm_fault.log");
+@@ -805,6 +799,7 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
+          fclose(f);
+       }
+    }
++#endif
+ 
+    /* Dump app info. */
+    snprintf(dump_path, sizeof(dump_path), "%s/%s", dump_dir, "app_info.log");
+diff --git a/src/amd/vulkan/radv_debug.h b/src/amd/vulkan/radv_debug.h
+index d5cc37496c5..caa22e6e7e1 100644
+--- a/src/amd/vulkan/radv_debug.h
++++ b/src/amd/vulkan/radv_debug.h
+@@ -38,40 +38,39 @@ enum {
+    RADV_DEBUG_ALL_BOS = 1ull << 7,
+    RADV_DEBUG_NO_IBS = 1ull << 8,
+    RADV_DEBUG_DUMP_SPIRV = 1ull << 9,
+-   RADV_DEBUG_VM_FAULTS = 1ull << 10,
+-   RADV_DEBUG_ZERO_VRAM = 1ull << 11,
+-   RADV_DEBUG_SYNC_SHADERS = 1ull << 12,
+-   RADV_DEBUG_PREOPTIR = 1ull << 13,
+-   RADV_DEBUG_NO_DYNAMIC_BOUNDS = 1ull << 14,
+-   RADV_DEBUG_INFO = 1ull << 15,
+-   RADV_DEBUG_STARTUP = 1ull << 16,
+-   RADV_DEBUG_CHECKIR = 1ull << 17,
+-   RADV_DEBUG_NOBINNING = 1ull << 18,
+-   RADV_DEBUG_NO_NGG = 1ull << 19,
+-   RADV_DEBUG_DUMP_META_SHADERS = 1ull << 20,
+-   RADV_DEBUG_NO_MEMORY_CACHE = 1ull << 21,
+-   RADV_DEBUG_DISCARD_TO_DEMOTE = 1ull << 22,
+-   RADV_DEBUG_LLVM = 1ull << 23,
+-   RADV_DEBUG_FORCE_COMPRESS = 1ull << 24,
+-   RADV_DEBUG_HANG = 1ull << 25,
+-   RADV_DEBUG_IMG = 1ull << 26,
+-   RADV_DEBUG_NO_UMR = 1ull << 27,
+-   RADV_DEBUG_INVARIANT_GEOM = 1ull << 28,
+-   RADV_DEBUG_NO_DISPLAY_DCC = 1ull << 29,
+-   RADV_DEBUG_NO_TC_COMPAT_CMASK = 1ull << 30,
+-   RADV_DEBUG_NO_VRS_FLAT_SHADING = 1ull << 31,
+-   RADV_DEBUG_NO_ATOC_DITHERING = 1ull << 32,
+-   RADV_DEBUG_NO_NGGC = 1ull << 33,
+-   RADV_DEBUG_DUMP_PROLOGS = 1ull << 34,
+-   RADV_DEBUG_NO_DMA_BLIT = 1ull << 35,
+-   RADV_DEBUG_SPLIT_FMA = 1ull << 36,
+-   RADV_DEBUG_DUMP_EPILOGS = 1ull << 37,
+-   RADV_DEBUG_NO_FMASK = 1ull << 38,
+-   RADV_DEBUG_SHADOW_REGS = 1ull << 39,
+-   RADV_DEBUG_EXTRA_MD = 1ull << 40,
+-   RADV_DEBUG_NO_GPL = 1ull << 41,
+-   RADV_DEBUG_VIDEO_ARRAY_PATH = 1ull << 42,
+-   RADV_DEBUG_NO_RT = 1ull << 43,
++   RADV_DEBUG_ZERO_VRAM = 1ull << 10,
++   RADV_DEBUG_SYNC_SHADERS = 1ull << 11,
++   RADV_DEBUG_PREOPTIR = 1ull << 12,
++   RADV_DEBUG_NO_DYNAMIC_BOUNDS = 1ull << 13,
++   RADV_DEBUG_INFO = 1ull << 14,
++   RADV_DEBUG_STARTUP = 1ull << 15,
++   RADV_DEBUG_CHECKIR = 1ull << 16,
++   RADV_DEBUG_NOBINNING = 1ull << 17,
++   RADV_DEBUG_NO_NGG = 1ull << 18,
++   RADV_DEBUG_DUMP_META_SHADERS = 1ull << 19,
++   RADV_DEBUG_NO_MEMORY_CACHE = 1ull << 20,
++   RADV_DEBUG_DISCARD_TO_DEMOTE = 1ull << 21,
++   RADV_DEBUG_LLVM = 1ull << 22,
++   RADV_DEBUG_FORCE_COMPRESS = 1ull << 23,
++   RADV_DEBUG_HANG = 1ull << 24,
++   RADV_DEBUG_IMG = 1ull << 25,
++   RADV_DEBUG_NO_UMR = 1ull << 26,
++   RADV_DEBUG_INVARIANT_GEOM = 1ull << 27,
++   RADV_DEBUG_NO_DISPLAY_DCC = 1ull << 28,
++   RADV_DEBUG_NO_TC_COMPAT_CMASK = 1ull << 29,
++   RADV_DEBUG_NO_VRS_FLAT_SHADING = 1ull << 30,
++   RADV_DEBUG_NO_ATOC_DITHERING = 1ull << 31,
++   RADV_DEBUG_NO_NGGC = 1ull << 32,
++   RADV_DEBUG_DUMP_PROLOGS = 1ull << 33,
++   RADV_DEBUG_NO_DMA_BLIT = 1ull << 34,
++   RADV_DEBUG_SPLIT_FMA = 1ull << 35,
++   RADV_DEBUG_DUMP_EPILOGS = 1ull << 36,
++   RADV_DEBUG_NO_FMASK = 1ull << 37,
++   RADV_DEBUG_SHADOW_REGS = 1ull << 38,
++   RADV_DEBUG_EXTRA_MD = 1ull << 39,
++   RADV_DEBUG_NO_GPL = 1ull << 40,
++   RADV_DEBUG_VIDEO_ARRAY_PATH = 1ull << 41,
++   RADV_DEBUG_NO_RT = 1ull << 42,
+ };
+ 
+ enum {
+diff --git a/src/amd/vulkan/radv_instance.c b/src/amd/vulkan/radv_instance.c
+index 0e04afa3b9e..03d647ad5a5 100644
+--- a/src/amd/vulkan/radv_instance.c
++++ b/src/amd/vulkan/radv_instance.c
+@@ -43,7 +43,6 @@ static const struct debug_control radv_debug_options[] = {{"nofastclears", RADV_
+                                                           {"allbos", RADV_DEBUG_ALL_BOS},
+                                                           {"noibs", RADV_DEBUG_NO_IBS},
+                                                           {"spirv", RADV_DEBUG_DUMP_SPIRV},
+-                                                          {"vmfaults", RADV_DEBUG_VM_FAULTS},
+                                                           {"zerovram", RADV_DEBUG_ZERO_VRAM},
+                                                           {"syncshaders", RADV_DEBUG_SYNC_SHADERS},
+                                                           {"preoptir", RADV_DEBUG_PREOPTIR},
+diff --git a/src/amd/vulkan/radv_private.h b/src/amd/vulkan/radv_private.h
+index b4ac91a392f..5eb9102f8c0 100644
+--- a/src/amd/vulkan/radv_private.h
++++ b/src/amd/vulkan/radv_private.h
+@@ -1015,9 +1015,6 @@ struct radv_device {
+    /* Whether to DMA shaders to invisible VRAM or to upload directly through BAR. */
+    bool shader_use_invisible_vram;
+ 
+-   /* For detecting VM faults reported by dmesg. */
+-   uint64_t dmesg_timestamp;
+-
+    /* Whether the app has enabled the robustBufferAccess/robustBufferAccess2 features. */
+    enum radv_buffer_robustness buffer_robustness;
+ 
+-- 
+2.42.0
+

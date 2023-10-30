@@ -1,0 +1,68 @@
+From 5308378a35eac1dfa8a61ac5ec692527af7f88b1 Mon Sep 17 00:00:00 2001
+From: Mary Guillemard <mary.guillemard@collabora.com>
+Date: Fri, 22 Sep 2023 18:30:51 +0200
+Subject: [PATCH 752/834] nir: Add NVIDIA-specific geometry shader opcodes
+
+Signed-off-by: Mary Guillemard <mary.guillemard@collabora.com>
+Reviewed-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir_divergence_analysis.c | 2 ++
+ src/compiler/nir/nir_gather_info.c         | 2 ++
+ src/compiler/nir/nir_intrinsics.py         | 7 +++++++
+ 3 files changed, 11 insertions(+)
+
+diff --git a/src/compiler/nir/nir_divergence_analysis.c b/src/compiler/nir/nir_divergence_analysis.c
+index 37ce3ccc43c..ad34c4db19d 100644
+--- a/src/compiler/nir/nir_divergence_analysis.c
++++ b/src/compiler/nir/nir_divergence_analysis.c
+@@ -608,6 +608,8 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
+    case nir_intrinsic_load_ray_flags:
+    case nir_intrinsic_load_cull_mask:
+    case nir_intrinsic_load_sysval_nv:
++   case nir_intrinsic_emit_vertex_nv:
++   case nir_intrinsic_end_primitive_nv:
+    case nir_intrinsic_report_ray_intersection:
+    case nir_intrinsic_rq_proceed:
+    case nir_intrinsic_rq_load:
+diff --git a/src/compiler/nir/nir_gather_info.c b/src/compiler/nir/nir_gather_info.c
+index eb0734ec6eb..40a5a421e28 100644
+--- a/src/compiler/nir/nir_gather_info.c
++++ b/src/compiler/nir/nir_gather_info.c
+@@ -765,12 +765,14 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader,
+ 
+    case nir_intrinsic_end_primitive:
+    case nir_intrinsic_end_primitive_with_counter:
++   case nir_intrinsic_end_primitive_nv:
+       assert(shader->info.stage == MESA_SHADER_GEOMETRY);
+       shader->info.gs.uses_end_primitive = 1;
+       FALLTHROUGH;
+ 
+    case nir_intrinsic_emit_vertex:
+    case nir_intrinsic_emit_vertex_with_counter:
++   case nir_intrinsic_emit_vertex_nv:
+       shader->info.gs.active_stream_mask |= 1 << nir_intrinsic_stream_id(instr);
+ 
+       break;
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index 576defa2f2a..4dfbc04e845 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1972,6 +1972,13 @@ intrinsic("ald_nv", dest_comp=0, src_comp=[1, 1], bit_sizes=[32],
+ intrinsic("ast_nv", src_comp=[0, 1, 1],
+           indices=[BASE, RANGE_BASE, RANGE, FLAGS], flags=[])
+ 
++# NVIDIA-specific Geometry Shader intrinsics.
++# These contain an additional integer source and destination with the primitive handle input/output.
++intrinsic("emit_vertex_nv", dest_comp=1, src_comp=[1], indices=[STREAM_ID])
++intrinsic("end_primitive_nv", dest_comp=1, src_comp=[1], indices=[STREAM_ID])
++# Contains the final primitive handle and indicate the end of emission.
++intrinsic("final_primitive_nv", src_comp=[1])
++
+ # In order to deal with flipped render targets, gl_PointCoord may be flipped
+ # in the shader requiring a shader key or extra instructions or it may be
+ # flipped in hardware based on a state bit.  This version of gl_PointCoord
+-- 
+2.42.0
+

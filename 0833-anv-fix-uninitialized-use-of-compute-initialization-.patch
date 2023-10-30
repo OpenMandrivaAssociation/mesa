@@ -1,0 +1,41 @@
+From a97065adab02e298fa72f467b8f82c54baaba68c Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Wed, 25 Oct 2023 20:09:13 +0300
+Subject: [PATCH 833/834] anv: fix uninitialized use of compute initialization
+ batch
+
+We sometimes fail initialization.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Fixes: 09d12e6727 ("anv: Add support for I915_ENGINE_CLASS_COMPUTE in init_device_state()")
+Reviewed-by: Jordan Justen <jordan.l.justen@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25891>
+---
+ src/intel/vulkan/genX_init_state.c | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/src/intel/vulkan/genX_init_state.c b/src/intel/vulkan/genX_init_state.c
+index f8bab0c7f26..c0ca960059c 100644
+--- a/src/intel/vulkan/genX_init_state.c
++++ b/src/intel/vulkan/genX_init_state.c
+@@ -599,12 +599,13 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
+ static VkResult
+ init_compute_queue_state(struct anv_queue *queue)
+ {
+-   struct anv_batch batch;
+    UNUSED const struct intel_device_info *devinfo = queue->device->info;
+-
+    uint32_t cmds[64];
+-   batch.start = batch.next = cmds;
+-   batch.end = (void *) cmds + sizeof(cmds);
++   struct anv_batch batch = {
++      .start = cmds,
++      .next = cmds,
++      .end = (void *) cmds + sizeof(cmds),
++   };
+ 
+    genX(emit_pipeline_select)(&batch, GPGPU);
+ 
+-- 
+2.42.0
+

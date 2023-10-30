@@ -1,0 +1,26 @@
+From 10e3de37bf6b9592406d4e1de32a5e22bb626ae4 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sat, 14 Oct 2023 17:27:30 +0200
+Subject: [PATCH 415/834] rusticl/memory: use get_mut instead of lock in drop
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25727>
+---
+ src/gallium/frontends/rusticl/core/memory.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/memory.rs b/src/gallium/frontends/rusticl/core/memory.rs
+index 3d3c81247cc..d361111de79 100644
+--- a/src/gallium/frontends/rusticl/core/memory.rs
++++ b/src/gallium/frontends/rusticl/core/memory.rs
+@@ -1242,7 +1242,7 @@ impl Drop for Mem {
+             .rev()
+             .for_each(|cb| cb(cl));
+ 
+-        for (d, tx) in self.maps.lock().unwrap().tx.drain() {
++        for (d, tx) in self.maps.get_mut().unwrap().tx.drain() {
+             d.helper_ctx().unmap(tx.tx);
+         }
+     }
+-- 
+2.42.0
+

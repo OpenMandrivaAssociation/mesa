@@ -1,0 +1,60 @@
+From 0680330cf7d7aa9dcb1242ff979f2054039a8aaa Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Fri, 28 Apr 2023 18:44:55 -0500
+Subject: [PATCH 744/834] nir: Add a nir_ssa_def_all_uses_are_fsat() helper
+
+Extracted from nir_lower_to_source_mods, this is useful for back-ends
+which don't want to rely on NIR source and destination modifiers.
+
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir.c | 19 +++++++++++++++++++
+ src/compiler/nir/nir.h |  1 +
+ 2 files changed, 20 insertions(+)
+
+diff --git a/src/compiler/nir/nir.c b/src/compiler/nir/nir.c
+index baf1c907107..745c16298af 100644
+--- a/src/compiler/nir/nir.c
++++ b/src/compiler/nir/nir.c
+@@ -1636,6 +1636,25 @@ nir_def_components_read(const nir_def *def)
+    return read_mask;
+ }
+ 
++bool
++nir_def_all_uses_are_fsat(const nir_def *def)
++{
++   nir_foreach_use(src, def) {
++      if (nir_src_is_if(src))
++         return false;
++
++      nir_instr *use = nir_src_parent_instr(src);
++      if (use->type != nir_instr_type_alu)
++         return false;
++
++      nir_alu_instr *alu = nir_instr_as_alu(use);
++      if (alu->op != nir_op_fsat)
++         return false;
++   }
++
++   return true;
++}
++
+ nir_block *
+ nir_block_unstructured_next(nir_block *block)
+ {
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index db1e26405e9..f958f1e00d2 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -4595,6 +4595,7 @@ void nir_def_rewrite_uses_after(nir_def *def, nir_def *new_ssa,
+ 
+ nir_component_mask_t nir_src_components_read(const nir_src *src);
+ nir_component_mask_t nir_def_components_read(const nir_def *def);
++bool nir_def_all_uses_are_fsat(const nir_def *def);
+ 
+ static inline bool
+ nir_def_is_unused(nir_def *ssa)
+-- 
+2.42.0
+

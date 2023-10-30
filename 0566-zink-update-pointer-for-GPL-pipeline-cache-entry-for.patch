@@ -1,0 +1,31 @@
+From b3e864b326875befaa153b061a934aa04ca80dea Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 18 Oct 2023 11:31:31 -0400
+Subject: [PATCH 566/834] zink: update pointer for GPL pipeline cache entry
+ formats
+
+this otherwise points to ctx->gfx_pipeline_state.rendering_formats,
+which is broken for background compiles
+
+cc: mesa-stable
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25795>
+---
+ src/gallium/drivers/zink/zink_program_state.hpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/zink/zink_program_state.hpp b/src/gallium/drivers/zink/zink_program_state.hpp
+index 4f05f1361e8..10e2fb94897 100644
+--- a/src/gallium/drivers/zink/zink_program_state.hpp
++++ b/src/gallium/drivers/zink/zink_program_state.hpp
+@@ -184,6 +184,7 @@ zink_get_gfx_pipeline(struct zink_context *ctx,
+        * TODO: maybe optimize this since all these values aren't actually needed
+        */
+       memcpy(&pc_entry->state, state, sizeof(*state));
++      pc_entry->state.rendering_info.pColorAttachmentFormats = pc_entry->state.rendering_formats;
+       pc_entry->prog = prog;
+       /* init the optimized background compile fence */
+       util_queue_fence_init(&pc_entry->fence);
+-- 
+2.42.0
+

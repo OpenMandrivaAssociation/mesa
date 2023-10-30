@@ -1,0 +1,62 @@
+From c8a8b09c1531acf1ac085bb96f44ba098f49b701 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Iv=C3=A1n=20Briano?= <ivan.briano@intel.com>
+Date: Thu, 14 Sep 2023 12:15:20 -0700
+Subject: [PATCH 034/834] nir/lower_int64: respect rounding mode when casting
+ to float
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Appendix A: Vulkan environemtn for SPIR-V says:
+  Operations described as “correctly rounded” will return the infinitely
+  precise result, x, rounded so as to be representable in
+  floating-point. The rounding mode is not specified, unless the entry
+  point is declared with the RoundingModeRTE or the RoundingModeRTZ
+  Execution Mode.
+
+Conversion between types are classified as correctly rounded, so let's
+do rounding correctly.
+
+v2: check rounding mode for destination bit size (Georg)
+
+Fixes upcoming Vulkan CTS tests:
+dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp32.input_args.rounding_rtz_conv_from_uint64_up
+dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp32.input_args.rounding_rtz_conv_from_int64_up
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp32.input_args.rounding_rtz_conv_from_uint64_up_vert
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp32.input_args.rounding_rtz_conv_from_int64_up_vert
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp32.input_args.rounding_rtz_conv_from_uint64_up_frag
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp32.input_args.rounding_rtz_conv_from_int64_up_frag
+
+Reviewed-by: Ian Romanick <ian.d.romanick@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25281>
+---
+ src/compiler/nir/nir_lower_int64.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/src/compiler/nir/nir_lower_int64.c b/src/compiler/nir/nir_lower_int64.c
+index 02417d4fc21..fdd578bf0a7 100644
+--- a/src/compiler/nir/nir_lower_int64.c
++++ b/src/compiler/nir/nir_lower_int64.c
+@@ -775,11 +775,14 @@ lower_2f(nir_builder *b, nir_def *x, unsigned dest_bit_size,
+                                     COND_LOWER_OP(b, iand, x, lsb_mask));
+    nir_def *round_up = nir_ior(b, COND_LOWER_CMP(b, ilt, half, rem),
+                                nir_iand(b, halfway, is_odd));
+-   if (significand_bits >= 32)
+-      significand = COND_LOWER_OP(b, iadd, significand,
+-                                  COND_LOWER_CAST(b, b2i64, round_up));
+-   else
+-      significand = nir_iadd(b, significand, nir_b2i32(b, round_up));
++   if (!nir_is_rounding_mode_rtz(b->shader->info.float_controls_execution_mode,
++                                 dest_bit_size)) {
++      if (significand_bits >= 32)
++         significand = COND_LOWER_OP(b, iadd, significand,
++                                     COND_LOWER_CAST(b, b2i64, round_up));
++      else
++         significand = nir_iadd(b, significand, nir_b2i32(b, round_up));
++   }
+ 
+    nir_def *res;
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,43 @@
+From cd41d9e96dd28f670e66016b36911f556ee88248 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Fri, 29 Sep 2023 17:47:40 +0200
+Subject: [PATCH 588/834] radv: Only call si_cp_dma_wait_for_idle on GFX and
+ ACE queues.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This command is only supported on GFX and ACE.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25770>
+---
+ src/amd/vulkan/radv_cmd_buffer.c | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_cmd_buffer.c b/src/amd/vulkan/radv_cmd_buffer.c
+index 5d6723397c8..b382d8f8566 100644
+--- a/src/amd/vulkan/radv_cmd_buffer.c
++++ b/src/amd/vulkan/radv_cmd_buffer.c
+@@ -6232,13 +6232,12 @@ radv_EndCommandBuffer(VkCommandBuffer commandBuffer)
+       }
+ 
+       si_emit_cache_flush(cmd_buffer);
+-   }
+ 
+-   /* Make sure CP DMA is idle at the end of IBs because the kernel
+-    * doesn't wait for it.
+-    */
+-   if (cmd_buffer->qf != RADV_QUEUE_VIDEO_DEC)
++      /* Make sure CP DMA is idle at the end of IBs because the kernel
++       * doesn't wait for it.
++       */
+       si_cp_dma_wait_for_idle(cmd_buffer);
++   }
+ 
+    radv_describe_end_cmd_buffer(cmd_buffer);
+ 
+-- 
+2.42.0
+

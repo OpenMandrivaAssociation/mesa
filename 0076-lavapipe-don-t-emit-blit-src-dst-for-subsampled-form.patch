@@ -1,0 +1,31 @@
+From d1622204b59a261329098a5557e8629c168fcd81 Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Tue, 26 Sep 2023 12:55:21 +1000
+Subject: [PATCH 076/834] lavapipe: don't emit blit src/dst for subsampled
+ formats.
+
+Fixes dEQP-VK.api.info.format_properties.b8g8r8g8_422_unorm
+
+Cc: mesa-stable
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/frontends/lavapipe/lvp_formats.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/frontends/lavapipe/lvp_formats.c b/src/gallium/frontends/lavapipe/lvp_formats.c
+index 14d05d0343a..dd5fde6470a 100644
+--- a/src/gallium/frontends/lavapipe/lvp_formats.c
++++ b/src/gallium/frontends/lavapipe/lvp_formats.c
+@@ -184,6 +184,7 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
+    }
+    if ((pformat != PIPE_FORMAT_R9G9B9E5_FLOAT) &&
+        util_format_get_nr_components(pformat) != 3 &&
++       !util_format_is_subsampled_422(pformat) &&
+        !util_format_is_yuv(pformat) &&
+        pformat != PIPE_FORMAT_R10G10B10A2_SNORM &&
+        pformat != PIPE_FORMAT_B10G10R10A2_SNORM &&
+-- 
+2.42.0
+

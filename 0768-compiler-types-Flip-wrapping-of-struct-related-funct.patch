@@ -1,0 +1,193 @@
+From ad092fcab56257e275a70e92bf39de1f312070a1 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 2 Sep 2023 11:39:23 -0700
+Subject: [PATCH 768/834] compiler/types: Flip wrapping of struct related
+ functions
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 34 +++++++++++++++++++--------
+ src/compiler/glsl_types.h      | 14 ++++++++++--
+ src/compiler/glsl_types_impl.h |  3 +++
+ src/compiler/nir_types.cpp     | 42 ----------------------------------
+ 4 files changed, 40 insertions(+), 53 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 7e349259786..d1451e621cf 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -1709,15 +1709,15 @@ glsl_type::field_type(const char *name) const
+ }
+ 
+ 
+-int
+-glsl_type::field_index(const char *name) const
++extern "C" int
++glsl_get_field_index(const struct glsl_type *t, const char *name)
+ {
+-   if (this->base_type != GLSL_TYPE_STRUCT
+-       && this->base_type != GLSL_TYPE_INTERFACE)
++   if (t->base_type != GLSL_TYPE_STRUCT &&
++       t->base_type != GLSL_TYPE_INTERFACE)
+       return -1;
+ 
+-   for (unsigned i = 0; i < this->length; i++) {
+-      if (strcmp(name, this->fields.structure[i].name) == 0)
++   for (unsigned i = 0; i < t->length; i++) {
++      if (strcmp(name, t->fields.structure[i].name) == 0)
+          return i;
+    }
+ 
+@@ -1843,11 +1843,11 @@ glsl_get_component_slots_aligned(const struct glsl_type *t, unsigned offset)
+    return 0;
+ }
+ 
+-unsigned
+-glsl_type::struct_location_offset(unsigned length) const
++extern "C" unsigned
++glsl_get_struct_location_offset(const struct glsl_type *t, unsigned length)
+ {
+    unsigned offset = 0;
+-   const struct glsl_type *t = this->without_array();
++   t = t->without_array();
+    if (t->is_struct()) {
+       assert(length <= t->length);
+ 
+@@ -3516,4 +3516,20 @@ glsl_get_aoa_size(const struct glsl_type *t)
+    return size;
+ }
+ 
++const struct glsl_type *
++glsl_get_struct_field(const struct glsl_type *t, unsigned index)
++{
++   assert(t->is_struct() || t->is_interface());
++   assert(index < t->length);
++   return t->fields.structure[index].type;
++}
++
++const struct glsl_struct_field *
++glsl_get_struct_field_data(const struct glsl_type *t, unsigned index)
++{
++   assert(t->is_struct() || t->is_interface());
++   assert(index < t->length);
++   return &t->fields.structure[index];
++}
++
+ }
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index f7e5e2ed678..95b6e71e272 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1335,8 +1335,18 @@ const struct glsl_type *glsl_get_struct_field(const struct glsl_type *t, unsigne
+ const struct glsl_struct_field *glsl_get_struct_field_data(const struct glsl_type *t, unsigned index);
+ unsigned glsl_get_struct_location_offset(const struct glsl_type *t, unsigned length);
+ int glsl_get_field_index(const struct glsl_type *t, const char *name);
+-int glsl_get_struct_field_offset(const struct glsl_type *t, unsigned index);
+-const char *glsl_get_struct_elem_name(const struct glsl_type *t, unsigned index);
++
++static inline int
++glsl_get_struct_field_offset(const struct glsl_type *t, unsigned index)
++{
++   return t->fields.structure[index].offset;
++}
++
++static inline const char *
++glsl_get_struct_elem_name(const struct glsl_type *t, unsigned index)
++{
++   return t->fields.structure[index].name;
++}
+ 
+ static inline const struct glsl_type *glsl_void_type(void) { return &glsl_type_builtin_void; }
+ static inline const struct glsl_type *glsl_float_type(void) { return &glsl_type_builtin_float; }
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index 4f0fa342251..54e74c05def 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -48,6 +48,9 @@ inline bool glsl_type::contains_integer() const { return glsl_contains_integer(t
+ inline int glsl_type::array_size() const { return glsl_array_size(this); }
+ inline const glsl_type *glsl_type::without_array() const { return glsl_without_array(this); }
+ 
++inline unsigned glsl_type::struct_location_offset(unsigned len) const { return glsl_get_struct_location_offset(this, len); }
++inline int glsl_type::field_index(const char *n) const { return glsl_get_field_index(this, n); }
++
+ inline unsigned glsl_type::components() const { return glsl_get_components(this); }
+ inline unsigned glsl_type::component_slots() const { return glsl_get_component_slots(this); }
+ inline unsigned glsl_type::component_slots_aligned(unsigned int offset) const { return glsl_get_component_slots_aligned(this, offset); }
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index f5ccb98097e..b9d8f73bb59 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -40,29 +40,6 @@ glsl_get_type_name(const struct glsl_type *type)
+    }
+ }
+ 
+-const struct glsl_type *
+-glsl_get_struct_field(const struct glsl_type *type, unsigned index)
+-{
+-   assert(type->is_struct() || type->is_interface());
+-   assert(index < type->length);
+-   return type->fields.structure[index].type;
+-}
+-
+-int
+-glsl_get_struct_field_offset(const struct glsl_type *type,
+-                             unsigned index)
+-{
+-   return type->fields.structure[index].offset;
+-}
+-
+-const struct glsl_struct_field *
+-glsl_get_struct_field_data(const struct glsl_type *type, unsigned index)
+-{
+-   assert(type->is_struct() || type->is_interface());
+-   assert(index < type->length);
+-   return &type->fields.structure[index];
+-}
+-
+ const struct glsl_type *
+ glsl_texture_type_to_sampler(const struct glsl_type *type, bool is_shadow)
+ {
+@@ -99,12 +76,6 @@ glsl_get_base_type(const struct glsl_type *type)
+    return type->base_type;
+ }
+ 
+-const char *
+-glsl_get_struct_elem_name(const struct glsl_type *type, unsigned index)
+-{
+-   return type->fields.structure[index].name;
+-}
+-
+ glsl_sampler_dim
+ glsl_get_sampler_dim(const struct glsl_type *type)
+ {
+@@ -132,13 +103,6 @@ glsl_get_sampler_coordinate_components(const struct glsl_type *type)
+    return type->coordinate_components();
+ }
+ 
+-unsigned
+-glsl_get_struct_location_offset(const struct glsl_type *type,
+-                                unsigned length)
+-{
+-   return type->struct_location_offset(length);
+-}
+-
+ bool
+ glsl_record_compare(const struct glsl_type *a, const struct glsl_type *b,
+                     bool match_name, bool match_locations, bool match_precision)
+@@ -518,12 +482,6 @@ glsl_type_get_image_count(const struct glsl_type *type)
+    return glsl_type_count(type, GLSL_TYPE_IMAGE);
+ }
+ 
+-int
+-glsl_get_field_index(const struct glsl_type *type, const char *name)
+-{
+-   return type->field_index(name);
+-}
+-
+ enum glsl_interface_packing
+ glsl_get_internal_ifc_packing(const struct glsl_type *type,
+                               bool std430_supported)
+-- 
+2.42.0
+

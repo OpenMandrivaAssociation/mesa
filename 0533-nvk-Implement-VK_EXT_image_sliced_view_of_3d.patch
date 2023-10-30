@@ -1,0 +1,66 @@
+From 1d5270bf3929ff73ddb85b6ce6e93e6316eff990 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Wed, 18 Oct 2023 03:32:59 -0500
+Subject: [PATCH 533/834] nvk: Implement VK_EXT_image_sliced_view_of_3d
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9637
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25785>
+---
+ docs/features.txt                        | 2 +-
+ src/nouveau/vulkan/nvk_image_view.c      | 4 ++--
+ src/nouveau/vulkan/nvk_physical_device.c | 4 ++++
+ 3 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index f72b0be82ce..edac939b6c0 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -574,7 +574,7 @@ Khronos extensions that are not part of any Vulkan version:
+   VK_EXT_graphics_pipeline_library                      DONE (anv, lvp, radv, tu)
+   VK_EXT_image_2d_view_of_3d                            DONE (anv, hasvk, lvp, nvk, radv, tu, vn)
+   VK_EXT_image_drm_format_modifier                      DONE (anv, hasvk, radv/gfx9+, tu, v3dv, vn)
+-  VK_EXT_image_sliced_view_of_3d                        DONE (anv, radv/gfx10+)
++  VK_EXT_image_sliced_view_of_3d                        DONE (anv, nvk, radv/gfx10+)
+   VK_EXT_image_view_min_lod                             DONE (anv, hasvk, nvk, radv, tu, vn)
+   VK_EXT_index_type_uint8                               DONE (anv, hasvk, nvk, lvp, panvk, radv/gfx8+, tu, v3dv, vn)
+   VK_EXT_line_rasterization                             DONE (anv, hasvk, nvk, lvp, radv, tu, v3dv, vn)
+diff --git a/src/nouveau/vulkan/nvk_image_view.c b/src/nouveau/vulkan/nvk_image_view.c
+index e5c8713b257..de3a404c939 100644
+--- a/src/nouveau/vulkan/nvk_image_view.c
++++ b/src/nouveau/vulkan/nvk_image_view.c
+@@ -187,8 +187,8 @@ nvk_image_view_init(struct nvk_device *dev,
+             assert(view->vk.layer_count == 1);
+             nil_view.type = NIL_VIEW_TYPE_2D_ARRAY;
+             nil_view.num_levels = 1;
+-            nil_view.base_array_layer = 0;
+-            nil_view.array_len = view->vk.extent.depth;
++            nil_view.base_array_layer = view->vk.storage.z_slice_offset;
++            nil_view.array_len = view->vk.storage.z_slice_count;
+             image_3d_view_as_2d_array(&nil_image, &nil_view, &base_addr);
+          }
+ 
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index 7c5ec2f7650..355f2a5ae56 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -113,6 +113,7 @@ nvk_get_device_extensions(const struct nv_device_info *info,
+       .EXT_host_query_reset = true,
+       .EXT_image_2d_view_of_3d = true,
+       .EXT_image_robustness = true,
++      .EXT_image_sliced_view_of_3d = true,
+       .EXT_image_view_min_lod = true,
+       .EXT_index_type_uint8 = true,
+       .EXT_inline_uniform_block = true,
+@@ -331,6 +332,9 @@ nvk_get_device_features(const struct nv_device_info *info,
+       .image2DViewOf3D = true,
+       .sampler2DViewOf3D = true,
+ 
++      /* VK_EXT_image_sliced_view_of_3d */
++      .imageSlicedViewOf3D = true,
++
+       /* VK_EXT_image_view_min_lod */
+       .minLod = true,
+ 
+-- 
+2.42.0
+

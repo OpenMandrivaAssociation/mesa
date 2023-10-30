@@ -1,0 +1,42 @@
+From d52c39a6cd95d5999ddb65d25ba47c50ead77598 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Tapani=20P=C3=A4lli?= <tapani.palli@intel.com>
+Date: Mon, 23 Oct 2023 14:47:58 +0300
+Subject: [PATCH 796/834] intel/dev: expand existing fix for all gfx12 with
+ small EU count
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Commit 7db1b94e07f added a fix for ADL-N but this issue has been
+reproduced also on RPL-S and is likely common with all gfx12 variants
+with a small EU count.
+
+cc: mesa-stable
+
+Signed-off-by: Tapani Pälli <tapani.palli@intel.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25861>
+---
+ src/intel/dev/intel_device_info.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/intel/dev/intel_device_info.c b/src/intel/dev/intel_device_info.c
+index e90824ef4fe..aa53136cc54 100644
+--- a/src/intel/dev/intel_device_info.c
++++ b/src/intel/dev/intel_device_info.c
+@@ -1383,10 +1383,10 @@ intel_device_info_apply_workarounds(struct intel_device_info *devinfo)
+ 
+    /* Fixes issues with:
+     * dEQP-GLES31.functional.geometry_shading.layered.render_with_default_layer_cubemap
+-    * when running on ADL-N platform.
++    * when running on GFX12 platforms with small EU count.
+     */
+    const uint32_t eu_total = intel_device_info_eu_total(devinfo);
+-   if (devinfo->platform == INTEL_PLATFORM_ADL && eu_total < 32)
++   if (devinfo->verx10 == 120 && eu_total <= 32)
+       devinfo->urb.max_entries[MESA_SHADER_GEOMETRY] = 1024;
+ }
+ 
+-- 
+2.42.0
+

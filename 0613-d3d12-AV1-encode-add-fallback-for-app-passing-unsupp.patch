@@ -1,0 +1,54 @@
+From 0f7b7149a8d0ae432e75e2ec007c61f16a829c4c Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Mon, 18 Sep 2023 19:43:34 -0400
+Subject: [PATCH 613/834] d3d12: AV1 encode - add fallback for app passing
+ unsupported pic_params.InterpolationFilter
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ .../drivers/d3d12/d3d12_video_enc_av1.cpp     | 21 +++++++++++++++++--
+ 1 file changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp b/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp
+index b99f4814873..2c1964aa274 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_enc_av1.cpp
+@@ -1309,6 +1309,23 @@ d3d12_video_encoder_update_current_frame_pic_params_info_av1(struct d3d12_video_
+    picParams.pAV1PicData->InterpolationFilter =
+       static_cast<D3D12_VIDEO_ENCODER_AV1_INTERPOLATION_FILTERS>(pAV1Pic->interpolation_filter);
+ 
++   // Workaround for apps sending interpolation_filter values not supported even when reporting
++   // them in pipe_av1_enc_cap_features_ext1.interpolation_filter. If D3D12 driver doesn't support
++   // requested InterpolationFilter, fallback to the first supported by D3D12 driver
++   if ( (pD3D12Enc->m_currentEncodeCapabilities.m_encoderCodecSpecificConfigCaps.m_AV1CodecCaps.SupportedInterpolationFilters &
++      (1 << picParams.pAV1PicData->InterpolationFilter)) == 0 ) { /* See definition of D3D12_VIDEO_ENCODER_AV1_INTERPOLATION_FILTERS_FLAGS */
++      debug_printf("[d3d12_video_encoder_update_current_frame_pic_params_info_av1] Requested interpolation_filter"
++                   " not supported in pipe_av1_enc_cap_features_ext1.interpolation_filter"
++                   ", auto selecting from D3D12 SupportedInterpolationFilters...");
++      for(uint8_t i = D3D12_VIDEO_ENCODER_AV1_INTERPOLATION_FILTERS_EIGHTTAP; i <= D3D12_VIDEO_ENCODER_AV1_INTERPOLATION_FILTERS_SWITCHABLE; i++) {
++         if ((pD3D12Enc->m_currentEncodeCapabilities.m_encoderCodecSpecificConfigCaps.m_AV1CodecCaps.SupportedInterpolationFilters &
++             (1 << i)) /* See definition of D3D12_VIDEO_ENCODER_AV1_INTERPOLATION_FILTERS_FLAGS */ != 0) {
++            picParams.pAV1PicData->InterpolationFilter = static_cast<D3D12_VIDEO_ENCODER_AV1_INTERPOLATION_FILTERS>(i);
++            break;
++         }
++      }
++   }
++
+    // D3D12_VIDEO_ENCODER_AV1_RESTORATION_CONFIG FrameRestorationConfig;
+    // AV1 spec matches w/D3D12 FrameRestorationType enum definition
+ 
+@@ -1346,8 +1363,8 @@ d3d12_video_encoder_update_current_frame_pic_params_info_av1(struct d3d12_video_
+    // Workaround for mismatch between VAAPI/D3D12 and TxMode support for all/some frame types
+    // If D3D12 driver doesn't support requested TxMode, fallback to the first supported by D3D12
+    // driver for the requested frame type
+-   if (((pD3D12Enc->m_currentEncodeCapabilities.m_encoderCodecSpecificConfigCaps.m_AV1CodecCaps.SupportedTxModes[picParams.pAV1PicData->FrameType] &
+-      (1 << picParams.pAV1PicData->TxMode)) == 0) /* See definition of D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAGS */ == 0) {
++   if ((pD3D12Enc->m_currentEncodeCapabilities.m_encoderCodecSpecificConfigCaps.m_AV1CodecCaps.SupportedTxModes[picParams.pAV1PicData->FrameType] &
++      (1 << picParams.pAV1PicData->TxMode)) == 0) /* See definition of D3D12_VIDEO_ENCODER_AV1_TX_MODE_FLAGS */ {
+       debug_printf("[d3d12_video_encoder_update_current_frame_pic_params_info_av1] Requested tx_mode not supported"
+                      ", auto selecting from D3D12 SupportedTxModes for current frame type...");
+       for(uint8_t i = D3D12_VIDEO_ENCODER_AV1_TX_MODE_ONLY4x4; i <= D3D12_VIDEO_ENCODER_AV1_TX_MODE_SELECT; i++) {
+-- 
+2.42.0
+

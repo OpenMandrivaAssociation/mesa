@@ -1,0 +1,98 @@
+From ff3602457690d7b5bb05cb74e62959ce36af5cf6 Mon Sep 17 00:00:00 2001
+From: David Rosca <nowrep@gmail.com>
+Date: Tue, 3 Oct 2023 17:55:54 +0200
+Subject: [PATCH 173/834] radeonsi/vcn: Add High Quality encoding preset for
+ AV1
+
+Reviewed-by: Boyuan Zhang <Boyuan.Zhang@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25564>
+---
+ src/amd/common/ac_vcn_enc.h                   |  2 ++
+ src/gallium/drivers/radeonsi/radeon_vcn_enc.c |  9 ++++++--
+ .../drivers/radeonsi/radeon_vcn_enc_4_0.c     | 22 +++++++++++++++++++
+ 3 files changed, 31 insertions(+), 2 deletions(-)
+
+diff --git a/src/amd/common/ac_vcn_enc.h b/src/amd/common/ac_vcn_enc.h
+index 382143cb992..41a63d7ddcd 100644
+--- a/src/amd/common/ac_vcn_enc.h
++++ b/src/amd/common/ac_vcn_enc.h
+@@ -36,6 +36,7 @@
+ #define RENCODE_IB_OP_SET_SPEED_ENCODING_MODE                                       0x01000006
+ #define RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE                                     0x01000007
+ #define RENCODE_IB_OP_SET_QUALITY_ENCODING_MODE                                     0x01000008
++#define RENCODE_IB_OP_SET_HIGH_QUALITY_ENCODING_MODE                                0x01000009
+ 
+ #define RENCODE_IF_MAJOR_VERSION_MASK                                               0xFFFF0000
+ #define RENCODE_IF_MAJOR_VERSION_SHIFT                                              16
+@@ -59,6 +60,7 @@
+ #define RENCODE_PRESET_MODE_SPEED                                                   0x00000000
+ #define RENCODE_PRESET_MODE_BALANCE                                                 0x00000001
+ #define RENCODE_PRESET_MODE_QUALITY                                                 0x00000002
++#define RENCODE_PRESET_MODE_HIGH_QUALITY                                            0x00000003
+ 
+ #define RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS                                   0x00000000
+ #define RENCODE_H264_SLICE_CONTROL_MODE_FIXED_BITS                                  0x00000001
+diff --git a/src/gallium/drivers/radeonsi/radeon_vcn_enc.c b/src/gallium/drivers/radeonsi/radeon_vcn_enc.c
+index 2510a3346bb..d79bcd101eb 100644
+--- a/src/gallium/drivers/radeonsi/radeon_vcn_enc.c
++++ b/src/gallium/drivers/radeonsi/radeon_vcn_enc.c
+@@ -26,9 +26,14 @@ static void radeon_vcn_enc_quality_modes(struct radeon_encoder *enc,
+ {
+    rvcn_enc_quality_modes_t *p = &enc->enc_pic.quality_modes;
+ 
+-   p->preset_mode = in->preset_mode > RENCODE_PRESET_MODE_QUALITY
+-                                    ? RENCODE_PRESET_MODE_QUALITY
++   p->preset_mode = in->preset_mode > RENCODE_PRESET_MODE_HIGH_QUALITY
++                                    ? RENCODE_PRESET_MODE_HIGH_QUALITY
+                                     : in->preset_mode;
++
++   if (u_reduce_video_profile(enc->base.profile) != PIPE_VIDEO_FORMAT_AV1 &&
++       p->preset_mode == RENCODE_PRESET_MODE_HIGH_QUALITY)
++      p->preset_mode = RENCODE_PRESET_MODE_QUALITY;
++
+    p->pre_encode_mode = in->pre_encode_mode ? RENCODE_PREENCODE_MODE_4X
+                                             : RENCODE_PREENCODE_MODE_NONE;
+    p->vbaq_mode = in->vbaq_mode ? RENCODE_VBAQ_AUTO : RENCODE_VBAQ_NONE;
+diff --git a/src/gallium/drivers/radeonsi/radeon_vcn_enc_4_0.c b/src/gallium/drivers/radeonsi/radeon_vcn_enc_4_0.c
+index 99b0edc04ae..37fb9991e61 100644
+--- a/src/gallium/drivers/radeonsi/radeon_vcn_enc_4_0.c
++++ b/src/gallium/drivers/radeonsi/radeon_vcn_enc_4_0.c
+@@ -58,6 +58,27 @@ static void radeon_enc_sq_destroy(struct radeon_encoder *enc)
+    rvcn_sq_tail(&enc->cs, &enc->sq);
+ }
+ 
++static void radeon_enc_op_preset(struct radeon_encoder *enc)
++{
++   uint32_t preset_mode;
++
++   if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_SPEED &&
++         (enc->enc_pic.sample_adaptive_offset_enabled_flag &&
++         (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC)))
++      preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;
++   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_QUALITY)
++      preset_mode = RENCODE_IB_OP_SET_QUALITY_ENCODING_MODE;
++   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_HIGH_QUALITY)
++      preset_mode = RENCODE_IB_OP_SET_HIGH_QUALITY_ENCODING_MODE;
++   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_BALANCE)
++      preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;
++   else
++      preset_mode = RENCODE_IB_OP_SET_SPEED_ENCODING_MODE;
++
++   RADEON_ENC_BEGIN(preset_mode);
++   RADEON_ENC_END();
++}
++
+ static void radeon_enc_session_init(struct radeon_encoder *enc)
+ {
+    bool av1_encoding = false;
+@@ -1014,6 +1035,7 @@ void radeon_enc_4_0_init(struct radeon_encoder *enc)
+    enc->begin = radeon_enc_sq_begin;
+    enc->encode = radeon_enc_sq_encode;
+    enc->destroy = radeon_enc_sq_destroy;
++   enc->op_preset = radeon_enc_op_preset;
+ 
+    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_AV1) {
+       enc->before_encode = radeon_enc_av1_dpb_management;
+-- 
+2.42.0
+

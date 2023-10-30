@@ -1,0 +1,36 @@
+From 87e9fafaa833c9f91050a959145ca5cb1958804b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Thu, 5 Oct 2023 08:46:56 -0400
+Subject: [PATCH 477/834] winsys/amdgpu: correctly pad noop IBs for
+ RADEON_NOOP=1
+
+We need to use ib_pad_dw_mask, not ib_alignment.
+
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25578>
+---
+ src/gallium/winsys/amdgpu/drm/amdgpu_cs.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c b/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c
+index ef63f04cf9b..b963a56bf04 100644
+--- a/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c
++++ b/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c
+@@ -1708,10 +1708,11 @@ static void amdgpu_cs_submit_ib(void *job, void *gdata, int thread_index)
+ 
+    if (noop && acs->ip_type == AMD_IP_GFX) {
+       /* Reduce the IB size and fill it with NOP to make it like an empty IB. */
+-      unsigned noop_size = MIN2(cs->ib[IB_MAIN].ib_bytes, ws->info.ip[AMD_IP_GFX].ib_alignment);
++      unsigned noop_dw_size = ws->info.ip[AMD_IP_GFX].ib_pad_dw_mask + 1;
++      assert(cs->ib[IB_MAIN].ib_bytes / 4 >= noop_dw_size);
+ 
+-      cs->ib_main_addr[0] = PKT3(PKT3_NOP, noop_size / 4 - 2, 0);
+-      cs->ib[IB_MAIN].ib_bytes = noop_size;
++      cs->ib_main_addr[0] = PKT3(PKT3_NOP, noop_dw_size - 2, 0);
++      cs->ib[IB_MAIN].ib_bytes = noop_dw_size * 4;
+       noop = false;
+    }
+ 
+-- 
+2.42.0
+

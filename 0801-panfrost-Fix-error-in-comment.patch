@@ -1,0 +1,32 @@
+From 6012bde0fc7e3c94c5efcd8dd6a408936a42435f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Thu, 31 Aug 2023 11:17:45 -0400
+Subject: [PATCH 801/834] panfrost: Fix error in comment
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+"linear" -> "tiled"
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/panfrost/lib/pan_layout.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/panfrost/lib/pan_layout.c b/src/panfrost/lib/pan_layout.c
+index e0dfb1f85ca..472568b1c63 100644
+--- a/src/panfrost/lib/pan_layout.c
++++ b/src/panfrost/lib/pan_layout.c
+@@ -148,7 +148,7 @@ pan_afbc_tile_size(uint64_t modifier)
+  * Determine the number of bytes between header rows for an AFBC image. For an
+  * image with linear headers, this is simply the number of header blocks
+  * (=superblocks) per row times the numbers of bytes per header block. For an
+- * image with linear headers, this is multipled by the number of rows of
++ * image with tiled headers, this is multipled by the number of rows of
+  * header blocks are in a tile together.
+  */
+ uint32_t
+-- 
+2.42.0
+

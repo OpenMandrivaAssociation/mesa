@@ -1,0 +1,42 @@
+From a59a66e11103ab86fbbe3e4ed09fd63fe3e87019 Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Mon, 9 Oct 2023 10:53:36 +0800
+Subject: [PATCH 128/834] radeonsi: disable disk cache when use aco
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is a temp fix. Currently we mix use llvm and aco to compile
+shaders when AMD_DEBUG=useaco, but disk cache need function
+identifier when creation, aco compiled shader should not use llvm
+function identifier, so we have to disable disk cache when use
+aco for now.
+
+After aco is able to compile all shaders, we can re-enable disk
+cache by removing the llvm function identifier when aco.
+
+Fixes: d1dd36a74e1 ("radeonsi: be able to use aco compiler for mono ps")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9673
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25607>
+---
+ src/gallium/drivers/radeonsi/si_pipe.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_pipe.c b/src/gallium/drivers/radeonsi/si_pipe.c
+index f5c820f4ad6..5c67a9ae005 100644
+--- a/src/gallium/drivers/radeonsi/si_pipe.c
++++ b/src/gallium/drivers/radeonsi/si_pipe.c
+@@ -1099,7 +1099,7 @@ static void si_test_gds_memory_management(struct si_context *sctx, unsigned allo
+ static void si_disk_cache_create(struct si_screen *sscreen)
+ {
+    /* Don't use the cache if shader dumping is enabled. */
+-   if (sscreen->debug_flags & DBG_ALL_SHADERS)
++   if (sscreen->debug_flags & (DBG_ALL_SHADERS | DBG(USE_ACO)))
+       return;
+ 
+    struct mesa_sha1 ctx;
+-- 
+2.42.0
+

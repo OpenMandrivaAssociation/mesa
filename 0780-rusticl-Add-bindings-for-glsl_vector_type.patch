@@ -1,0 +1,57 @@
+From 2d4a250d212850998481f3f21322325307e597de Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 16 Sep 2023 10:19:22 -0700
+Subject: [PATCH 780/834] rusticl: Add bindings for glsl_vector_type()
+
+This is going to become inline functions, so add the corresponding
+Rust bindings for it first.
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ .../rusticl/rusticl_mesa_inline_bindings_wrapper.c          | 6 ++++++
+ .../rusticl/rusticl_mesa_inline_bindings_wrapper.h          | 3 +++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.c b/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.c
+index 56c403c710a..546d0c5106a 100644
+--- a/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.c
++++ b/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.c
+@@ -96,3 +96,9 @@ glsl_int16_t_type(void)
+ {
+     return __glsl_int16_t_type();
+ }
++
++const struct glsl_type *
++glsl_vector_type(enum glsl_base_type base_type, unsigned components)
++{
++    return __glsl_vector_type(base_type, components);
++}
+diff --git a/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.h b/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.h
+index 6f4ef1be20d..814421c27a4 100644
+--- a/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.h
++++ b/src/gallium/frontends/rusticl/rusticl_mesa_inline_bindings_wrapper.h
+@@ -13,6 +13,7 @@
+ #define glsl_uint8_t_type __glsl_uint8_t_type
+ #define glsl_uint64_t_type __glsl_uint64_t_type
+ #define glsl_int16_t_type __glsl_int16_t_type
++#define glsl_vector_type __glsl_vector_type
+ #include "nir.h"
+ #include "util/blob.h"
+ #include "util/disk_cache.h"
+@@ -35,6 +36,7 @@
+ #undef glsl_uint8_t_type
+ #undef glsl_uint64_t_type
+ #undef glsl_int16_t_type
++#undef glsl_vector_type
+ 
+ void blob_finish(struct blob *);
+ char *mesa_bytes_to_hex(char *buf, const uint8_t *hex_id, unsigned size);
+@@ -52,3 +54,4 @@ const struct glsl_type *glsl_uint_type(void);
+ const struct glsl_type *glsl_uint8_t_type(void);
+ const struct glsl_type *glsl_uint64_t_type(void);
+ const struct glsl_type *glsl_int16_t_type(void);
++const struct glsl_type *glsl_vector_type(enum glsl_base_type base_type, unsigned components);
+-- 
+2.42.0
+

@@ -1,0 +1,70 @@
+From 2a3aa6da5038e50a34f22d986fb36870024fd57e Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Tue, 19 Sep 2023 17:08:41 +0100
+Subject: [PATCH 013/834] pvr: Fix cubemap layer stride
+
+The hw calculates the layer stride with the assumption of a full
+mip chain being there even though certain levels might never be
+used.
+
+Fix the `layer_size` by accounting for any missing mip levels.
+
+Fixes: 8991e6464 ("pvr: Add a Vulkan driver for Imagination Technologies PowerVR Rogue GPUs")
+Reported-by: James Glanville <james.glanville@imgtec.com>
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25344>
+---
+ src/imagination/vulkan/pvr_image.c | 28 ++++++++++++++++++++++------
+ 1 file changed, 22 insertions(+), 6 deletions(-)
+
+diff --git a/src/imagination/vulkan/pvr_image.c b/src/imagination/vulkan/pvr_image.c
+index 88c4bed45fb..c21544182da 100644
+--- a/src/imagination/vulkan/pvr_image.c
++++ b/src/imagination/vulkan/pvr_image.c
+@@ -98,20 +98,36 @@ static void pvr_image_setup_mip_levels(struct pvr_image *image)
+    image->layer_size = 0;
+ 
+    for (uint32_t i = 0; i < image->vk.mip_levels; i++) {
+-      const uint32_t height = u_minify(extent.height, i);
+-      const uint32_t width = u_minify(extent.width, i);
+-      const uint32_t depth = u_minify(extent.depth, i);
+       struct pvr_mip_level *mip_level = &image->mip_levels[i];
+ 
+-      mip_level->pitch = cpp * ALIGN(width, extent_alignment);
+-      mip_level->height_pitch = ALIGN(height, extent_alignment);
++      mip_level->pitch = cpp * ALIGN(extent.width, extent_alignment);
++      mip_level->height_pitch = ALIGN(extent.height, extent_alignment);
+       mip_level->size = image->vk.samples * mip_level->pitch *
+                         mip_level->height_pitch *
+-                        ALIGN(depth, extent_alignment);
++                        ALIGN(extent.depth, extent_alignment);
+       mip_level->size = ALIGN(mip_level->size, level_alignment);
+       mip_level->offset = image->layer_size;
+ 
+       image->layer_size += mip_level->size;
++
++      extent.height = u_minify(extent.height, 1);
++      extent.width = u_minify(extent.width, 1);
++      extent.depth = u_minify(extent.depth, 1);
++   }
++
++   /* The hw calculates layer strides as if a full mip chain up until 1x1x1
++    * were present so we need to account for that in the `layer_size`.
++    */
++   while (extent.height != 1 || extent.width != 1 || extent.depth != 1) {
++      const uint32_t height_pitch = ALIGN(extent.height, extent_alignment);
++      const uint32_t pitch = cpp * ALIGN(extent.width, extent_alignment);
++
++      image->layer_size += image->vk.samples * pitch * height_pitch *
++                           ALIGN(extent.depth, extent_alignment);
++
++      extent.height = u_minify(extent.height, 1);
++      extent.width = u_minify(extent.width, 1);
++      extent.depth = u_minify(extent.depth, 1);
+    }
+ 
+    /* TODO: It might be useful to store the alignment in the image so it can be
+-- 
+2.42.0
+

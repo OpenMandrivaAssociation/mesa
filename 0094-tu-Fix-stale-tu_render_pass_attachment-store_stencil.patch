@@ -1,0 +1,35 @@
+From 964a27aa39f326edf070b0dea91c614af0970ed7 Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Fri, 6 Oct 2023 16:46:59 +0200
+Subject: [PATCH 094/834] tu: Fix stale
+ tu_render_pass_attachment::store_stencil with dyn rendering
+
+Attachment initialization helpers expect zeroed memory by default.
+
+Fixes a hang when running Subnautica with TU_DEBUG="gmem".
+See: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8702#note_1932003
+
+Fixes: ed125e6cca188275631641784fcf3ddcbcfef193
+("tu: Initial support for dynamic rendering")
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25592>
+---
+ src/freedreno/vulkan/tu_pass.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/freedreno/vulkan/tu_pass.cc b/src/freedreno/vulkan/tu_pass.cc
+index 299495e38a5..b304ef44a8e 100644
+--- a/src/freedreno/vulkan/tu_pass.cc
++++ b/src/freedreno/vulkan/tu_pass.cc
+@@ -1063,6 +1063,7 @@ static void
+ tu_setup_dynamic_attachment(struct tu_render_pass_attachment *att,
+                             struct tu_image_view *view)
+ {
++   *att = {};
+    att->format = view->vk.format;
+    att->samples = (VkSampleCountFlagBits) view->image->layout->nr_samples;
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,78 @@
+From b1eef3094fd41bfbb72aba642774e74e2b3db47f Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 16:33:41 +0200
+Subject: [PATCH 574/834] ci/freedreno: Move skqp testing to a618.
+
+The limozeen runners are quite under-committed, while we had 10 jobs
+running for our 9 cheza runners, causing an unnecessary wait even when the
+farms were idle.
+
+I've removed the old 630 skqp bits, so we can just track what's being
+tested on 618.  618 had skqp toml and xfails laying around alreaady.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25790>
+---
+ src/freedreno/ci/deqp-freedreno-a630-skqp.toml |  3 ---
+ src/freedreno/ci/freedreno-a630-fails.txt      |  5 -----
+ src/freedreno/ci/gitlab-ci.yml                 | 12 +-----------
+ 3 files changed, 1 insertion(+), 19 deletions(-)
+ delete mode 100644 src/freedreno/ci/deqp-freedreno-a630-skqp.toml
+
+diff --git a/src/freedreno/ci/deqp-freedreno-a630-skqp.toml b/src/freedreno/ci/deqp-freedreno-a630-skqp.toml
+deleted file mode 100644
+index c2921a1122b..00000000000
+--- a/src/freedreno/ci/deqp-freedreno-a630-skqp.toml
++++ /dev/null
+@@ -1,3 +0,0 @@
+-[[skqp]]
+-skqp = "/skqp/skqp"
+-skqp_assets = "/skqp/assets"
+diff --git a/src/freedreno/ci/freedreno-a630-fails.txt b/src/freedreno/ci/freedreno-a630-fails.txt
+index 92f96f5711a..ecd5de60ad2 100644
+--- a/src/freedreno/ci/freedreno-a630-fails.txt
++++ b/src/freedreno/ci/freedreno-a630-fails.txt
+@@ -350,11 +350,6 @@ spec@arb_query_buffer_object@qbo@query-GL_TESS_CONTROL_SHADER_PATCHES-SYNC_CPU_R
+ spec@arb_query_buffer_object@qbo@query-GL_TESS_CONTROL_SHADER_PATCHES-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_UNSIGNED_INT,Fail
+ spec@arb_query_buffer_object@qbo@query-GL_TESS_CONTROL_SHADER_PATCHES-SYNC_CPU_READ_AFTER_CACHE_TEST-GL_UNSIGNED_INT64_ARB,Fail
+ 
+-# skqp failure:
+-# SRGBReadWritePixels FAILED (7 errors)
+-# ../../tests/SRGBReadWritePixelsTest.cpp:214	Could not create sRGB surface context. [OpenGL]
+-SRGBReadWritePixels,Fail
+-
+ spec@!opengl 1.1@line-smooth-stipple,Fail
+ 
+ 
+diff --git a/src/freedreno/ci/gitlab-ci.yml b/src/freedreno/ci/gitlab-ci.yml
+index 73f50f4598d..b150c658a89 100644
+--- a/src/freedreno/ci/gitlab-ci.yml
++++ b/src/freedreno/ci/gitlab-ci.yml
+@@ -91,7 +91,7 @@ a618_gl:
+     HWCI_START_WESTON: 1
+     DEQP_SUITE: freedreno-a618-egl
+ 
+-.a618_skqp:  # FIXME disabled due to device outage
++a618_skqp:
+   extends:
+     - .lava-test-deqp:arm64
+     - .a618-test-limozeen-nots-r5
+@@ -198,16 +198,6 @@ a630_gles_asan:
+     FDO_CI_CONCURRENT: 2 # We get OOMkills if we go too wide with asan enabled
+     GPU_VERSION: freedreno-a630-asan
+ 
+-a630_skqp:
+-  extends:
+-    - .baremetal-deqp-test
+-    - .a630-test
+-    # SKQP tests both the GL and VK drivers.
+-    - .google-freedreno-turnip-rules
+-  variables:
+-    HWCI_START_WESTON: 1
+-    DEQP_SUITE: freedreno-a630-skqp
+-
+ a630_vk:
+   extends:
+     - .a630-test
+-- 
+2.42.0
+

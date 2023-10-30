@@ -1,0 +1,55 @@
+From 542c44ffde46a8db95c611c5f44e8add11f6388a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Thu, 31 Aug 2023 11:47:48 -0400
+Subject: [PATCH 805/834] panfrost: Add panfrost_batch_write_bo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Needed when writing to a BO from a compute shader when the BO isn't
+assigned to a resource yet.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/gallium/drivers/panfrost/pan_job.c | 8 ++++++++
+ src/gallium/drivers/panfrost/pan_job.h | 4 ++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/src/gallium/drivers/panfrost/pan_job.c b/src/gallium/drivers/panfrost/pan_job.c
+index be9e6757a3b..ed8b404808e 100644
+--- a/src/gallium/drivers/panfrost/pan_job.c
++++ b/src/gallium/drivers/panfrost/pan_job.c
+@@ -350,6 +350,14 @@ panfrost_batch_add_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
+       batch, bo, PAN_BO_ACCESS_READ | panfrost_access_for_stage(stage));
+ }
+ 
++void
++panfrost_batch_write_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
++                        enum pipe_shader_type stage)
++{
++   panfrost_batch_add_bo_old(
++      batch, bo, PAN_BO_ACCESS_WRITE | panfrost_access_for_stage(stage));
++}
++
+ void
+ panfrost_batch_read_rsrc(struct panfrost_batch *batch,
+                          struct panfrost_resource *rsrc,
+diff --git a/src/gallium/drivers/panfrost/pan_job.h b/src/gallium/drivers/panfrost/pan_job.h
+index b5120b0ac0a..f57b82857f8 100644
+--- a/src/gallium/drivers/panfrost/pan_job.h
++++ b/src/gallium/drivers/panfrost/pan_job.h
+@@ -205,6 +205,10 @@ panfrost_get_fresh_batch_for_fbo(struct panfrost_context *ctx,
+ void panfrost_batch_add_bo(struct panfrost_batch *batch, struct panfrost_bo *bo,
+                            enum pipe_shader_type stage);
+ 
++void panfrost_batch_write_bo(struct panfrost_batch *batch,
++                             struct panfrost_bo *bo,
++                             enum pipe_shader_type stage);
++
+ void panfrost_batch_read_rsrc(struct panfrost_batch *batch,
+                               struct panfrost_resource *rsrc,
+                               enum pipe_shader_type stage);
+-- 
+2.42.0
+

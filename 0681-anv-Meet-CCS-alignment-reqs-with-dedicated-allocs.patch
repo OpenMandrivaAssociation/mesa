@@ -1,0 +1,126 @@
+From 4cdd3178fb10723e91060a75c34f379a1a92184c Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Fri, 25 Aug 2023 16:10:29 -0400
+Subject: [PATCH 681/834] anv: Meet CCS alignment reqs with dedicated allocs
+
+At image bind time, we require BOs to meet aux-map alignment
+requirements in order to enable CCS on images. This is a heuristic
+controlled by anv_bo_allows_aux_map().
+
+To improve the chances of getting a properly aligned BO, we make use of
+the dedicated allocation extension. Firstly, we report to applications a
+preference for dedicated memory if an image would like to use the aux
+map. Secondly, we align the VMA for dedicated allocations to meet
+aux-map requirements.
+
+To make enabling modifiers much easier on integrated gfx12, report
+dedicated allocations as a requirement for modifiers which specify CCS.
+
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com> (v1)
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_allocator.c |  3 ++-
+ src/intel/vulkan/anv_device.c    |  1 +
+ src/intel/vulkan/anv_image.c     | 18 ++++++++++++++++++
+ src/intel/vulkan/anv_private.h   | 15 +++++++++++++++
+ 4 files changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/src/intel/vulkan/anv_allocator.c b/src/intel/vulkan/anv_allocator.c
+index c1bf5086571..7c033e8301b 100644
+--- a/src/intel/vulkan/anv_allocator.c
++++ b/src/intel/vulkan/anv_allocator.c
+@@ -1375,7 +1375,7 @@ anv_bo_vma_alloc_or_close(struct anv_device *device,
+    /* If we're using the AUX map, make sure we follow the required
+     * alignment.
+     */
+-   if (device->info->has_aux_map && (alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS))
++   if (device->info->has_aux_map && (alloc_flags & ANV_BO_ALLOC_DEDICATED))
+       align = MAX2(intel_aux_map_get_alignment(device->aux_map_ctx), align);
+ 
+    /* Opportunistically align addresses to 2Mb when above 1Mb. We do this
+@@ -1563,6 +1563,7 @@ anv_device_import_bo_from_host_ptr(struct anv_device *device,
+ {
+    assert(!(alloc_flags & (ANV_BO_ALLOC_MAPPED |
+                            ANV_BO_ALLOC_SNOOPED |
++                           ANV_BO_ALLOC_DEDICATED |
+                            ANV_BO_ALLOC_FIXED_ADDRESS)));
+ 
+    assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS) ||
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index f574a69ef19..8d2c4c6b2c4 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -3942,6 +3942,7 @@ VkResult anv_AllocateMemory(
+ 
+       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
+          dedicated_info = (void *)ext;
++         alloc_flags |= ANV_BO_ALLOC_DEDICATED;
+          break;
+ 
+       case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO: {
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index e0549d78ea8..c9e15a32ce9 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -1898,6 +1898,24 @@ anv_image_get_memory_requirements(struct anv_device *device,
+              */
+             requirements->prefersDedicatedAllocation = true;
+             requirements->requiresDedicatedAllocation = true;
++         } else if (anv_image_uses_aux_map(device, image)) {
++            /* We request a dedicated allocation to guarantee that the BO will
++             * be aux-map compatible (see anv_bo_vma_alloc_or_close and
++             * anv_bo_allows_aux_map).
++             *
++             * TODO: This is an untested heuristic. It's not known if this
++             *       guarantee is worth losing suballocation.
++             *
++             * If we don't have an aux-map compatible BO at the time we bind
++             * this image to device memory, we'll change the aux usage.
++             *
++             * It may be possible to handle an image using a modifier in the
++             * same way. However, we choose to keep things simple and require
++             * a dedicated allocation for that case.
++             */
++            requirements->prefersDedicatedAllocation = true;
++            requirements->requiresDedicatedAllocation =
++               isl_drm_modifier_has_aux(image->vk.drm_format_mod);
+          } else {
+             requirements->prefersDedicatedAllocation = false;
+             requirements->requiresDedicatedAllocation = false;
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index c150ab84313..7751318c673 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -400,6 +400,9 @@ enum anv_bo_alloc_flags {
+ 
+    /** For descriptor pools */
+    ANV_BO_ALLOC_DESCRIPTOR_POOL = (1 << 13),
++
++   /** This BO will be dedicated to a buffer or an image */
++   ANV_BO_ALLOC_DEDICATED = (1 << 14),
+ };
+ 
+ struct anv_bo {
+@@ -4919,6 +4922,18 @@ anv_image_plane_uses_aux_map(const struct anv_device *device,
+       isl_aux_usage_has_ccs(image->planes[plane].aux_usage);
+ }
+ 
++static inline bool
++anv_image_uses_aux_map(const struct anv_device *device,
++                       const struct anv_image *image)
++{
++   for (uint32_t p = 0; p < image->n_planes; ++p) {
++      if (anv_image_plane_uses_aux_map(device, image, p))
++         return true;
++   }
++
++   return false;
++}
++
+ static inline bool
+ anv_bo_allows_aux_map(const struct anv_device *device,
+                       const struct anv_bo *bo)
+-- 
+2.42.0
+

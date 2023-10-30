@@ -1,0 +1,97 @@
+From 65848d445c49ed6125a782627f728601c7f3cb76 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 386/834] rusticl: enable zink
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ docs/features.txt                            | 12 ++++++------
+ src/gallium/frontends/rusticl/core/device.rs |  2 +-
+ src/gallium/targets/rusticl/meson.build      |  1 +
+ 3 files changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index d76e9f34f59..cb0d56caf3f 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -850,7 +850,7 @@ Rusticl OpenCL 1.2 -- all DONE:
+   clEnqueueMarkerWithWaitList                           DONE
+   clEnqueueBarrierWithWaitList                          DONE
+   clUnloadPlatformCompiler                              DONE
+-  cl_khr_fp64                                           in progress (iris, llvmpipe, nvc0, radeonsi, Available with environment variable RUSTICL_FEATURES=fp64, device dependent.)
++  cl_khr_fp64                                           in progress (iris, llvmpipe, nvc0, radeonsi, zink, Available with environment variable RUSTICL_FEATURES=fp64, device dependent.)
+   printf                                                DONE
+   CL_KERNEL_ATTRIBUTES for clGetKernelInfo              DONE
+   OpenCL C 1.2                                          DONE
+@@ -870,7 +870,7 @@ Rusticl OpenCL 2.0 -- all DONE:
+   - from sRGB images                                    in progress
+   clCreateSamplerWithProperties                         DONE
+   Non-uniform work-group sizes                          not started
+-  cl_khr_3d_image_writes                                DONE (iris, llvmpipe, nvc0, panfrost, radeonsi)
++  cl_khr_3d_image_writes                                DONE (iris, llvmpipe, nvc0, panfrost, radeonsi, zink)
+   OpenCL C 2.0                                          in progress
+   - Work-group Collective Functions                     not started
+   - Generic address space                               in progress
+@@ -881,7 +881,7 @@ Rusticl OpenCL 2.1 -- all DONE:
+   Sub groups                                            DONE (iris, llvmpipe, radeonsi)
+   - cl_khr_subgroups                                    in progress
+   cl_khr_il_program                                     DONE
+-  Device and host timer synchronization                 DONE (iris, llvmpipe, radeonsi)
++  Device and host timer synchronization                 DONE (iris, llvmpipe, radeonsi, zink)
+   clEnqueueSVMMigrateMem                                in progress (nvc0/gp100, broken)
+   clCloneKernel                                         DONE
+   Default device command queue                          not started
+@@ -915,13 +915,13 @@ Rusticl extensions that are not part of any OpenCL version:
+   cl_khr_async_copy_fence                               not started
+   cl_khr_async_work_group_copy_fence                    not started
+   cl_khr_device_enqueue_local_arg_types                 not started
+-  cl_khr_device_uuid                                    DONE (iris, llvmpipe, radeonsi)
++  cl_khr_device_uuid                                    DONE (iris, llvmpipe, radeonsi, zink)
+   cl_khr_egl_event                                      not started
+   cl_khr_egl_image                                      not started
+   cl_khr_expect_assume                                  in progress (hints are ignored)
+   cl_khr_extended_async_copies                          not started
+   cl_khr_extended_bit_ops                               in progress
+-  cl_khr_fp16                                           in progress (llvmpipe, radeonsi, Available with environment variable RUSTICL_FEATURES=fp16)
++  cl_khr_fp16                                           in progress (llvmpipe, radeonsi, zink, Available with environment variable RUSTICL_FEATURES=fp16)
+   cl_khr_gl_depth_images                                not started
+   cl_khr_gl_msaa_sharing                                not started
+   cl_khr_gl_sharing                                     in progress
+@@ -931,7 +931,7 @@ Rusticl extensions that are not part of any OpenCL version:
+   cl_khr_int64_extended_atomics                         not started
+   cl_khr_integer_dot_product                            DONE
+   cl_khr_mipmap_image                                   not started
+-  cl_khr_pci_bus_info                                   DONE (iris, nvc0, radeonsi)
++  cl_khr_pci_bus_info                                   DONE (iris, nvc0, radeonsi, zink)
+   cl_khr_priority_hints                                 not started
+   cl_khr_spirv_extended_debug_info                      not started
+   cl_khr_spirv_linkonce_odr                             not started
+diff --git a/src/gallium/frontends/rusticl/core/device.rs b/src/gallium/frontends/rusticl/core/device.rs
+index aeaba5326bb..36d3af8418c 100644
+--- a/src/gallium/frontends/rusticl/core/device.rs
++++ b/src/gallium/frontends/rusticl/core/device.rs
+@@ -649,7 +649,7 @@ impl Device {
+             pipe_loader_device_type::NUM_PIPE_LOADER_DEVICE_TYPES => CL_DEVICE_TYPE_CUSTOM,
+         };
+ 
+-        if internal && res == CL_DEVICE_TYPE_GPU {
++        if internal && res == CL_DEVICE_TYPE_GPU && self.screen.driver_name() != "zink" {
+             res |= CL_DEVICE_TYPE_DEFAULT;
+         }
+ 
+diff --git a/src/gallium/targets/rusticl/meson.build b/src/gallium/targets/rusticl/meson.build
+index 8205ed77eca..b2963fe6dfa 100644
+--- a/src/gallium/targets/rusticl/meson.build
++++ b/src/gallium/targets/rusticl/meson.build
+@@ -56,6 +56,7 @@ librusticl = shared_library(
+     driver_panfrost,
+     driver_radeonsi,
+     driver_swrast,
++    driver_zink,
+     idep_nir,
+     idep_vtn,
+   ],
+-- 
+2.42.0
+

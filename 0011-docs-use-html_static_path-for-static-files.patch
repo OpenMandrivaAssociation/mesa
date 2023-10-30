@@ -1,0 +1,433 @@
+From e037761a2f6845653520e0785844efe1fd9340b4 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 11:03:55 +0200
+Subject: [PATCH 011/834] docs: use html_static_path for static files
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+I'm not sure why I picked html_extra_path instead, as it's meant for
+slightly less directly related files than what html_static_path is for.
+
+So let's switch. It shouldn't make much of a real-world difference, but
+should make it a bit easier to understand what this is about.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/{_extra => _static}/_redirects                       | 0
+ docs/{_extra => _static}/relnotes/3.1                     | 0
+ docs/{_extra => _static}/relnotes/3.2                     | 0
+ docs/{_extra => _static}/relnotes/3.2.1                   | 0
+ docs/{_extra => _static}/relnotes/3.3                     | 0
+ docs/{_extra => _static}/relnotes/3.4                     | 0
+ docs/{_extra => _static}/relnotes/3.4.1                   | 0
+ docs/{_extra => _static}/relnotes/3.4.2                   | 0
+ docs/{_extra => _static}/relnotes/3.5                     | 0
+ docs/{_extra => _static}/relnotes/4.0                     | 0
+ docs/{_extra => _static}/relnotes/4.0.1                   | 0
+ docs/{_extra => _static}/relnotes/4.0.2                   | 0
+ docs/{_extra => _static}/relnotes/4.0.3                   | 0
+ docs/{_extra => _static}/relnotes/4.1                     | 0
+ docs/{_extra => _static}/relnotes/5.0                     | 0
+ docs/{_extra => _static}/relnotes/5.0.1                   | 0
+ docs/{_extra => _static}/relnotes/5.0.2                   | 0
+ docs/{_extra => _static}/relnotes/5.1                     | 0
+ docs/{_extra => _static}/relnotes/6.0                     | 0
+ docs/{_extra => _static}/relnotes/6.0.1                   | 0
+ docs/{_extra => _static}/relnotes/6.1                     | 0
+ docs/{_extra => _static}/relnotes/6.2                     | 0
+ docs/{_extra => _static}/relnotes/6.2.1                   | 0
+ docs/{_extra => _static}/relnotes/6.3                     | 0
+ docs/{_extra => _static}/relnotes/6.3.1                   | 0
+ docs/{_extra => _static}/relnotes/6.3.2                   | 0
+ .../specs/EGL_MESA_device_software.txt                    | 0
+ .../specs/EGL_MESA_drm_image_formats.txt                  | 0
+ .../specs/EGL_MESA_platform_surfaceless.txt               | 0
+ docs/{_extra => _static}/specs/EGL_MESA_query_driver.txt  | 0
+ .../{_extra => _static}/specs/EXT_shader_integer_mix.spec | 0
+ .../specs/EXT_shader_samples_identical.txt                | 0
+ .../specs/INTEL_shader_atomic_float_minmax.txt            | 0
+ docs/{_extra => _static}/specs/MESA_bgra.txt              | 0
+ .../specs/MESA_configless_context.spec                    | 0
+ docs/{_extra => _static}/specs/MESA_copy_sub_buffer.spec  | 0
+ docs/{_extra => _static}/specs/MESA_drm_image.spec        | 0
+ .../{_extra => _static}/specs/MESA_framebuffer_flip_y.txt | 0
+ .../specs/MESA_image_dma_buf_export.txt                   | 0
+ docs/{_extra => _static}/specs/MESA_pack_invert.spec      | 0
+ docs/{_extra => _static}/specs/MESA_pixmap_colormap.spec  | 0
+ docs/{_extra => _static}/specs/MESA_query_renderer.spec   | 0
+ docs/{_extra => _static}/specs/MESA_release_buffers.spec  | 0
+ docs/{_extra => _static}/specs/MESA_sampler_objects.spec  | 0
+ .../specs/MESA_shader_integer_functions.txt               | 0
+ docs/{_extra => _static}/specs/MESA_swap_control.spec     | 0
+ .../specs/MESA_texture_signed_rgba.spec                   | 0
+ docs/{_extra => _static}/specs/MESA_window_pos.spec       | 0
+ docs/{_extra => _static}/specs/MESA_ycbcr_texture.spec    | 0
+ .../specs/OLD/EGL_MESA_screen_surface.txt                 | 0
+ docs/{_extra => _static}/specs/OLD/MESA_agp_offset.spec   | 0
+ .../specs/OLD/MESA_multithread_makecurrent.spec           | 0
+ .../specs/OLD/MESA_packed_depth_stencil.spec              | 0
+ .../{_extra => _static}/specs/OLD/MESA_program_debug.spec | 0
+ .../specs/OLD/MESA_resize_buffers.spec                    | 0
+ .../{_extra => _static}/specs/OLD/MESA_set_3dfx_mode.spec | 0
+ docs/{_extra => _static}/specs/OLD/MESA_shader_debug.spec | 0
+ docs/{_extra => _static}/specs/OLD/MESA_sprite_point.spec | 0
+ .../specs/OLD/MESA_swap_frame_usage.spec                  | 0
+ .../{_extra => _static}/specs/OLD/MESA_texture_array.spec | 0
+ docs/{_extra => _static}/specs/OLD/MESA_trace.spec        | 0
+ .../specs/WL_bind_wayland_display.spec                    | 0
+ .../specs/WL_create_wayland_buffer_from_image.spec        | 0
+ docs/{_extra => _static}/specs/enums.txt                  | 0
+ docs/conf.py                                              | 8 ++++----
+ 65 files changed, 4 insertions(+), 4 deletions(-)
+ rename docs/{_extra => _static}/_redirects (100%)
+ rename docs/{_extra => _static}/relnotes/3.1 (100%)
+ rename docs/{_extra => _static}/relnotes/3.2 (100%)
+ rename docs/{_extra => _static}/relnotes/3.2.1 (100%)
+ rename docs/{_extra => _static}/relnotes/3.3 (100%)
+ rename docs/{_extra => _static}/relnotes/3.4 (100%)
+ rename docs/{_extra => _static}/relnotes/3.4.1 (100%)
+ rename docs/{_extra => _static}/relnotes/3.4.2 (100%)
+ rename docs/{_extra => _static}/relnotes/3.5 (100%)
+ rename docs/{_extra => _static}/relnotes/4.0 (100%)
+ rename docs/{_extra => _static}/relnotes/4.0.1 (100%)
+ rename docs/{_extra => _static}/relnotes/4.0.2 (100%)
+ rename docs/{_extra => _static}/relnotes/4.0.3 (100%)
+ rename docs/{_extra => _static}/relnotes/4.1 (100%)
+ rename docs/{_extra => _static}/relnotes/5.0 (100%)
+ rename docs/{_extra => _static}/relnotes/5.0.1 (100%)
+ rename docs/{_extra => _static}/relnotes/5.0.2 (100%)
+ rename docs/{_extra => _static}/relnotes/5.1 (100%)
+ rename docs/{_extra => _static}/relnotes/6.0 (100%)
+ rename docs/{_extra => _static}/relnotes/6.0.1 (100%)
+ rename docs/{_extra => _static}/relnotes/6.1 (100%)
+ rename docs/{_extra => _static}/relnotes/6.2 (100%)
+ rename docs/{_extra => _static}/relnotes/6.2.1 (100%)
+ rename docs/{_extra => _static}/relnotes/6.3 (100%)
+ rename docs/{_extra => _static}/relnotes/6.3.1 (100%)
+ rename docs/{_extra => _static}/relnotes/6.3.2 (100%)
+ rename docs/{_extra => _static}/specs/EGL_MESA_device_software.txt (100%)
+ rename docs/{_extra => _static}/specs/EGL_MESA_drm_image_formats.txt (100%)
+ rename docs/{_extra => _static}/specs/EGL_MESA_platform_surfaceless.txt (100%)
+ rename docs/{_extra => _static}/specs/EGL_MESA_query_driver.txt (100%)
+ rename docs/{_extra => _static}/specs/EXT_shader_integer_mix.spec (100%)
+ rename docs/{_extra => _static}/specs/EXT_shader_samples_identical.txt (100%)
+ rename docs/{_extra => _static}/specs/INTEL_shader_atomic_float_minmax.txt (100%)
+ rename docs/{_extra => _static}/specs/MESA_bgra.txt (100%)
+ rename docs/{_extra => _static}/specs/MESA_configless_context.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_copy_sub_buffer.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_drm_image.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_framebuffer_flip_y.txt (100%)
+ rename docs/{_extra => _static}/specs/MESA_image_dma_buf_export.txt (100%)
+ rename docs/{_extra => _static}/specs/MESA_pack_invert.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_pixmap_colormap.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_query_renderer.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_release_buffers.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_sampler_objects.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_shader_integer_functions.txt (100%)
+ rename docs/{_extra => _static}/specs/MESA_swap_control.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_texture_signed_rgba.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_window_pos.spec (100%)
+ rename docs/{_extra => _static}/specs/MESA_ycbcr_texture.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/EGL_MESA_screen_surface.txt (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_agp_offset.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_multithread_makecurrent.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_packed_depth_stencil.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_program_debug.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_resize_buffers.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_set_3dfx_mode.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_shader_debug.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_sprite_point.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_swap_frame_usage.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_texture_array.spec (100%)
+ rename docs/{_extra => _static}/specs/OLD/MESA_trace.spec (100%)
+ rename docs/{_extra => _static}/specs/WL_bind_wayland_display.spec (100%)
+ rename docs/{_extra => _static}/specs/WL_create_wayland_buffer_from_image.spec (100%)
+ rename docs/{_extra => _static}/specs/enums.txt (100%)
+
+diff --git a/docs/_extra/_redirects b/docs/_static/_redirects
+similarity index 100%
+rename from docs/_extra/_redirects
+rename to docs/_static/_redirects
+diff --git a/docs/_extra/relnotes/3.1 b/docs/_static/relnotes/3.1
+similarity index 100%
+rename from docs/_extra/relnotes/3.1
+rename to docs/_static/relnotes/3.1
+diff --git a/docs/_extra/relnotes/3.2 b/docs/_static/relnotes/3.2
+similarity index 100%
+rename from docs/_extra/relnotes/3.2
+rename to docs/_static/relnotes/3.2
+diff --git a/docs/_extra/relnotes/3.2.1 b/docs/_static/relnotes/3.2.1
+similarity index 100%
+rename from docs/_extra/relnotes/3.2.1
+rename to docs/_static/relnotes/3.2.1
+diff --git a/docs/_extra/relnotes/3.3 b/docs/_static/relnotes/3.3
+similarity index 100%
+rename from docs/_extra/relnotes/3.3
+rename to docs/_static/relnotes/3.3
+diff --git a/docs/_extra/relnotes/3.4 b/docs/_static/relnotes/3.4
+similarity index 100%
+rename from docs/_extra/relnotes/3.4
+rename to docs/_static/relnotes/3.4
+diff --git a/docs/_extra/relnotes/3.4.1 b/docs/_static/relnotes/3.4.1
+similarity index 100%
+rename from docs/_extra/relnotes/3.4.1
+rename to docs/_static/relnotes/3.4.1
+diff --git a/docs/_extra/relnotes/3.4.2 b/docs/_static/relnotes/3.4.2
+similarity index 100%
+rename from docs/_extra/relnotes/3.4.2
+rename to docs/_static/relnotes/3.4.2
+diff --git a/docs/_extra/relnotes/3.5 b/docs/_static/relnotes/3.5
+similarity index 100%
+rename from docs/_extra/relnotes/3.5
+rename to docs/_static/relnotes/3.5
+diff --git a/docs/_extra/relnotes/4.0 b/docs/_static/relnotes/4.0
+similarity index 100%
+rename from docs/_extra/relnotes/4.0
+rename to docs/_static/relnotes/4.0
+diff --git a/docs/_extra/relnotes/4.0.1 b/docs/_static/relnotes/4.0.1
+similarity index 100%
+rename from docs/_extra/relnotes/4.0.1
+rename to docs/_static/relnotes/4.0.1
+diff --git a/docs/_extra/relnotes/4.0.2 b/docs/_static/relnotes/4.0.2
+similarity index 100%
+rename from docs/_extra/relnotes/4.0.2
+rename to docs/_static/relnotes/4.0.2
+diff --git a/docs/_extra/relnotes/4.0.3 b/docs/_static/relnotes/4.0.3
+similarity index 100%
+rename from docs/_extra/relnotes/4.0.3
+rename to docs/_static/relnotes/4.0.3
+diff --git a/docs/_extra/relnotes/4.1 b/docs/_static/relnotes/4.1
+similarity index 100%
+rename from docs/_extra/relnotes/4.1
+rename to docs/_static/relnotes/4.1
+diff --git a/docs/_extra/relnotes/5.0 b/docs/_static/relnotes/5.0
+similarity index 100%
+rename from docs/_extra/relnotes/5.0
+rename to docs/_static/relnotes/5.0
+diff --git a/docs/_extra/relnotes/5.0.1 b/docs/_static/relnotes/5.0.1
+similarity index 100%
+rename from docs/_extra/relnotes/5.0.1
+rename to docs/_static/relnotes/5.0.1
+diff --git a/docs/_extra/relnotes/5.0.2 b/docs/_static/relnotes/5.0.2
+similarity index 100%
+rename from docs/_extra/relnotes/5.0.2
+rename to docs/_static/relnotes/5.0.2
+diff --git a/docs/_extra/relnotes/5.1 b/docs/_static/relnotes/5.1
+similarity index 100%
+rename from docs/_extra/relnotes/5.1
+rename to docs/_static/relnotes/5.1
+diff --git a/docs/_extra/relnotes/6.0 b/docs/_static/relnotes/6.0
+similarity index 100%
+rename from docs/_extra/relnotes/6.0
+rename to docs/_static/relnotes/6.0
+diff --git a/docs/_extra/relnotes/6.0.1 b/docs/_static/relnotes/6.0.1
+similarity index 100%
+rename from docs/_extra/relnotes/6.0.1
+rename to docs/_static/relnotes/6.0.1
+diff --git a/docs/_extra/relnotes/6.1 b/docs/_static/relnotes/6.1
+similarity index 100%
+rename from docs/_extra/relnotes/6.1
+rename to docs/_static/relnotes/6.1
+diff --git a/docs/_extra/relnotes/6.2 b/docs/_static/relnotes/6.2
+similarity index 100%
+rename from docs/_extra/relnotes/6.2
+rename to docs/_static/relnotes/6.2
+diff --git a/docs/_extra/relnotes/6.2.1 b/docs/_static/relnotes/6.2.1
+similarity index 100%
+rename from docs/_extra/relnotes/6.2.1
+rename to docs/_static/relnotes/6.2.1
+diff --git a/docs/_extra/relnotes/6.3 b/docs/_static/relnotes/6.3
+similarity index 100%
+rename from docs/_extra/relnotes/6.3
+rename to docs/_static/relnotes/6.3
+diff --git a/docs/_extra/relnotes/6.3.1 b/docs/_static/relnotes/6.3.1
+similarity index 100%
+rename from docs/_extra/relnotes/6.3.1
+rename to docs/_static/relnotes/6.3.1
+diff --git a/docs/_extra/relnotes/6.3.2 b/docs/_static/relnotes/6.3.2
+similarity index 100%
+rename from docs/_extra/relnotes/6.3.2
+rename to docs/_static/relnotes/6.3.2
+diff --git a/docs/_extra/specs/EGL_MESA_device_software.txt b/docs/_static/specs/EGL_MESA_device_software.txt
+similarity index 100%
+rename from docs/_extra/specs/EGL_MESA_device_software.txt
+rename to docs/_static/specs/EGL_MESA_device_software.txt
+diff --git a/docs/_extra/specs/EGL_MESA_drm_image_formats.txt b/docs/_static/specs/EGL_MESA_drm_image_formats.txt
+similarity index 100%
+rename from docs/_extra/specs/EGL_MESA_drm_image_formats.txt
+rename to docs/_static/specs/EGL_MESA_drm_image_formats.txt
+diff --git a/docs/_extra/specs/EGL_MESA_platform_surfaceless.txt b/docs/_static/specs/EGL_MESA_platform_surfaceless.txt
+similarity index 100%
+rename from docs/_extra/specs/EGL_MESA_platform_surfaceless.txt
+rename to docs/_static/specs/EGL_MESA_platform_surfaceless.txt
+diff --git a/docs/_extra/specs/EGL_MESA_query_driver.txt b/docs/_static/specs/EGL_MESA_query_driver.txt
+similarity index 100%
+rename from docs/_extra/specs/EGL_MESA_query_driver.txt
+rename to docs/_static/specs/EGL_MESA_query_driver.txt
+diff --git a/docs/_extra/specs/EXT_shader_integer_mix.spec b/docs/_static/specs/EXT_shader_integer_mix.spec
+similarity index 100%
+rename from docs/_extra/specs/EXT_shader_integer_mix.spec
+rename to docs/_static/specs/EXT_shader_integer_mix.spec
+diff --git a/docs/_extra/specs/EXT_shader_samples_identical.txt b/docs/_static/specs/EXT_shader_samples_identical.txt
+similarity index 100%
+rename from docs/_extra/specs/EXT_shader_samples_identical.txt
+rename to docs/_static/specs/EXT_shader_samples_identical.txt
+diff --git a/docs/_extra/specs/INTEL_shader_atomic_float_minmax.txt b/docs/_static/specs/INTEL_shader_atomic_float_minmax.txt
+similarity index 100%
+rename from docs/_extra/specs/INTEL_shader_atomic_float_minmax.txt
+rename to docs/_static/specs/INTEL_shader_atomic_float_minmax.txt
+diff --git a/docs/_extra/specs/MESA_bgra.txt b/docs/_static/specs/MESA_bgra.txt
+similarity index 100%
+rename from docs/_extra/specs/MESA_bgra.txt
+rename to docs/_static/specs/MESA_bgra.txt
+diff --git a/docs/_extra/specs/MESA_configless_context.spec b/docs/_static/specs/MESA_configless_context.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_configless_context.spec
+rename to docs/_static/specs/MESA_configless_context.spec
+diff --git a/docs/_extra/specs/MESA_copy_sub_buffer.spec b/docs/_static/specs/MESA_copy_sub_buffer.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_copy_sub_buffer.spec
+rename to docs/_static/specs/MESA_copy_sub_buffer.spec
+diff --git a/docs/_extra/specs/MESA_drm_image.spec b/docs/_static/specs/MESA_drm_image.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_drm_image.spec
+rename to docs/_static/specs/MESA_drm_image.spec
+diff --git a/docs/_extra/specs/MESA_framebuffer_flip_y.txt b/docs/_static/specs/MESA_framebuffer_flip_y.txt
+similarity index 100%
+rename from docs/_extra/specs/MESA_framebuffer_flip_y.txt
+rename to docs/_static/specs/MESA_framebuffer_flip_y.txt
+diff --git a/docs/_extra/specs/MESA_image_dma_buf_export.txt b/docs/_static/specs/MESA_image_dma_buf_export.txt
+similarity index 100%
+rename from docs/_extra/specs/MESA_image_dma_buf_export.txt
+rename to docs/_static/specs/MESA_image_dma_buf_export.txt
+diff --git a/docs/_extra/specs/MESA_pack_invert.spec b/docs/_static/specs/MESA_pack_invert.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_pack_invert.spec
+rename to docs/_static/specs/MESA_pack_invert.spec
+diff --git a/docs/_extra/specs/MESA_pixmap_colormap.spec b/docs/_static/specs/MESA_pixmap_colormap.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_pixmap_colormap.spec
+rename to docs/_static/specs/MESA_pixmap_colormap.spec
+diff --git a/docs/_extra/specs/MESA_query_renderer.spec b/docs/_static/specs/MESA_query_renderer.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_query_renderer.spec
+rename to docs/_static/specs/MESA_query_renderer.spec
+diff --git a/docs/_extra/specs/MESA_release_buffers.spec b/docs/_static/specs/MESA_release_buffers.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_release_buffers.spec
+rename to docs/_static/specs/MESA_release_buffers.spec
+diff --git a/docs/_extra/specs/MESA_sampler_objects.spec b/docs/_static/specs/MESA_sampler_objects.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_sampler_objects.spec
+rename to docs/_static/specs/MESA_sampler_objects.spec
+diff --git a/docs/_extra/specs/MESA_shader_integer_functions.txt b/docs/_static/specs/MESA_shader_integer_functions.txt
+similarity index 100%
+rename from docs/_extra/specs/MESA_shader_integer_functions.txt
+rename to docs/_static/specs/MESA_shader_integer_functions.txt
+diff --git a/docs/_extra/specs/MESA_swap_control.spec b/docs/_static/specs/MESA_swap_control.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_swap_control.spec
+rename to docs/_static/specs/MESA_swap_control.spec
+diff --git a/docs/_extra/specs/MESA_texture_signed_rgba.spec b/docs/_static/specs/MESA_texture_signed_rgba.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_texture_signed_rgba.spec
+rename to docs/_static/specs/MESA_texture_signed_rgba.spec
+diff --git a/docs/_extra/specs/MESA_window_pos.spec b/docs/_static/specs/MESA_window_pos.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_window_pos.spec
+rename to docs/_static/specs/MESA_window_pos.spec
+diff --git a/docs/_extra/specs/MESA_ycbcr_texture.spec b/docs/_static/specs/MESA_ycbcr_texture.spec
+similarity index 100%
+rename from docs/_extra/specs/MESA_ycbcr_texture.spec
+rename to docs/_static/specs/MESA_ycbcr_texture.spec
+diff --git a/docs/_extra/specs/OLD/EGL_MESA_screen_surface.txt b/docs/_static/specs/OLD/EGL_MESA_screen_surface.txt
+similarity index 100%
+rename from docs/_extra/specs/OLD/EGL_MESA_screen_surface.txt
+rename to docs/_static/specs/OLD/EGL_MESA_screen_surface.txt
+diff --git a/docs/_extra/specs/OLD/MESA_agp_offset.spec b/docs/_static/specs/OLD/MESA_agp_offset.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_agp_offset.spec
+rename to docs/_static/specs/OLD/MESA_agp_offset.spec
+diff --git a/docs/_extra/specs/OLD/MESA_multithread_makecurrent.spec b/docs/_static/specs/OLD/MESA_multithread_makecurrent.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_multithread_makecurrent.spec
+rename to docs/_static/specs/OLD/MESA_multithread_makecurrent.spec
+diff --git a/docs/_extra/specs/OLD/MESA_packed_depth_stencil.spec b/docs/_static/specs/OLD/MESA_packed_depth_stencil.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_packed_depth_stencil.spec
+rename to docs/_static/specs/OLD/MESA_packed_depth_stencil.spec
+diff --git a/docs/_extra/specs/OLD/MESA_program_debug.spec b/docs/_static/specs/OLD/MESA_program_debug.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_program_debug.spec
+rename to docs/_static/specs/OLD/MESA_program_debug.spec
+diff --git a/docs/_extra/specs/OLD/MESA_resize_buffers.spec b/docs/_static/specs/OLD/MESA_resize_buffers.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_resize_buffers.spec
+rename to docs/_static/specs/OLD/MESA_resize_buffers.spec
+diff --git a/docs/_extra/specs/OLD/MESA_set_3dfx_mode.spec b/docs/_static/specs/OLD/MESA_set_3dfx_mode.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_set_3dfx_mode.spec
+rename to docs/_static/specs/OLD/MESA_set_3dfx_mode.spec
+diff --git a/docs/_extra/specs/OLD/MESA_shader_debug.spec b/docs/_static/specs/OLD/MESA_shader_debug.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_shader_debug.spec
+rename to docs/_static/specs/OLD/MESA_shader_debug.spec
+diff --git a/docs/_extra/specs/OLD/MESA_sprite_point.spec b/docs/_static/specs/OLD/MESA_sprite_point.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_sprite_point.spec
+rename to docs/_static/specs/OLD/MESA_sprite_point.spec
+diff --git a/docs/_extra/specs/OLD/MESA_swap_frame_usage.spec b/docs/_static/specs/OLD/MESA_swap_frame_usage.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_swap_frame_usage.spec
+rename to docs/_static/specs/OLD/MESA_swap_frame_usage.spec
+diff --git a/docs/_extra/specs/OLD/MESA_texture_array.spec b/docs/_static/specs/OLD/MESA_texture_array.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_texture_array.spec
+rename to docs/_static/specs/OLD/MESA_texture_array.spec
+diff --git a/docs/_extra/specs/OLD/MESA_trace.spec b/docs/_static/specs/OLD/MESA_trace.spec
+similarity index 100%
+rename from docs/_extra/specs/OLD/MESA_trace.spec
+rename to docs/_static/specs/OLD/MESA_trace.spec
+diff --git a/docs/_extra/specs/WL_bind_wayland_display.spec b/docs/_static/specs/WL_bind_wayland_display.spec
+similarity index 100%
+rename from docs/_extra/specs/WL_bind_wayland_display.spec
+rename to docs/_static/specs/WL_bind_wayland_display.spec
+diff --git a/docs/_extra/specs/WL_create_wayland_buffer_from_image.spec b/docs/_static/specs/WL_create_wayland_buffer_from_image.spec
+similarity index 100%
+rename from docs/_extra/specs/WL_create_wayland_buffer_from_image.spec
+rename to docs/_static/specs/WL_create_wayland_buffer_from_image.spec
+diff --git a/docs/_extra/specs/enums.txt b/docs/_static/specs/enums.txt
+similarity index 100%
+rename from docs/_extra/specs/enums.txt
+rename to docs/_static/specs/enums.txt
+diff --git a/docs/conf.py b/docs/conf.py
+index dece7a6fb9e..c7a99047649 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -109,10 +109,8 @@ html_copy_source = False
+ # Add any paths that contain custom static files (such as style sheets) here,
+ # relative to this directory. They are copied after the builtin static files,
+ # so a file named "default.css" will overwrite the builtin "default.css".
+-html_static_path = []
+-
+-html_extra_path = [
+-  '_extra/',
++html_static_path = [
++  '_static/',
+   'release-maintainers-keys.asc',
+   'features.txt',
+   'libGL.txt',
+@@ -120,6 +118,8 @@ html_extra_path = [
+   'README.VCE',
+ ]
+ 
++html_extra_path = []
++
+ html_redirects = [
+   ('webmaster', 'https://www.mesa3d.org/website/'),
+   ('developers', 'https://www.mesa3d.org/developers/'),
+-- 
+2.42.0
+

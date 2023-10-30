@@ -1,0 +1,33 @@
+From ed3ca5b7812f39ca0072d871d785efe0e34bbb82 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 22 Sep 2023 16:45:06 +0100
+Subject: [PATCH 163/834] aco: fix s_setreg hazards
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+s_setreg doesn't have any definitions.
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Daniel Schürmann <daniel@schuermann.dev>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25374>
+---
+ src/amd/compiler/aco_insert_NOPs.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/amd/compiler/aco_insert_NOPs.cpp b/src/amd/compiler/aco_insert_NOPs.cpp
+index a03b90000e9..6290ac16745 100644
+--- a/src/amd/compiler/aco_insert_NOPs.cpp
++++ b/src/amd/compiler/aco_insert_NOPs.cpp
+@@ -681,7 +681,7 @@ handle_instruction_gfx6(State& state, NOP_ctx_gfx6& ctx, aco_ptr<Instruction>& i
+             }
+          }
+       }
+-   } else if (instr->isSALU() && !instr->definitions.empty()) {
++   } else if (instr->isSALU()) {
+       if (!instr->definitions.empty()) {
+          /* all other definitions should be SCC */
+          Definition def = instr->definitions[0];
+-- 
+2.42.0
+

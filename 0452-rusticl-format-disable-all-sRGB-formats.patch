@@ -1,0 +1,30 @@
+From ccdea7bbebf87eb2cc187b6b23602dac6cc2d59b Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 15 Oct 2023 15:37:36 +0200
+Subject: [PATCH 452/834] rusticl/format: disable all sRGB formats
+
+Fixes: 714e11fe046 ("rusticl/format: enable all trivial to support optional image formats")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25739>
+---
+ src/gallium/frontends/rusticl/core/format.rs | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/format.rs b/src/gallium/frontends/rusticl/core/format.rs
+index 2a0ff2316fd..a4843068f84 100644
+--- a/src/gallium/frontends/rusticl/core/format.rs
++++ b/src/gallium/frontends/rusticl/core/format.rs
+@@ -176,8 +176,8 @@ cl_format_table!([
+ //  (CL_RGBx,      CL_UNORM_SHORT_555)    => pipe_format::PIPE_FORMAT_R5G5B5X1_UNORM,
+ //  (CL_RGBx,      CL_UNORM_INT_101010)   => pipe_format::PIPE_FORMAT_R10G10B10X2_UNORM,
+ 
+-    (CL_sRGB,      CL_UNORM_INT8)         => pipe_format::PIPE_FORMAT_R8G8B8_SRGB,
+-// broken on iris and radeonsi
++// broken
++//  (CL_sRGB,      CL_UNORM_INT8)         => pipe_format::PIPE_FORMAT_R8G8B8_SRGB,
+ //  (CL_sRGBA,     CL_UNORM_INT8)         => pipe_format::PIPE_FORMAT_R8G8B8A8_SRGB,
+ //  (CL_sBGRA,     CL_UNORM_INT8)         => pipe_format::PIPE_FORMAT_B8G8R8A8_SRGB,
+ // broken
+-- 
+2.42.0
+

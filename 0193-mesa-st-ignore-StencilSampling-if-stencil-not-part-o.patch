@@ -1,0 +1,77 @@
+From f33d9376089555f0b16b27265daba4cf16a6c7e1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Tapani=20P=C3=A4lli?= <tapani.palli@intel.com>
+Date: Mon, 9 Oct 2023 07:54:55 +0300
+Subject: [PATCH 193/834] mesa/st: ignore StencilSampling if stencil not part
+ of the format
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This avoids hitting assert in debug builds and incorrect rendering
+on release in case GL_DEPTH_STENCIL_TEXTURE_MODE has been set to
+GL_STENCIL_INDEX with a texture that does not have stencil.
+
+Cc: mesa-stable
+Signed-off-by: Tapani Pälli <tapani.palli@intel.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25610>
+---
+ src/mesa/state_tracker/st_atom_sampler.c | 13 +++++++++++--
+ src/mesa/state_tracker/st_sampler_view.c | 11 ++++++++++-
+ 2 files changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/src/mesa/state_tracker/st_atom_sampler.c b/src/mesa/state_tracker/st_atom_sampler.c
+index 4cad8b0c879..c7171ef1704 100644
+--- a/src/mesa/state_tracker/st_atom_sampler.c
++++ b/src/mesa/state_tracker/st_atom_sampler.c
+@@ -112,11 +112,20 @@ st_convert_sampler(const struct st_context *st,
+        /* This is true if wrap modes are using the border color: */
+        (sampler->wrap_s | sampler->wrap_t | sampler->wrap_r) & 0x1) {
+       GLenum texBaseFormat = _mesa_base_tex_image(texobj)->_BaseFormat;
++
++      /* From OpenGL 4.3 spec, "Combined Depth/Stencil Textures":
++       *
++       *    "The DEPTH_STENCIL_TEXTURE_MODE is ignored for non
++       *     depth/stencil textures.
++       */
++      const bool has_combined_ds = texBaseFormat == GL_DEPTH_STENCIL;
++
+       const GLboolean is_integer =
+-         texobj->_IsIntegerFormat || texobj->StencilSampling ||
++         texobj->_IsIntegerFormat ||
++         (texobj->StencilSampling && has_combined_ds) ||
+          texBaseFormat == GL_STENCIL_INDEX;
+ 
+-      if (texobj->StencilSampling)
++      if (texobj->StencilSampling && has_combined_ds)
+          texBaseFormat = GL_STENCIL_INDEX;
+ 
+       if (st->apply_texture_swizzle_to_border_color ||
+diff --git a/src/mesa/state_tracker/st_sampler_view.c b/src/mesa/state_tracker/st_sampler_view.c
+index 0b7b57ac7e5..5978c11c12d 100644
+--- a/src/mesa/state_tracker/st_sampler_view.c
++++ b/src/mesa/state_tracker/st_sampler_view.c
+@@ -361,10 +361,19 @@ st_get_sampler_view_format(const struct st_context *st,
+    GLenum baseFormat = _mesa_base_tex_image(texObj)->_BaseFormat;
+    format = texObj->surface_based ? texObj->surface_format : texObj->pt->format;
+ 
++   /* From OpenGL 4.3 spec, "Combined Depth/Stencil Textures":
++    *
++    *    "The DEPTH_STENCIL_TEXTURE_MODE is ignored for non
++    *     depth/stencil textures.
++    */
++   const bool has_combined_ds =
++      baseFormat == GL_DEPTH_STENCIL;
++
+    if (baseFormat == GL_DEPTH_COMPONENT ||
+        baseFormat == GL_DEPTH_STENCIL ||
+        baseFormat == GL_STENCIL_INDEX) {
+-      if (texObj->StencilSampling || baseFormat == GL_STENCIL_INDEX)
++      if ((texObj->StencilSampling && has_combined_ds) ||
++          baseFormat == GL_STENCIL_INDEX)
+          format = util_format_stencil_only(format);
+ 
+       return format;
+-- 
+2.42.0
+

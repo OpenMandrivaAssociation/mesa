@@ -1,0 +1,41 @@
+From d6c6599a49843666c56940bebbd603b963a36f00 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Martin=20Roukala=20=28n=C3=A9=20Peres=29?=
+ <martin.roukala@mupuf.org>
+Date: Fri, 13 Oct 2023 14:27:23 +0300
+Subject: [PATCH 233/834] zink/ci: tighten the zink-radv-vangogh timeouts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The jobs should never take longer than 30 minutes, so let's enforce it!
+
+Signed-off-by: Martin Roukala (né Peres) <martin.roukala@mupuf.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25704>
+---
+ src/gallium/drivers/zink/ci/gitlab-ci.yml | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/ci/gitlab-ci.yml b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+index 4ad4da698c7..9967e8f0a9f 100644
+--- a/src/gallium/drivers/zink/ci/gitlab-ci.yml
++++ b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+@@ -126,6 +126,7 @@ zink-radv-navi10-valve:
+     GPU_VERSION: zink-radv-navi10
+ 
+ zink-radv-vangogh-valve:
++  timeout: 35m
+   parallel: 3
+   extends:
+     - .radv-zink-test-valve
+@@ -135,6 +136,8 @@ zink-radv-vangogh-valve:
+     GPU_VERSION: zink-radv-vangogh
+     B2C_SESSION_REBOOT_REGEX: 'BUG: kernel NULL pointer dereference, address'
+     B2C_TIMEOUT_BOOT_RETRIES: 1
++    B2C_TIMEOUT_BOOT_MINUTES: 30
++    B2C_TIMEOUT_OVERALL_MINUTES: 30
+   # Override the list of tags to drop `priority:low`
+   tags:
+     - amdgpu:codename:VANGOGH
+-- 
+2.42.0
+

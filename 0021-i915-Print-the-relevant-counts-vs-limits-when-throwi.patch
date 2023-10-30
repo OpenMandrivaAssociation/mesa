@@ -1,0 +1,52 @@
+From 9c7d94c57e4a2bd3f7d848fe2415d5b40d9f8249 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 3 Oct 2023 11:45:22 -0700
+Subject: [PATCH 021/834] i915: Print the relevant counts vs limits when
+ throwing errors.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25533>
+---
+ src/gallium/drivers/i915/i915_fpc_translate.c | 24 ++++++++++++-------
+ 1 file changed, 16 insertions(+), 8 deletions(-)
+
+diff --git a/src/gallium/drivers/i915/i915_fpc_translate.c b/src/gallium/drivers/i915/i915_fpc_translate.c
+index 6148bae517c..deb7ffe00ac 100644
+--- a/src/gallium/drivers/i915/i915_fpc_translate.c
++++ b/src/gallium/drivers/i915/i915_fpc_translate.c
+@@ -989,17 +989,25 @@ i915_fini_compile(struct i915_context *i915, struct i915_fp_compile *p)
+    unsigned long program_size = (unsigned long)(p->csr - p->program);
+    unsigned long decl_size = (unsigned long)(p->decl - p->declarations);
+ 
+-   if (p->nr_tex_indirect > I915_MAX_TEX_INDIRECT)
+-      debug_printf("Exceeded max nr indirect texture lookups\n");
++   if (p->nr_tex_indirect > I915_MAX_TEX_INDIRECT) {
++      debug_printf("Exceeded max nr indirect texture lookups (%d/%d)\n",
++                   p->nr_tex_indirect, I915_MAX_TEX_INDIRECT);
++   }
+ 
+-   if (p->nr_tex_insn > I915_MAX_TEX_INSN)
+-      i915_program_error(p, "Exceeded max TEX instructions");
++   if (p->nr_tex_insn > I915_MAX_TEX_INSN) {
++      i915_program_error(p, "Exceeded max TEX instructions (%d/%d)",
++                         p->nr_tex_insn, I915_MAX_TEX_INSN);
++   }
+ 
+-   if (p->nr_alu_insn > I915_MAX_ALU_INSN)
+-      i915_program_error(p, "Exceeded max ALU instructions");
++   if (p->nr_alu_insn > I915_MAX_ALU_INSN) {
++      i915_program_error(p, "Exceeded max ALU instructions (%d/%d)",
++                         p->nr_alu_insn, I915_MAX_ALU_INSN);
++   }
+ 
+-   if (p->nr_decl_insn > I915_MAX_DECL_INSN)
+-      i915_program_error(p, "Exceeded max DECL instructions");
++   if (p->nr_decl_insn > I915_MAX_DECL_INSN) {
++      i915_program_error(p, "Exceeded max DECL instructions (%d/%d)",
++                         p->nr_decl_insn, I915_MAX_DECL_INSN);
++   }
+ 
+    /* hw doesn't seem to like empty frag programs (num_instructions == 1 is just
+     * TGSI_END), even when the depth write fixup gets emitted below - maybe that
+-- 
+2.42.0
+

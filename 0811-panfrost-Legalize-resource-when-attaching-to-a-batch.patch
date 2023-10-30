@@ -1,0 +1,141 @@
+From e9d523bb92a59336f69e92e51e8fe004f04cd629 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Fri, 1 Sep 2023 11:22:05 -0400
+Subject: [PATCH 811/834] panfrost: Legalize resource when attaching to a batch
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Make sure we don't convert the texture for nothing by only
+legalizing when creating a batch instead of on surface creation.
+Also, to avoid recursive blit, we need to legalize the destination
+resource before blitting.
+
+Finally, make sure the resource has a sparse memory layout if
+AFBC compressed. The GPU doesn't support rendering to a AFBC-packed
+texture.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/gallium/drivers/panfrost/pan_blit.c      |  4 ++++
+ src/gallium/drivers/panfrost/pan_cmdstream.c |  3 ++-
+ src/gallium/drivers/panfrost/pan_job.c       |  1 +
+ src/gallium/drivers/panfrost/pan_resource.c  | 23 +++++++++++---------
+ src/gallium/drivers/panfrost/pan_resource.h  |  2 +-
+ 5 files changed, 21 insertions(+), 12 deletions(-)
+
+diff --git a/src/gallium/drivers/panfrost/pan_blit.c b/src/gallium/drivers/panfrost/pan_blit.c
+index d5205ec636d..fcb3aa32160 100644
+--- a/src/gallium/drivers/panfrost/pan_blit.c
++++ b/src/gallium/drivers/panfrost/pan_blit.c
+@@ -90,6 +90,10 @@ panfrost_blit(struct pipe_context *pipe, const struct pipe_blit_info *info)
+    if (!util_blitter_is_blit_supported(ctx->blitter, info))
+       unreachable("Unsupported blit\n");
+ 
++   /* Legalize here because it could trigger a recursive blit otherwise */
++   pan_legalize_afbc_format(ctx, pan_resource(info->dst.resource),
++                            info->dst.format, true);
++
+    panfrost_blitter_save(ctx, info->render_condition_enable
+                                  ? PAN_RENDER_BLIT_COND
+                                  : PAN_RENDER_BLIT);
+diff --git a/src/gallium/drivers/panfrost/pan_cmdstream.c b/src/gallium/drivers/panfrost/pan_cmdstream.c
+index a5c4ed2c6e8..58c38ed0d22 100644
+--- a/src/gallium/drivers/panfrost/pan_cmdstream.c
++++ b/src/gallium/drivers/panfrost/pan_cmdstream.c
+@@ -4224,7 +4224,8 @@ panfrost_create_sampler_view(struct pipe_context *pctx,
+    struct panfrost_sampler_view *so =
+       rzalloc(pctx, struct panfrost_sampler_view);
+ 
+-   pan_legalize_afbc_format(ctx, pan_resource(texture), template->format);
++   pan_legalize_afbc_format(ctx, pan_resource(texture), template->format,
++                            false);
+ 
+    pipe_reference(NULL, &texture->reference);
+ 
+diff --git a/src/gallium/drivers/panfrost/pan_job.c b/src/gallium/drivers/panfrost/pan_job.c
+index ed8b404808e..717e7db9f36 100644
+--- a/src/gallium/drivers/panfrost/pan_job.c
++++ b/src/gallium/drivers/panfrost/pan_job.c
+@@ -68,6 +68,7 @@ panfrost_batch_add_surface(struct panfrost_batch *batch,
+ {
+    if (surf) {
+       struct panfrost_resource *rsrc = pan_resource(surf->texture);
++      pan_legalize_afbc_format(batch->ctx, rsrc, surf->format, true);
+       panfrost_batch_write_rsrc(batch, rsrc, PIPE_SHADER_FRAGMENT);
+    }
+ }
+diff --git a/src/gallium/drivers/panfrost/pan_resource.c b/src/gallium/drivers/panfrost/pan_resource.c
+index cb493a4a462..7b8407590f3 100644
+--- a/src/gallium/drivers/panfrost/pan_resource.c
++++ b/src/gallium/drivers/panfrost/pan_resource.c
+@@ -257,11 +257,8 @@ static struct pipe_surface *
+ panfrost_create_surface(struct pipe_context *pipe, struct pipe_resource *pt,
+                         const struct pipe_surface *surf_tmpl)
+ {
+-   struct panfrost_context *ctx = pan_context(pipe);
+    struct pipe_surface *ps = NULL;
+ 
+-   pan_legalize_afbc_format(ctx, pan_resource(pt), surf_tmpl->format);
+-
+    ps = CALLOC_STRUCT(pipe_surface);
+ 
+    if (ps) {
+@@ -1180,7 +1177,8 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
+ {
+    assert(!rsrc->modifier_constant);
+ 
+-   perf_debug_ctx(ctx, "Disabling AFBC with a blit. Reason: %s", reason);
++   perf_debug_ctx(ctx, "%s AFBC with a blit. Reason: %s",
++                  drm_is_afbc(modifier) ? "Unpacking" : "Disabling", reason);
+ 
+    struct pipe_resource *tmp_prsrc = panfrost_resource_create_with_modifier(
+       ctx->base.screen, &rsrc->base, modifier);
+@@ -1228,20 +1226,25 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
+ void
+ pan_legalize_afbc_format(struct panfrost_context *ctx,
+                          struct panfrost_resource *rsrc,
+-                         enum pipe_format format)
++                         enum pipe_format format, bool write)
+ {
+    struct panfrost_device *dev = pan_device(ctx->base.screen);
+ 
+    if (!drm_is_afbc(rsrc->image.layout.modifier))
+       return;
+ 
+-   if (panfrost_afbc_format(dev->arch, rsrc->base.format) ==
+-       panfrost_afbc_format(dev->arch, format))
++   if (panfrost_afbc_format(dev->arch, rsrc->base.format) !=
++       panfrost_afbc_format(dev->arch, format)) {
++      pan_resource_modifier_convert(
++         ctx, rsrc, DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
++         "Reinterpreting AFBC surface as incompatible format");
+       return;
++   }
+ 
+-   pan_resource_modifier_convert(
+-      ctx, rsrc, DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,
+-      "Reinterpreting AFBC surface as incompatible format");
++   if (write && (rsrc->image.layout.modifier & AFBC_FORMAT_MOD_SPARSE) == 0)
++      pan_resource_modifier_convert(
++         ctx, rsrc, rsrc->image.layout.modifier | AFBC_FORMAT_MOD_SPARSE,
++         "Legalizing resource to allow writing");
+ }
+ 
+ static bool
+diff --git a/src/gallium/drivers/panfrost/pan_resource.h b/src/gallium/drivers/panfrost/pan_resource.h
+index d6d1593e587..0f92cae62bb 100644
+--- a/src/gallium/drivers/panfrost/pan_resource.h
++++ b/src/gallium/drivers/panfrost/pan_resource.h
+@@ -190,6 +190,6 @@ void pan_resource_modifier_convert(struct panfrost_context *ctx,
+ 
+ void pan_legalize_afbc_format(struct panfrost_context *ctx,
+                               struct panfrost_resource *rsrc,
+-                              enum pipe_format format);
++                              enum pipe_format format, bool write);
+ 
+ #endif /* PAN_RESOURCE_H */
+-- 
+2.42.0
+

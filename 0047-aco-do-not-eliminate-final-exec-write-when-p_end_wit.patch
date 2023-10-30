@@ -1,0 +1,100 @@
+From 80728a2e71928638754c5a996ff39f9b8b6755e1 Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Fri, 15 Sep 2023 16:42:25 +0800
+Subject: [PATCH 047/834] aco: do not eliminate final exec write when
+ p_end_with_regs block
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+p_end_with_regs just partially end the program, next part need
+exec mask to be set correctly. For example p_end_wqm will generate
+a exec restore from WQM mode after p_end_with_regs.
+
+Reviewed-by: Daniel Schürmann <daniel@schuermann.dev>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ .../compiler/aco_instruction_selection.cpp    |  2 +
+ src/amd/compiler/aco_ir.h                     |  1 +
+ src/amd/compiler/aco_ssa_elimination.cpp      | 37 +++++++++++--------
+ 3 files changed, 24 insertions(+), 16 deletions(-)
+
+diff --git a/src/amd/compiler/aco_instruction_selection.cpp b/src/amd/compiler/aco_instruction_selection.cpp
+index bf28ae1f41e..313310f27af 100644
+--- a/src/amd/compiler/aco_instruction_selection.cpp
++++ b/src/amd/compiler/aco_instruction_selection.cpp
+@@ -11003,6 +11003,8 @@ build_end_with_regs(isel_context* ctx, std::vector<Operand>& regs)
+       end->operands[i] = regs[i];
+ 
+    ctx->block->instructions.emplace_back(std::move(end));
++
++   ctx->block->kind |= block_kind_end_with_regs;
+ }
+ 
+ static void
+diff --git a/src/amd/compiler/aco_ir.h b/src/amd/compiler/aco_ir.h
+index 7874096da8a..71effd82266 100644
+--- a/src/amd/compiler/aco_ir.h
++++ b/src/amd/compiler/aco_ir.h
+@@ -1901,6 +1901,7 @@ enum block_kind {
+    block_kind_uses_discard = 1 << 12,
+    block_kind_resume = 1 << 13,
+    block_kind_export_end = 1 << 14,
++   block_kind_end_with_regs = 1 << 15,
+ };
+ 
+ struct RegisterDemand {
+diff --git a/src/amd/compiler/aco_ssa_elimination.cpp b/src/amd/compiler/aco_ssa_elimination.cpp
+index 80644140b8b..729449fcf7f 100644
+--- a/src/amd/compiler/aco_ssa_elimination.cpp
++++ b/src/amd/compiler/aco_ssa_elimination.cpp
+@@ -547,24 +547,29 @@ eliminate_useless_exec_writes_in_block(ssa_elimination_ctx& ctx, Block& block)
+ {
+    /* Check if any successor needs the outgoing exec mask from the current block. */
+ 
+-   bool copy_to_exec = false;
+-   bool copy_from_exec = false;
+-
+-   for (const auto& successor_phi_info : ctx.linear_phi_info[block.index]) {
+-      copy_to_exec |= successor_phi_info.def.physReg() == exec;
+-      copy_from_exec |= successor_phi_info.op.physReg() == exec;
+-   }
+-
+    bool exec_write_used;
+-   if (copy_from_exec)
++   if (block.kind & block_kind_end_with_regs) {
++      /* Last block of a program with succeed shader part should respect final exec write. */
+       exec_write_used = true;
+-   else if (copy_to_exec)
+-      exec_write_used = false;
+-   else
+-      /* blocks_incoming_exec_used is initialized to true, so this is correct even for loops. */
+-      exec_write_used =
+-         std::any_of(block.linear_succs.begin(), block.linear_succs.end(),
+-                     [&ctx](int succ_idx) { return ctx.blocks_incoming_exec_used[succ_idx]; });
++   } else {
++      bool copy_to_exec = false;
++      bool copy_from_exec = false;
++
++      for (const auto& successor_phi_info : ctx.linear_phi_info[block.index]) {
++         copy_to_exec |= successor_phi_info.def.physReg() == exec;
++         copy_from_exec |= successor_phi_info.op.physReg() == exec;
++      }
++
++      if (copy_from_exec)
++         exec_write_used = true;
++      else if (copy_to_exec)
++         exec_write_used = false;
++      else
++         /* blocks_incoming_exec_used is initialized to true, so this is correct even for loops. */
++         exec_write_used =
++            std::any_of(block.linear_succs.begin(), block.linear_succs.end(),
++                        [&ctx](int succ_idx) { return ctx.blocks_incoming_exec_used[succ_idx]; });
++   }
+ 
+    /* Collect information about the branching sequence. */
+ 
+-- 
+2.42.0
+

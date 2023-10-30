@@ -1,0 +1,29 @@
+From 1e80011bc7b99aee4aae80f30f0ee0e618160509 Mon Sep 17 00:00:00 2001
+From: Lucas Stach <l.stach@pengutronix.de>
+Date: Wed, 11 Oct 2023 11:44:29 +0200
+Subject: [PATCH 154/834] Revert "ci/etnaviv: allow failure on failing test"
+
+This reverts commit 2ac2268ce74c, as the issue causing the
+test to fail has been resolved.
+
+Signed-off-by: Lucas Stach <l.stach@pengutronix.de>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25646>
+---
+ src/etnaviv/ci/gitlab-ci.yml | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/etnaviv/ci/gitlab-ci.yml b/src/etnaviv/ci/gitlab-ci.yml
+index 963bb8cfc24..924f4a300f0 100644
+--- a/src/etnaviv/ci/gitlab-ci.yml
++++ b/src/etnaviv/ci/gitlab-ci.yml
+@@ -76,7 +76,6 @@ gc2000_gles2_asan:
+   extends:
+     - gc2000_gles2
+     - .baremetal-arm32-asan-test
+-  allow_failure: true # FIXME: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9967
+   variables:
+     DEQP_FRACTION: 100
+     FDO_CI_CONCURRENT: 1
+-- 
+2.42.0
+

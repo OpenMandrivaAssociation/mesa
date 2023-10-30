@@ -1,0 +1,26 @@
+From 129d58e8131ab59ff72ed71f2143151146978244 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Wed, 11 Oct 2023 12:49:47 +0200
+Subject: [PATCH 168/834] radv/ci: update list of flakes for VANGOGH
+
+This one is already skipped in radv-skips.txt.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25656>
+---
+ src/amd/ci/radv-vangogh-aco-flakes.txt | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/amd/ci/radv-vangogh-aco-flakes.txt b/src/amd/ci/radv-vangogh-aco-flakes.txt
+index e81e23723e2..61d3f90e86e 100644
+--- a/src/amd/ci/radv-vangogh-aco-flakes.txt
++++ b/src/amd/ci/radv-vangogh-aco-flakes.txt
+@@ -1,5 +1,3 @@
+-dEQP-VK.api.device_init.create_instance_device_intentional_alloc_fail.basic
+-
+ dEQP-VK.dynamic_rendering.basic.*
+ dEQP-VK.dynamic_rendering.primary_cmd_buff.basic.*
+ dEQP-VK.draw.dynamic_rendering.*
+-- 
+2.42.0
+

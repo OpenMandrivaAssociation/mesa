@@ -1,0 +1,30 @@
+From 01a1975fce2bc24536cc006441036fc140f8c844 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Thu, 12 Oct 2023 12:15:47 -0700
+Subject: [PATCH 214/834] ci/zink: Add a TGL flake that's showed up in
+ nightlies recently.
+
+I don't know how recently, since the nightlies were timing out for a long
+time.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25693>
+---
+ src/gallium/drivers/zink/ci/zink-anv-tgl-flakes.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/ci/zink-anv-tgl-flakes.txt b/src/gallium/drivers/zink/ci/zink-anv-tgl-flakes.txt
+index a38054df89f..7292a1e0434 100644
+--- a/src/gallium/drivers/zink/ci/zink-anv-tgl-flakes.txt
++++ b/src/gallium/drivers/zink/ci/zink-anv-tgl-flakes.txt
+@@ -3,6 +3,8 @@ glx@glx-tfp
+ spec@arb_query_buffer_object@qbo
+ spec@arb_query_buffer_object@qbo@query-GL_PRIMITIVES_SUBMITTED-ASYNC_CPU_READ_BEFORE-GL_UNSIGNED_INT64_ARB
+ 
++dEQP-GLES31.functional.image_load_store.buffer.atomic.comp_swap_r32i_return_value
++
+ # "../src/gallium/drivers/zink/zink_fence.c:130: fence_wait: Assertion `fence->batch_id' failed."
+ .*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.copytexsubimage2d.4
+ .*dEQP-EGL.functional.sharing.gles2.multithread.random_egl_sync.textures.texsubimage2d.4
+-- 
+2.42.0
+

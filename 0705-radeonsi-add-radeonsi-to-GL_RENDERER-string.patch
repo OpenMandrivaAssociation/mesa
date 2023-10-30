@@ -1,0 +1,35 @@
+From 62a2ed86021c30476d6dc7542041357b0a9d11f9 Mon Sep 17 00:00:00 2001
+From: Yogesh Mohan Marimuthu <yogesh.mohanmarimuthu@amd.com>
+Date: Mon, 11 Sep 2023 16:10:22 +0530
+Subject: [PATCH 705/834] radeonsi: add radeonsi to GL_RENDERER string
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+adding driver name to GL_RENDERER string will help to quickly
+identify the driver being used.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25148>
+---
+ src/gallium/drivers/radeonsi/si_get.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_get.c b/src/gallium/drivers/radeonsi/si_get.c
+index c9cdb391b3b..1a74d1f9356 100644
+--- a/src/gallium/drivers/radeonsi/si_get.c
++++ b/src/gallium/drivers/radeonsi/si_get.c
+@@ -1211,8 +1211,8 @@ static void si_init_renderer_string(struct si_screen *sscreen)
+       snprintf(kernel_version, sizeof(kernel_version), ", %s", uname_data.release);
+ 
+    snprintf(sscreen->renderer_string, sizeof(sscreen->renderer_string),
+-            "%s (%sLLVM " MESA_LLVM_VERSION_STRING ", DRM %i.%i%s)", first_name, second_name,
+-            sscreen->info.drm_major, sscreen->info.drm_minor, kernel_version);
++            "%s (radeonsi, %sLLVM " MESA_LLVM_VERSION_STRING ", DRM %i.%i%s)", first_name,
++            second_name, sscreen->info.drm_major, sscreen->info.drm_minor, kernel_version);
+ }
+ 
+ static int si_get_screen_fd(struct pipe_screen *screen)
+-- 
+2.42.0
+

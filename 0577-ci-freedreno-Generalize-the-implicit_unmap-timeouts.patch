@@ -1,0 +1,28 @@
+From 0603ac7b00fe9468cd96c858d7f1377eba6fa158 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Thu, 19 Oct 2023 10:37:51 +0200
+Subject: [PATCH 577/834] ci/freedreno: Generalize the implicit_unmap timeouts.
+
+dedicated_alloc.image caused a job flake today.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25804>
+---
+ src/freedreno/ci/freedreno-a660-premerge-skips.txt | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/freedreno/ci/freedreno-a660-premerge-skips.txt b/src/freedreno/ci/freedreno-a660-premerge-skips.txt
+index 3cbb1d8e43c..4ffab5d911d 100644
+--- a/src/freedreno/ci/freedreno-a660-premerge-skips.txt
++++ b/src/freedreno/ci/freedreno-a660-premerge-skips.txt
+@@ -3,7 +3,6 @@
+ # delete lines from the test list.  Be careful.
+ 
+ # Slow tests that may hit 60s timeout pre-merge.
+-dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap
+-dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap
++dEQP-VK.memory.mapping.*.full.variable.implicit_unmap
+ dEQP-VK.spirv_assembly.instruction.graphics.16bit_storage.struct_mixed_types.uniform_buffer_block_vert
+ dEQP-VK.spirv_assembly.instruction.graphics.spirv_ids_abuse.lots_ids_.*
+-- 
+2.42.0
+

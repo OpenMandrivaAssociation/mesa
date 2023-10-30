@@ -1,0 +1,110 @@
+From a4110026ea7465f42e64c364d926147f62db4a44 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 16:16:00 +0200
+Subject: [PATCH 573/834] ci/freedreno: Fold a630_egl into a630_gl.
+
+The GL job was only taking 5 minutes in deqp, and egl is 2 minutes.  Saves
+a boot, and gets us closer to starting all a630 jobs at the same time if
+the farm was idle.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25790>
+---
+ src/freedreno/ci/deqp-freedreno-a630-egl.toml | 21 -------------------
+ src/freedreno/ci/deqp-freedreno-a630.toml     | 21 +++++++++++++++++++
+ src/freedreno/ci/gitlab-ci.yml                | 11 +---------
+ 3 files changed, 22 insertions(+), 31 deletions(-)
+ delete mode 100644 src/freedreno/ci/deqp-freedreno-a630-egl.toml
+
+diff --git a/src/freedreno/ci/deqp-freedreno-a630-egl.toml b/src/freedreno/ci/deqp-freedreno-a630-egl.toml
+deleted file mode 100644
+index ff9a6b5e6e4..00000000000
+--- a/src/freedreno/ci/deqp-freedreno-a630-egl.toml
++++ /dev/null
+@@ -1,21 +0,0 @@
+-# x11
+-[[deqp]]
+-deqp = "/deqp/modules/egl/deqp-egl-x11"
+-caselists = ["/deqp/mustpass/egl-master.txt"]
+-skips = ["install/freedreno-a630-premerge-skips.txt"]
+-deqp_args = [
+-    "--deqp-surface-width=256", "--deqp-surface-height=256",
+-    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
+-    "--deqp-gl-config-name=rgba8888d24s8ms0",
+-]
+-
+-[[deqp]]
+-deqp = "/deqp/modules/egl/deqp-egl-wayland"
+-caselists = ["/deqp/mustpass/egl-master.txt"]
+-skips = ["install/freedreno-a630-premerge-skips.txt"]
+-deqp_args = [
+-    "--deqp-surface-width=256", "--deqp-surface-height=256",
+-    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
+-    "--deqp-gl-config-name=rgba8888d24s8ms0",
+-]
+-prefix = "wayland-"
+diff --git a/src/freedreno/ci/deqp-freedreno-a630.toml b/src/freedreno/ci/deqp-freedreno-a630.toml
+index 790cad9699d..600fb1b44d4 100644
+--- a/src/freedreno/ci/deqp-freedreno-a630.toml
++++ b/src/freedreno/ci/deqp-freedreno-a630.toml
+@@ -49,6 +49,27 @@ deqp_args = [
+     "--deqp-gl-config-name=rgba8888d24s8ms0",
+ ]
+ 
++# x11
++[[deqp]]
++deqp = "/deqp/modules/egl/deqp-egl-x11"
++caselists = ["/deqp/mustpass/egl-master.txt"]
++skips = ["install/freedreno-a630-premerge-skips.txt"]
++deqp_args = [
++    "--deqp-surface-width=256", "--deqp-surface-height=256",
++    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
++    "--deqp-gl-config-name=rgba8888d24s8ms0",
++]
++
++[[deqp]]
++deqp = "/deqp/modules/egl/deqp-egl-wayland"
++caselists = ["/deqp/mustpass/egl-master.txt"]
++skips = ["install/freedreno-a630-premerge-skips.txt"]
++deqp_args = [
++    "--deqp-surface-width=256", "--deqp-surface-height=256",
++    "--deqp-surface-type=pbuffer", "--deqp-visibility=hidden",
++    "--deqp-gl-config-name=rgba8888d24s8ms0",
++]
++prefix = "wayland-"
+ 
+ # force-gmem testing
+ [[deqp]]
+diff --git a/src/freedreno/ci/gitlab-ci.yml b/src/freedreno/ci/gitlab-ci.yml
+index 8b78ed1085a..73f50f4598d 100644
+--- a/src/freedreno/ci/gitlab-ci.yml
++++ b/src/freedreno/ci/gitlab-ci.yml
+@@ -175,6 +175,7 @@ a660_vk_full:
+     DEQP_SUITE: freedreno-a660-vk-full
+     JOB_TIMEOUT: 180
+ 
++# X11 takes over the screen, wayland is run headless.
+ a630_gl:
+   extends:
+     - .baremetal-deqp-test
+@@ -182,18 +183,8 @@ a630_gl:
+   parallel: 4
+   variables:
+     DEQP_SUITE: freedreno-a630
+-
+-# Run dEQP EGL window system tests separately with the window systems available.
+-# X11 takes over the screen, wayland is run headless.
+-a630_egl:
+-  extends:
+-    - .baremetal-deqp-test
+-    - .a630-test
+-  variables:
+-    DEQP_VER: egl
+     HWCI_START_XORG: 1
+     HWCI_START_WESTON: 1
+-    DEQP_SUITE: freedreno-a630-egl
+ 
+ a630_gles_asan:
+   extends:
+-- 
+2.42.0
+

@@ -1,0 +1,199 @@
+From 146ceadcf45db7d2e6434ccc816f133da8dcd81f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alejandro=20Pi=C3=B1eiro?= <apinheiro@igalia.com>
+Date: Wed, 17 Nov 2021 11:33:59 +0100
+Subject: [PATCH 336/834] v3dv: add support for TFU jobs in v71
+
+This includes update the simulator.
+
+Reviewed-by: Iago Toral Quiroga <itoral@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ include/drm-uapi/v3d_drm.h              |  5 +++
+ src/broadcom/common/v3d_tfu.h           | 23 ++++++++++++++
+ src/broadcom/simulator/v3dx_simulator.c | 42 +++++++++++++++----------
+ src/broadcom/vulkan/v3dvx_meta_common.c | 37 ++++++++++++++++++++++
+ 4 files changed, 91 insertions(+), 16 deletions(-)
+
+diff --git a/include/drm-uapi/v3d_drm.h b/include/drm-uapi/v3d_drm.h
+index 3dfc0af8756..1a7d7a689de 100644
+--- a/include/drm-uapi/v3d_drm.h
++++ b/include/drm-uapi/v3d_drm.h
+@@ -319,6 +319,11 @@ struct drm_v3d_submit_tfu {
+ 
+ 	/* Pointer to an array of ioctl extensions*/
+ 	__u64 extensions;
++
++	struct {
++		__u32 ioc;
++		__u32 pad;
++	} v71;
+ };
+ 
+ /* Submits a compute shader for dispatch.  This job will block on any
+diff --git a/src/broadcom/common/v3d_tfu.h b/src/broadcom/common/v3d_tfu.h
+index 80da224ca2d..572d0074794 100644
+--- a/src/broadcom/common/v3d_tfu.h
++++ b/src/broadcom/common/v3d_tfu.h
+@@ -48,4 +48,27 @@
+ #define V3D33_TFU_ICFG_FORMAT_UIF_NO_XOR 14
+ #define V3D33_TFU_ICFG_FORMAT_UIF_XOR 15
+ 
++/* Disable level 0 write, just write following mipmaps */
++#define V3D71_TFU_IOC_DIMTW (1 << 0)
++#define V3D71_TFU_IOC_FORMAT_SHIFT              12
++#define V3D71_TFU_IOC_FORMAT_LINEARTILE          3
++#define V3D71_TFU_IOA_FORMAT_UBLINEAR_1_COLUMN   4
++#define V3D71_TFU_IOA_FORMAT_UBLINEAR_2_COLUMN   5
++#define V3D71_TFU_IOA_FORMAT_UIF_NO_XOR          6
++#define V3D71_TFU_IOA_FORMAT_UIF_XOR             7
++
++#define V3D71_TFU_IOC_STRIDE_SHIFT              16
++#define V3D71_TFU_IOC_NUMMM_SHIFT                4
++
++#define V3D71_TFU_ICFG_OTYPE_SHIFT              16
++#define V3D71_TFU_ICFG_IFORMAT_SHIFT            23
++#define V3D71_TFU_ICFG_FORMAT_RASTER             0
++#define V3D71_TFU_ICFG_FORMAT_SAND_128           1
++#define V3D71_TFU_ICFG_FORMAT_SAND_256           2
++#define V3D71_TFU_ICFG_FORMAT_LINEARTILE        11
++#define V3D71_TFU_ICFG_FORMAT_UBLINEAR_1_COLUMN 12
++#define V3D71_TFU_ICFG_FORMAT_UBLINEAR_2_COLUMN 13
++#define V3D71_TFU_ICFG_FORMAT_UIF_NO_XOR        14
++#define V3D71_TFU_ICFG_FORMAT_UIF_XOR           15
++
+ #endif
+diff --git a/src/broadcom/simulator/v3dx_simulator.c b/src/broadcom/simulator/v3dx_simulator.c
+index b1a005d941f..87f92ad242d 100644
+--- a/src/broadcom/simulator/v3dx_simulator.c
++++ b/src/broadcom/simulator/v3dx_simulator.c
+@@ -182,26 +182,36 @@ v3d_flush_caches(struct v3d_hw *v3d)
+         v3d_flush_l2t(v3d);
+ }
+ 
++#if V3D_VERSION < 71
++#define TFU_REG(NAME) V3D_TFU_ ## NAME
++#else
++#define TFU_REG(NAME) V3D_IFC_ ## NAME
++#endif
++
++
+ int
+ v3dX(simulator_submit_tfu_ioctl)(struct v3d_hw *v3d,
+                                  struct drm_v3d_submit_tfu *args)
+ {
+-        int last_vtct = V3D_READ(V3D_TFU_CS) & V3D_TFU_CS_CVTCT_SET;
+-
+-        V3D_WRITE(V3D_TFU_IIA, args->iia);
+-        V3D_WRITE(V3D_TFU_IIS, args->iis);
+-        V3D_WRITE(V3D_TFU_ICA, args->ica);
+-        V3D_WRITE(V3D_TFU_IUA, args->iua);
+-        V3D_WRITE(V3D_TFU_IOA, args->ioa);
+-        V3D_WRITE(V3D_TFU_IOS, args->ios);
+-        V3D_WRITE(V3D_TFU_COEF0, args->coef[0]);
+-        V3D_WRITE(V3D_TFU_COEF1, args->coef[1]);
+-        V3D_WRITE(V3D_TFU_COEF2, args->coef[2]);
+-        V3D_WRITE(V3D_TFU_COEF3, args->coef[3]);
+-
+-        V3D_WRITE(V3D_TFU_ICFG, args->icfg);
+-
+-        while ((V3D_READ(V3D_TFU_CS) & V3D_TFU_CS_CVTCT_SET) == last_vtct) {
++        int last_vtct = V3D_READ(TFU_REG(CS)) & V3D_TFU_CS_CVTCT_SET;
++
++        V3D_WRITE(TFU_REG(IIA), args->iia);
++        V3D_WRITE(TFU_REG(IIS), args->iis);
++        V3D_WRITE(TFU_REG(ICA), args->ica);
++        V3D_WRITE(TFU_REG(IUA), args->iua);
++        V3D_WRITE(TFU_REG(IOA), args->ioa);
++#if V3D_VERSION >= 71
++        V3D_WRITE(TFU_REG(IOC), args->v71.ioc);
++#endif
++        V3D_WRITE(TFU_REG(IOS), args->ios);
++        V3D_WRITE(TFU_REG(COEF0), args->coef[0]);
++        V3D_WRITE(TFU_REG(COEF1), args->coef[1]);
++        V3D_WRITE(TFU_REG(COEF2), args->coef[2]);
++        V3D_WRITE(TFU_REG(COEF3), args->coef[3]);
++
++        V3D_WRITE(TFU_REG(ICFG), args->icfg);
++
++        while ((V3D_READ(TFU_REG(CS)) & V3D_TFU_CS_CVTCT_SET) == last_vtct) {
+                 v3d_hw_tick(v3d);
+         }
+ 
+diff --git a/src/broadcom/vulkan/v3dvx_meta_common.c b/src/broadcom/vulkan/v3dvx_meta_common.c
+index 09ebcfa97c1..b8f3297bc94 100644
+--- a/src/broadcom/vulkan/v3dvx_meta_common.c
++++ b/src/broadcom/vulkan/v3dvx_meta_common.c
+@@ -950,6 +950,7 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
+ 
+    tfu.iia |= src_offset;
+ 
++#if V3D_VERSION <= 42
+    if (src_tiling == V3D_TILING_RASTER) {
+       tfu.icfg = V3D33_TFU_ICFG_FORMAT_RASTER << V3D33_TFU_ICFG_FORMAT_SHIFT;
+    } else {
+@@ -958,12 +959,46 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
+                    V3D33_TFU_ICFG_FORMAT_SHIFT;
+    }
+    tfu.icfg |= format_plane->tex_type << V3D33_TFU_ICFG_TTYPE_SHIFT;
++#endif
++#if V3D_VERSION >= 71
++   if (src_tiling == V3D_TILING_RASTER) {
++      tfu.icfg = V3D71_TFU_ICFG_FORMAT_RASTER << V3D71_TFU_ICFG_IFORMAT_SHIFT;
++   } else {
++      tfu.icfg = (V3D71_TFU_ICFG_FORMAT_LINEARTILE +
++                  (src_tiling - V3D_TILING_LINEARTILE)) <<
++                   V3D71_TFU_ICFG_IFORMAT_SHIFT;
++   }
++   tfu.icfg |= format_plane->tex_type << V3D71_TFU_ICFG_OTYPE_SHIFT;
++#endif
+ 
+    tfu.ioa = dst_offset;
+ 
++#if V3D_VERSION <= 42
+    tfu.ioa |= (V3D33_TFU_IOA_FORMAT_LINEARTILE +
+                (dst_tiling - V3D_TILING_LINEARTILE)) <<
+                 V3D33_TFU_IOA_FORMAT_SHIFT;
++#endif
++
++#if V3D_VERSION >= 71
++   tfu.v71.ioc = (V3D71_TFU_IOC_FORMAT_LINEARTILE +
++                  (dst_tiling - V3D_TILING_LINEARTILE)) <<
++                   V3D71_TFU_IOC_FORMAT_SHIFT;
++
++   switch (dst_tiling) {
++   case V3D_TILING_UIF_NO_XOR:
++   case V3D_TILING_UIF_XOR:
++      tfu.v71.ioc |=
++         (dst_padded_height_or_stride / (2 * v3d_utile_height(dst_cpp))) <<
++         V3D71_TFU_IOC_STRIDE_SHIFT;
++      break;
++   case V3D_TILING_RASTER:
++      tfu.v71.ioc |= (dst_padded_height_or_stride / dst_cpp) <<
++                      V3D71_TFU_IOC_STRIDE_SHIFT;
++      break;
++   default:
++      break;
++   }
++#endif
+ 
+    switch (src_tiling) {
+    case V3D_TILING_UIF_NO_XOR:
+@@ -980,6 +1015,7 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
+    /* The TFU can handle raster sources but always produces UIF results */
+    assert(dst_tiling != V3D_TILING_RASTER);
+ 
++#if V3D_VERSION <= 42
+    /* If we're writing level 0 (!IOA_DIMTW), then we need to supply the
+     * OPAD field for the destination (how many extra UIF blocks beyond
+     * those necessary to cover the height).
+@@ -991,6 +1027,7 @@ v3dX(meta_emit_tfu_job)(struct v3dv_cmd_buffer *cmd_buffer,
+                       uif_block_h;
+       tfu.icfg |= icfg << V3D33_TFU_ICFG_OPAD_SHIFT;
+    }
++#endif
+ 
+    v3dv_cmd_buffer_add_tfu_job(cmd_buffer, &tfu);
+ }
+-- 
+2.42.0
+

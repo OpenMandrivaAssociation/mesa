@@ -1,0 +1,31 @@
+From f93b11822ab11dfe1914369e530473c8d783a9ca Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david.heidelberg@collabora.com>
+Date: Wed, 11 Oct 2023 22:01:43 +0200
+Subject: [PATCH 183/834] ci/traces: always export piglit EXTRA_ARGS
+
+When a job doesn't define them, it won't get passed to piglit otherwise.
+
+Fixes: 5ab60581da92 ("ci/traces: keep images for every job except the performance testing")
+
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25654>
+---
+ .gitlab-ci/piglit/piglit-traces.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.gitlab-ci/piglit/piglit-traces.sh b/.gitlab-ci/piglit/piglit-traces.sh
+index 326df1e1d75..3ad3070584b 100755
+--- a/.gitlab-ci/piglit/piglit-traces.sh
++++ b/.gitlab-ci/piglit/piglit-traces.sh
+@@ -18,7 +18,7 @@ if [ "$PIGLIT_REPLAY_SUBCOMMAND" = "profile" ]; then
+       "$PIGLIT_REPLAY_DESCRIPTION_FILE"
+ else
+     # keep the images for the later upload
+-    PIGLIT_REPLAY_EXTRA_ARGS="--keep-image ${PIGLIT_REPLAY_EXTRA_ARGS}"
++    export PIGLIT_REPLAY_EXTRA_ARGS="--keep-image ${PIGLIT_REPLAY_EXTRA_ARGS}"
+ fi
+ 
+ # WINE
+-- 
+2.42.0
+

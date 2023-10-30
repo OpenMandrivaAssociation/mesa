@@ -1,0 +1,74 @@
+From 987749430db11e50b6c551739795807158cd7382 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Iv=C3=A1n=20Briano?= <ivan.briano@intel.com>
+Date: Mon, 18 Sep 2023 17:39:40 -0700
+Subject: [PATCH 037/834] nir: round f2f16{_rtne/_rtz} correctly for constant
+ expressions
+
+As noted in the previous commit, the intermediate cast to float from
+double can produce wrong results.
+
+Fixes upcoming Vulkan CTS tests:
+dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp16.input_args.rounding_rte_sconst_conv_from_fp64_up
+dEQP-VK.spirv_assembly.instruction.compute.float_controls.fp16.input_args.rounding_rte_sconst_conv_from_fp64_up_nostorage
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.input_args.rounding_rte_sconst_conv_from_fp64_up_vert
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.input_args.rounding_rte_sconst_conv_from_fp64_up_nostorage_vert
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.input_args.rounding_rte_sconst_conv_from_fp64_up_frag
+dEQP-VK.spirv_assembly.instruction.graphics.float_controls.fp16.input_args.rounding_rte_sconst_conv_from_fp64_up_nostorage_frag
+
+Reviewed-by: Ian Romanick <ian.d.romanick@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25281>
+---
+ src/compiler/nir/nir_opcodes.py | 24 +++++++++++++++++++++---
+ 1 file changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/src/compiler/nir/nir_opcodes.py b/src/compiler/nir/nir_opcodes.py
+index cef3d2f6417..4e7283dcb25 100644
+--- a/src/compiler/nir/nir_opcodes.py
++++ b/src/compiler/nir/nir_opcodes.py
+@@ -251,7 +251,9 @@ for src_t in [tint, tuint, tfloat, tbool]:
+               for rnd_mode in rnd_modes:
+                   if rnd_mode == '_rtne':
+                       conv_expr = """
+-                      if (bit_size > 16) {
++                      if (bit_size > 32) {
++                         dst = _mesa_half_to_float(_mesa_double_to_float16_rtne(src0));
++                      } else if (bit_size > 16) {
+                          dst = _mesa_half_to_float(_mesa_float_to_float16_rtne(src0));
+                       } else {
+                          dst = src0;
+@@ -259,14 +261,30 @@ for src_t in [tint, tuint, tfloat, tbool]:
+                       """
+                   elif rnd_mode == '_rtz':
+                       conv_expr = """
+-                      if (bit_size > 16) {
++                      if (bit_size > 32) {
++                         dst = _mesa_half_to_float(_mesa_double_to_float16_rtz(src0));
++                      } else if (bit_size > 16) {
+                          dst = _mesa_half_to_float(_mesa_float_to_float16_rtz(src0));
+                       } else {
+                          dst = src0;
+                       }
+                       """
+                   else:
+-                      conv_expr = "src0"
++                      conv_expr = """
++                      if (bit_size > 32) {
++                         if (nir_is_rounding_mode_rtz(execution_mode, 16))
++                            dst = _mesa_half_to_float(_mesa_double_to_float16_rtz(src0));
++                         else
++                            dst = _mesa_half_to_float(_mesa_double_to_float16_rtne(src0));
++                      } else if (bit_size > 16) {
++                         if (nir_is_rounding_mode_rtz(execution_mode, 16))
++                            dst = _mesa_half_to_float(_mesa_float_to_float16_rtz(src0));
++                         else
++                            dst = _mesa_half_to_float(_mesa_float_to_float16_rtne(src0));
++                      } else {
++                         dst = src0;
++                      }
++                      """
+ 
+                   unop_numeric_convert("{0}2{1}{2}{3}".format(src_t[0],
+                                                               dst_t[0],
+-- 
+2.42.0
+

@@ -1,0 +1,46 @@
+From d97427f41c1603db2f657b5d9c3f91a97f74b1c0 Mon Sep 17 00:00:00 2001
+From: Rob Clark <robdclark@chromium.org>
+Date: Tue, 3 Oct 2023 14:33:32 -0700
+Subject: [PATCH 422/834] radeonsi: Add PIPE_CAP_HAS_CONST_BW support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25464>
+---
+ src/gallium/drivers/radeonsi/si_get.c     | 1 +
+ src/gallium/drivers/radeonsi/si_texture.c | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/src/gallium/drivers/radeonsi/si_get.c b/src/gallium/drivers/radeonsi/si_get.c
+index 8de9124c0c1..3d0215fe585 100644
+--- a/src/gallium/drivers/radeonsi/si_get.c
++++ b/src/gallium/drivers/radeonsi/si_get.c
+@@ -161,6 +161,7 @@ static int si_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
+    case PIPE_CAP_TEXTURE_MULTISAMPLE:
+    case PIPE_CAP_ALLOW_GLTHREAD_BUFFER_SUBDATA_OPT: /* TODO: remove if it's slow */
+    case PIPE_CAP_NULL_TEXTURES:
++   case PIPE_CAP_HAS_CONST_BW:
+       return 1;
+ 
+    case PIPE_CAP_TEXTURE_TRANSFER_MODES:
+diff --git a/src/gallium/drivers/radeonsi/si_texture.c b/src/gallium/drivers/radeonsi/si_texture.c
+index 47a1ffdfb3e..57bf0f6a5ed 100644
+--- a/src/gallium/drivers/radeonsi/si_texture.c
++++ b/src/gallium/drivers/radeonsi/si_texture.c
+@@ -261,6 +261,10 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
+           ptex->format == PIPE_FORMAT_R9G9B9E5_FLOAT)
+          flags |= RADEON_SURF_DISABLE_DCC;
+ 
++      /* If constant (non-data-dependent) format is requested, disable DCC: */
++      if (ptex->bind & PIPE_BIND_CONST_BW)
++         flags |= RADEON_SURF_DISABLE_DCC;
++
+       switch (sscreen->info.gfx_level) {
+       case GFX8:
+          /* Stoney: 128bpp MSAA textures randomly fail piglit tests with DCC. */
+-- 
+2.42.0
+

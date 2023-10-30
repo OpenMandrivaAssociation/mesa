@@ -1,0 +1,32 @@
+From 28ebe62af2cb38f73790f31dce4b0448268eb2e1 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 1 Sep 2023 11:27:39 +0100
+Subject: [PATCH 743/834] radv: enable mesh shader gs_fast_launch=2 and
+ multi-row export
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25040>
+---
+ src/amd/vulkan/radv_device.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/amd/vulkan/radv_device.c b/src/amd/vulkan/radv_device.c
+index 436e06cbc3a..d13035bf4b5 100644
+--- a/src/amd/vulkan/radv_device.c
++++ b/src/amd/vulkan/radv_device.c
+@@ -924,7 +924,7 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
+    device->pbb_allowed =
+       device->physical_device->rad_info.gfx_level >= GFX9 && !(device->instance->debug_flags & RADV_DEBUG_NOBINNING);
+ 
+-   device->mesh_fast_launch_2 = false;
++   device->mesh_fast_launch_2 = device->physical_device->rad_info.gfx_level >= GFX11;
+ 
+    /* The maximum number of scratch waves. Scratch space isn't divided
+     * evenly between CUs. The number is only a function of the number of CUs.
+-- 
+2.42.0
+

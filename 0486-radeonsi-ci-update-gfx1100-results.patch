@@ -1,0 +1,53 @@
+From 843f2eb3c8effa955d8e1da04696ec11b18b7c5a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Fri, 29 Sep 2023 20:55:39 -0400
+Subject: [PATCH 486/834] radeonsi/ci: update gfx1100 results
+
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25484>
+---
+ src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv | 6 ++++--
+ src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv    | 1 +
+ 2 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv b/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv
+index bfc70cf2b28..5b3ed185685 100644
+--- a/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv
++++ b/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv
+@@ -21,7 +21,6 @@ spec@!opengl 1.0@gl-1.0-user-clip-all-planes,Fail
+ spec@!opengl 1.0@rasterpos,Fail
+ spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
+ spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
+-spec@arb_bindless_texture@compiler@images@return-struct.frag,Crash
+ spec@arb_bindless_texture@compiler@samplers@arith-bound-sampler-texture2d.frag,Crash
+ spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
+ spec@arb_gpu_shader_fp64@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
+@@ -138,9 +137,12 @@ KHR-Single-GL46.enhanced_layouts.xfb_capture_inactive_output_component,Fail
+ # gfx11-only failures
+ 
+ spec@!opengl 1.1@line-smooth-stipple,Fail
+-spec@egl 1.4@egl-ext_egl_image_storage,Crash
+ 
+ KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-interleaved-attribs,Fail
+ KHR-GL46.transform_feedback_overflow_query_ARB.advanced-single-stream-separate-attribs,Fail
+ KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-multiple-buffers-per-stream,Fail
+ KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream,Fail
++
++# I saw these on Navi31, but not Navi33
++dEQP-GLES3.functional.fragment_ops.interaction.basic_shader.39,Fail
++dEQP-GLES3.functional.fragment_ops.interaction.basic_shader.94,Fail
+diff --git a/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv b/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv
+index b9d66844da6..99c37438e13 100644
+--- a/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv
++++ b/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv
+@@ -11,6 +11,7 @@ spec@egl_mesa_configless_context@basic
+ glx@glx-visuals-depth -pixmap
+ glx@glx-visuals-stencil -pixmap
+ spec@arb_timer_query@timestamp-get
++spec@egl 1.4@egl-ext_egl_image_storage
+ spec@egl_mesa_configless_context@basic
+ spec@egl_chromium_sync_control@conformance
+ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
+-- 
+2.42.0
+

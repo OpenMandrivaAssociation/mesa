@@ -1,0 +1,285 @@
+From 9e402e93d290b96dd2842691f2fe6407651a813c Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Mon, 28 Aug 2023 18:46:38 -0400
+Subject: [PATCH 682/834] anv: Delete implicit CCS code
+
+Stop allocating CCS at the end of some BOs. Anv no longer uses that
+memory range.
+
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_allocator.c        | 39 ++++-----------------
+ src/intel/vulkan/anv_device.c           |  7 ----
+ src/intel/vulkan/anv_private.h          | 45 +++----------------------
+ src/intel/vulkan/genX_cmd_buffer.c      |  1 -
+ src/intel/vulkan/i915/anv_batch_chain.c |  5 ++-
+ 5 files changed, 12 insertions(+), 85 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_allocator.c b/src/intel/vulkan/anv_allocator.c
+index 7c033e8301b..56073b42899 100644
+--- a/src/intel/vulkan/anv_allocator.c
++++ b/src/intel/vulkan/anv_allocator.c
+@@ -1342,7 +1342,7 @@ anv_bo_vma_free(struct anv_device *device, struct anv_bo *bo)
+ {
+    if (bo->offset != 0 && !bo->has_fixed_address) {
+       assert(bo->vma_heap != NULL);
+-      anv_vma_free(device, bo->vma_heap, bo->offset, bo->size + bo->_ccs_size);
++      anv_vma_free(device, bo->vma_heap, bo->offset, bo->size);
+    }
+    bo->vma_heap = NULL;
+ }
+@@ -1384,16 +1384,15 @@ anv_bo_vma_alloc_or_close(struct anv_device *device,
+     *
+     * Only available on ICL+.
+     */
+-   if (device->info->ver >= 11 && (bo->size + bo->_ccs_size) >= 1 * 1024 * 1024)
++   if (device->info->ver >= 11 && bo->size >= 1 * 1024 * 1024)
+       align = MAX2(2 * 1024 * 1024, align);
+ 
+    if (alloc_flags & ANV_BO_ALLOC_FIXED_ADDRESS) {
+       bo->has_fixed_address = true;
+       bo->offset = intel_canonical_address(explicit_address);
+    } else {
+-      bo->offset = anv_vma_alloc(device, bo->size + bo->_ccs_size,
+-                                 align, alloc_flags, explicit_address,
+-                                 &bo->vma_heap);
++      bo->offset = anv_vma_alloc(device, bo->size, align, alloc_flags,
++                                 explicit_address, &bo->vma_heap);
+       if (bo->offset == 0) {
+          anv_bo_unmap_close(device, bo);
+          return vk_errorf(device, VK_ERROR_OUT_OF_DEVICE_MEMORY,
+@@ -1412,27 +1411,12 @@ anv_device_alloc_bo(struct anv_device *device,
+                     uint64_t explicit_address,
+                     struct anv_bo **bo_out)
+ {
+-   if (!device->physical->has_implicit_ccs)
+-      assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS));
+-
+    const uint32_t bo_flags =
+          device->kmd_backend->bo_alloc_flags_to_bo_flags(device, alloc_flags);
+ 
+-   /* The kernel is going to give us whole pages anyway. And we
+-    * also need 4KB alignment for 1MB AUX buffer that follows
+-    * the main region. The 4KB also covers 64KB AUX granularity
+-    * that has 256B AUX mapping to the main.
+-    */
++   /* The kernel is going to give us whole pages anyway. */
+    size = align64(size, 4096);
+ 
+-   uint64_t ccs_size = 0;
+-   if (device->info->has_aux_map && (alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS)) {
+-      uint64_t aux_ratio =
+-         intel_aux_get_main_to_aux_ratio(device->aux_map_ctx);
+-      /* See anv_bo::_ccs_size */
+-      ccs_size = align64(DIV_ROUND_UP(size, aux_ratio), 4096);
+-   }
+-
+    const struct intel_memory_class_instance *regions[2];
+    uint32_t nregions = 0;
+ 
+@@ -1462,8 +1446,7 @@ anv_device_alloc_bo(struct anv_device *device,
+ 
+    uint64_t actual_size;
+    uint32_t gem_handle = device->kmd_backend->gem_create(device, regions,
+-                                                         nregions,
+-                                                         size + ccs_size,
++                                                         nregions, size,
+                                                          alloc_flags,
+                                                          &actual_size);
+    if (gem_handle == 0)
+@@ -1475,14 +1458,11 @@ anv_device_alloc_bo(struct anv_device *device,
+       .refcount = 1,
+       .offset = -1,
+       .size = size,
+-      ._ccs_size = ccs_size,
+       .actual_size = actual_size,
+       .flags = bo_flags,
+       .is_external = (alloc_flags & ANV_BO_ALLOC_EXTERNAL),
+       .has_client_visible_address =
+          (alloc_flags & ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS) != 0,
+-      .has_implicit_ccs = ccs_size > 0 ||
+-                          (device->info->verx10 >= 125 && !(alloc_flags & ANV_BO_ALLOC_NO_LOCAL_MEM)),
+       .vram_only = nregions == 1 &&
+                    regions[0] == device->physical->vram_non_mappable.region,
+    };
+@@ -1566,9 +1546,6 @@ anv_device_import_bo_from_host_ptr(struct anv_device *device,
+                            ANV_BO_ALLOC_DEDICATED |
+                            ANV_BO_ALLOC_FIXED_ADDRESS)));
+ 
+-   assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS) ||
+-          (device->physical->has_implicit_ccs && device->info->has_aux_map));
+-
+    struct anv_bo_cache *cache = &device->bo_cache;
+    const uint32_t bo_flags =
+          device->kmd_backend->bo_alloc_flags_to_bo_flags(device, alloc_flags);
+@@ -1670,9 +1647,6 @@ anv_device_import_bo(struct anv_device *device,
+                            ANV_BO_ALLOC_SNOOPED |
+                            ANV_BO_ALLOC_FIXED_ADDRESS)));
+ 
+-   assert(!(alloc_flags & ANV_BO_ALLOC_IMPLICIT_CCS) ||
+-          (device->physical->has_implicit_ccs && device->info->has_aux_map));
+-
+    struct anv_bo_cache *cache = &device->bo_cache;
+ 
+    pthread_mutex_lock(&cache->mutex);
+@@ -1731,7 +1705,6 @@ anv_device_import_bo(struct anv_device *device,
+       new_bo.size = size;
+       new_bo.actual_size = size;
+ 
+-      assert(new_bo._ccs_size == 0);
+       VkResult result = anv_bo_vma_alloc_or_close(device, &new_bo,
+                                                   alloc_flags,
+                                                   client_address);
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index 8d2c4c6b2c4..2904216c6b8 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -1408,9 +1408,6 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
+    device->use_call_secondary =
+       !debug_get_bool_option("ANV_DISABLE_SECONDARY_CMD_BUFFER_CALLS", false);
+ 
+-   device->has_implicit_ccs = device->info.has_aux_map ||
+-                              device->info.verx10 >= 125;
+-
+    device->video_decode_enabled = debug_get_bool_option("ANV_VIDEO_DECODE", false);
+ 
+    device->uses_ex_bso = device->info.verx10 >= 125;
+@@ -3971,10 +3968,6 @@ VkResult anv_AllocateMemory(
+       }
+    }
+ 
+-   /* By default, we want all VkDeviceMemory objects to support CCS */
+-   if (device->physical->has_implicit_ccs && device->info->has_aux_map)
+-      alloc_flags |= ANV_BO_ALLOC_IMPLICIT_CCS;
+-
+    /* If i915 reported a mappable/non_mappable vram regions and the
+     * application want lmem mappable, then we need to use the
+     * I915_GEM_CREATE_EXT_FLAG_NEEDS_CPU_ACCESS flag to create our BO.
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 7751318c673..7a028ead514 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -386,8 +386,8 @@ enum anv_bo_alloc_flags {
+    /** Has an address which is visible to the client */
+    ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS = (1 << 8),
+ 
+-   /** This buffer has implicit CCS data attached to it */
+-   ANV_BO_ALLOC_IMPLICIT_CCS = (1 << 9),
++   /** This BO will be dedicated to a buffer or an image */
++   ANV_BO_ALLOC_DEDICATED = (1 << 9),
+ 
+    /** This buffer is allocated from local memory and should be cpu visible */
+    ANV_BO_ALLOC_LOCAL_MEM_CPU_VISIBLE = (1 << 10),
+@@ -400,9 +400,6 @@ enum anv_bo_alloc_flags {
+ 
+    /** For descriptor pools */
+    ANV_BO_ALLOC_DESCRIPTOR_POOL = (1 << 13),
+-
+-   /** This BO will be dedicated to a buffer or an image */
+-   ANV_BO_ALLOC_DEDICATED = (1 << 14),
+ };
+ 
+ struct anv_bo {
+@@ -434,7 +431,7 @@ struct anv_bo {
+     */
+    uint64_t offset;
+ 
+-   /** Size of the buffer not including implicit aux */
++   /** Size of the buffer */
+    uint64_t size;
+ 
+    /* Map for internally mapped BOs.
+@@ -444,32 +441,8 @@ struct anv_bo {
+     */
+    void *map;
+ 
+-   /** Size of the implicit CCS range at the end of the buffer
+-    *
+-    * On Gfx12, CCS data is always a direct 1/256 scale-down.  A single 64K
+-    * page of main surface data maps to a 256B chunk of CCS data and that
+-    * mapping is provided on TGL-LP by the AUX table which maps virtual memory
+-    * addresses in the main surface to virtual memory addresses for CCS data.
+-    *
+-    * Because we can't change these maps around easily and because Vulkan
+-    * allows two VkImages to be bound to overlapping memory regions (as long
+-    * as the app is careful), it's not feasible to make this mapping part of
+-    * the image.  (On Gfx11 and earlier, the mapping was provided via
+-    * RENDER_SURFACE_STATE so each image had its own main -> CCS mapping.)
+-    * Instead, we attach the CCS data directly to the buffer object and setup
+-    * the AUX table mapping at BO creation time.
+-    *
+-    * This field is for internal tracking use by the BO allocator only and
+-    * should not be touched by other parts of the code.  If something wants to
+-    * know if a BO has implicit CCS data, it should instead look at the
+-    * has_implicit_ccs boolean below.
+-    *
+-    * This data is not included in maps of this buffer.
+-    */
+-   uint32_t _ccs_size;
+-
+    /* The actual size of bo allocated by kmd, basically:
+-    * align(size + _ccs_size, mem_alignment)
++    * align(size, mem_alignment)
+     */
+    uint64_t actual_size;
+ 
+@@ -488,9 +461,6 @@ struct anv_bo {
+    /** See also ANV_BO_ALLOC_CLIENT_VISIBLE_ADDRESS */
+    bool has_client_visible_address:1;
+ 
+-   /** True if this BO has implicit CCS data attached to it */
+-   bool has_implicit_ccs:1;
+-
+    /** True if this BO can only live in VRAM */
+    bool vram_only:1;
+ };
+@@ -908,13 +878,6 @@ struct anv_physical_device {
+      */
+     bool                                        has_reg_timestamp;
+ 
+-    /** True if this device has implicit AUX
+-     *
+-     * If true, CCS is handled as an implicit attachment to the BO rather than
+-     * as an explicitly bound surface.
+-     */
+-    bool                                        has_implicit_ccs;
+-
+     /** True if we can create protected contexts. */
+     bool                                        has_protected_contexts;
+ 
+diff --git a/src/intel/vulkan/genX_cmd_buffer.c b/src/intel/vulkan/genX_cmd_buffer.c
+index 4bc160b012e..424e917ee6a 100644
+--- a/src/intel/vulkan/genX_cmd_buffer.c
++++ b/src/intel/vulkan/genX_cmd_buffer.c
+@@ -422,7 +422,6 @@ transition_stencil_buffer(struct anv_cmd_buffer *cmd_buffer,
+ 
+    if ((initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
+         initial_layout == VK_IMAGE_LAYOUT_PREINITIALIZED) &&
+-       cmd_buffer->device->physical->has_implicit_ccs &&
+        cmd_buffer->device->info->has_aux_map) {
+       /* If will_full_fast_clear is set, the caller promises to fast-clear the
+        * largest portion of the specified range as it can.
+diff --git a/src/intel/vulkan/i915/anv_batch_chain.c b/src/intel/vulkan/i915/anv_batch_chain.c
+index 030a3b5d013..ee814bc15f2 100644
+--- a/src/intel/vulkan/i915/anv_batch_chain.c
++++ b/src/intel/vulkan/i915/anv_batch_chain.c
+@@ -636,12 +636,11 @@ anv_i915_debug_submit(const struct anv_execbuf *execbuf)
+            (float)total_vram_only_size_kb / 1024.0f);
+    for (uint32_t i = 0; i < execbuf->bo_count; i++) {
+       const struct anv_bo *bo = execbuf->bos[i];
+-      uint64_t size = bo->size + bo->_ccs_size;
+ 
+       fprintf(stderr, "   BO: addr=0x%016"PRIx64"-0x%016"PRIx64" size=%7"PRIu64
+               "KB handle=%05u capture=%u vram_only=%u name=%s\n",
+-              bo->offset, bo->offset + size - 1, size / 1024, bo->gem_handle,
+-              (bo->flags & EXEC_OBJECT_CAPTURE) != 0,
++              bo->offset, bo->offset + bo->size - 1, bo->size / 1024,
++              bo->gem_handle, (bo->flags & EXEC_OBJECT_CAPTURE) != 0,
+               bo->vram_only, bo->name);
+    }
+ }
+-- 
+2.42.0
+

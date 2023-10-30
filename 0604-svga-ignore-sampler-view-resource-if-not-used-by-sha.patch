@@ -1,0 +1,235 @@
+From a5ac29d85f9d38007e93375c24ce2ad1df1e9465 Mon Sep 17 00:00:00 2001
+From: Charmaine Lee <charmainel@vmware.com>
+Date: Wed, 18 Oct 2023 20:00:43 +0300
+Subject: [PATCH 604/834] svga: ignore sampler view resource if not used by
+ shaders
+
+Currently bound sampler view resources are relevant only if the
+currently bound shaders also access them. So when checking for shader
+resource collision, we only need to check those shader resources that
+are actively used by the shaders.
+
+This fixes a regression with manhattan on SVGA device when only the
+active state changes are sent to the driver and a no longer relevant
+shader resource is included in the shader resource collision check.
+This causes a backing resource to be unnecessarily created and the content
+never propagated to the original resource.
+
+Fixes: aaa4b0e6186 ("st/mesa: move check_program_state code into _mesa_update_state")
+Reviewed-by: Neha Bhenden <bhenden@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25801>
+---
+ src/gallium/drivers/svga/svga_context.h       | 19 +++++++++++++++++++
+ src/gallium/drivers/svga/svga_pipe_cs.c       |  4 ++++
+ src/gallium/drivers/svga/svga_pipe_fs.c       |  4 ++++
+ src/gallium/drivers/svga/svga_pipe_gs.c       |  4 ++++
+ src/gallium/drivers/svga/svga_pipe_ts.c       |  8 ++++++++
+ src/gallium/drivers/svga/svga_pipe_vs.c       |  4 ++++
+ src/gallium/drivers/svga/svga_shader.c        |  3 +++
+ src/gallium/drivers/svga/svga_shader.h        |  7 +++++++
+ src/gallium/drivers/svga/svga_state_sampler.c |  7 +++++++
+ src/gallium/drivers/svga/svga_tgsi.c          |  1 +
+ 10 files changed, 61 insertions(+)
+
+diff --git a/src/gallium/drivers/svga/svga_context.h b/src/gallium/drivers/svga/svga_context.h
+index a079241b2c4..5793f88166d 100644
+--- a/src/gallium/drivers/svga/svga_context.h
++++ b/src/gallium/drivers/svga/svga_context.h
+@@ -339,6 +339,7 @@ struct svga_state
+    struct pipe_clip_state clip;
+    struct pipe_viewport_state viewport[SVGA3D_DX_MAX_VIEWPORTS];
+ 
++   bool use_samplers[PIPE_SHADER_TYPES];
+    unsigned num_samplers[PIPE_SHADER_TYPES];
+    unsigned num_sampler_views[PIPE_SHADER_TYPES];
+    unsigned num_vertex_buffers;
+@@ -1023,6 +1024,24 @@ svga_use_sampler_state_mapping(const struct svga_context *svga,
+            num_sampler_states > SVGA3D_DX_MAX_SAMPLERS);
+ }
+ 
++
++static inline void
++svga_set_curr_shader_use_samplers_flag(struct svga_context *svga,
++                                       enum pipe_shader_type shader_type,
++                                       bool use_samplers)
++{
++   svga->curr.use_samplers[shader_type] = use_samplers;
++}
++
++
++static inline bool
++svga_curr_shader_use_samplers(const struct svga_context *svga,
++	                      enum pipe_shader_type shader_type)
++{
++   return svga->curr.use_samplers[shader_type];
++}
++
++
+ /**
+  * If the Gallium HUD is enabled, this will return the current time.
+  * Otherwise, just return zero.
+diff --git a/src/gallium/drivers/svga/svga_pipe_cs.c b/src/gallium/drivers/svga/svga_pipe_cs.c
+index 49f52b4e1f2..5a6642254e8 100644
+--- a/src/gallium/drivers/svga/svga_pipe_cs.c
++++ b/src/gallium/drivers/svga/svga_pipe_cs.c
+@@ -89,6 +89,10 @@ svga_bind_compute_state(struct pipe_context *pipe, void *shader)
+ 
+    svga->curr.cs = cs;
+    svga->dirty |= SVGA_NEW_CS;
++
++   /* Check if the shader uses samplers */
++   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_COMPUTE,
++                                          svga_shader_use_samplers(&cs->base));
+ }
+ 
+ 
+diff --git a/src/gallium/drivers/svga/svga_pipe_fs.c b/src/gallium/drivers/svga/svga_pipe_fs.c
+index b6845ec44b7..e586e153a1c 100644
+--- a/src/gallium/drivers/svga/svga_pipe_fs.c
++++ b/src/gallium/drivers/svga/svga_pipe_fs.c
+@@ -83,6 +83,10 @@ svga_bind_fs_state(struct pipe_context *pipe, void *shader)
+ 
+    svga->curr.fs = fs;
+    svga->dirty |= SVGA_NEW_FS;
++
++   /* Check if shader uses samplers */
++   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_FRAGMENT,
++                                          svga_shader_use_samplers(&fs->base));
+ }
+ 
+ 
+diff --git a/src/gallium/drivers/svga/svga_pipe_gs.c b/src/gallium/drivers/svga/svga_pipe_gs.c
+index 0c7bb7b37af..6c514880414 100644
+--- a/src/gallium/drivers/svga/svga_pipe_gs.c
++++ b/src/gallium/drivers/svga/svga_pipe_gs.c
+@@ -76,6 +76,10 @@ svga_bind_gs_state(struct pipe_context *pipe, void *shader)
+ 
+    svga->curr.user_gs = gs;
+    svga->dirty |= SVGA_NEW_GS;
++
++   /* Check if the shader uses samplers */
++   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_GEOMETRY,
++                                          svga_shader_use_samplers(&gs->base));
+ }
+ 
+ 
+diff --git a/src/gallium/drivers/svga/svga_pipe_ts.c b/src/gallium/drivers/svga/svga_pipe_ts.c
+index 4983117ddcc..53e3988f141 100644
+--- a/src/gallium/drivers/svga/svga_pipe_ts.c
++++ b/src/gallium/drivers/svga/svga_pipe_ts.c
+@@ -90,6 +90,10 @@ svga_bind_tcs_state(struct pipe_context *pipe, void *shader)
+ 
+    svga->curr.tcs = tcs;
+    svga->dirty |= SVGA_NEW_TCS;
++
++   /* Check if the shader uses samplers */
++   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_TESS_CTRL,
++                                          svga_shader_use_samplers(&tcs->base));
+ }
+ 
+ 
+@@ -170,6 +174,10 @@ svga_bind_tes_state(struct pipe_context *pipe, void *shader)
+ 
+    svga->curr.tes = tes;
+    svga->dirty |= SVGA_NEW_TES;
++
++   /* Check if the shader uses samplers */
++   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_TESS_EVAL,
++                                          svga_shader_use_samplers(&tes->base));
+ }
+ 
+ 
+diff --git a/src/gallium/drivers/svga/svga_pipe_vs.c b/src/gallium/drivers/svga/svga_pipe_vs.c
+index dff0f6f4678..e4469733a8a 100644
+--- a/src/gallium/drivers/svga/svga_pipe_vs.c
++++ b/src/gallium/drivers/svga/svga_pipe_vs.c
+@@ -92,6 +92,10 @@ svga_bind_vs_state(struct pipe_context *pipe, void *shader)
+ 
+    svga->curr.vs = vs;
+    svga->dirty |= SVGA_NEW_VS;
++
++   /* Check if the shader uses samplers */
++   svga_set_curr_shader_use_samplers_flag(svga, PIPE_SHADER_VERTEX,
++                                          svga_shader_use_samplers(&vs->base));
+ }
+ 
+ 
+diff --git a/src/gallium/drivers/svga/svga_shader.c b/src/gallium/drivers/svga/svga_shader.c
+index b410f97cd55..ee95622043f 100644
+--- a/src/gallium/drivers/svga/svga_shader.c
++++ b/src/gallium/drivers/svga/svga_shader.c
+@@ -289,6 +289,9 @@ svga_init_shader_key_common(const struct svga_context *svga,
+    key->num_textures = MAX2(svga->curr.num_sampler_views[shader_type],
+                             svga->curr.num_samplers[shader_type]);
+ 
++   if (!shader->info.uses_samplers)
++      key->num_textures = 0;
++
+    key->num_samplers = 0;
+ 
+    /* Set sampler_state_mapping only if GL43 is supported and
+diff --git a/src/gallium/drivers/svga/svga_shader.h b/src/gallium/drivers/svga/svga_shader.h
+index e59b025a0bf..38417a053b2 100644
+--- a/src/gallium/drivers/svga/svga_shader.h
++++ b/src/gallium/drivers/svga/svga_shader.h
+@@ -327,6 +327,7 @@ struct svga_shader_info
+    bool uses_images;
+    bool uses_image_size;
+    bool uses_shader_buffers;
++   bool uses_samplers;
+ 
+    unsigned const_buffers_declared;  /* bitmask of declared const buffers */
+    unsigned constbuf0_num_uniforms;  /* number of uniforms in constbuf0 */
+@@ -635,4 +636,10 @@ svga_get_compiled_dummy_geometry_shader(struct svga_context *svga,
+                                         struct svga_shader *shader,
+                                         const struct svga_compile_key *key);
+ 
++static inline bool
++svga_shader_use_samplers(struct svga_shader *shader)
++{
++   return shader ? (shader->info.uses_samplers != 0) : false;
++}
++
+ #endif /* SVGA_SHADER_H */
+diff --git a/src/gallium/drivers/svga/svga_state_sampler.c b/src/gallium/drivers/svga/svga_state_sampler.c
+index a45e53e65eb..07970c69428 100644
+--- a/src/gallium/drivers/svga/svga_state_sampler.c
++++ b/src/gallium/drivers/svga/svga_state_sampler.c
+@@ -75,6 +75,9 @@ svga_check_sampler_view_resource_collision(const struct svga_context *svga,
+       return false;
+    }
+ 
++   if (!svga_curr_shader_use_samplers(svga, shader))
++      return false;
++
+    for (i = 0; i < svga->curr.num_sampler_views[shader]; i++) {
+       struct svga_pipe_sampler_view *sv =
+          svga_pipe_sampler_view(svga->curr.sampler_views[shader][i]);
+@@ -551,8 +554,12 @@ update_cs_sampler_resources(struct svga_context *svga, uint64_t dirty)
+    unsigned count;
+    unsigned nviews;
+    unsigned i;
++   struct svga_compute_shader *cs = svga->curr.cs;
+ 
+    count = svga->curr.num_sampler_views[shader];
++   if (!cs || !cs->base.info.uses_samplers)
++      count = 0;
++
+    for (i = 0; i < count; i++) {
+       struct svga_pipe_sampler_view *sv =
+          svga_pipe_sampler_view(svga->curr.sampler_views[shader][i]);
+diff --git a/src/gallium/drivers/svga/svga_tgsi.c b/src/gallium/drivers/svga/svga_tgsi.c
+index 038ab40a480..ce5b5318a88 100644
+--- a/src/gallium/drivers/svga/svga_tgsi.c
++++ b/src/gallium/drivers/svga/svga_tgsi.c
+@@ -419,6 +419,7 @@ svga_tgsi_scan_shader(struct svga_shader *shader)
+    info->uses_images = tgsi_info->images_declared != 0;
+    info->uses_image_size = tgsi_info->opcode_count[TGSI_OPCODE_RESQ] ? 1 : 0;
+    info->uses_shader_buffers = tgsi_info->shader_buffers_declared != 0;
++   info->uses_samplers = tgsi_info->samplers_declared != 0;
+    info->const_buffers_declared = tgsi_info->const_buffers_declared;
+    info->shader_buffers_declared = tgsi_info->shader_buffers_declared;
+ 
+-- 
+2.42.0
+

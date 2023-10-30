@@ -1,0 +1,51 @@
+From 99214f048193f97fd4bc2dc0483d796b7a0f18d2 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Wed, 27 Sep 2023 12:51:15 +0100
+Subject: [PATCH 684/834] radv: skip zero-sized memcpy
+
+Fixes UBSan:
+src/amd/vulkan/radv_pipeline.c:1181:4: runtime error: null pointer passed as argument 2, which is declared to never be null
+src/amd/vulkan/radv_shader.c:2243:4: runtime error: null pointer passed as argument 2, which is declared to never be null
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25432>
+---
+ src/amd/vulkan/radv_pipeline.c | 3 ++-
+ src/amd/vulkan/radv_shader.c   | 6 ++++--
+ 2 files changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_pipeline.c b/src/amd/vulkan/radv_pipeline.c
+index 9766f322ec8..d18f5b04875 100644
+--- a/src/amd/vulkan/radv_pipeline.c
++++ b/src/amd/vulkan/radv_pipeline.c
+@@ -1178,7 +1178,8 @@ radv_copy_shader_stage_create_info(struct radv_device *device, uint32_t stageCou
+    if (!new_stages)
+       return NULL;
+ 
+-   memcpy(new_stages, pStages, size);
++   if (size)
++      memcpy(new_stages, pStages, size);
+ 
+    for (uint32_t i = 0; i < stageCount; i++) {
+       RADV_FROM_HANDLE(vk_shader_module, module, new_stages[i].module);
+diff --git a/src/amd/vulkan/radv_shader.c b/src/amd/vulkan/radv_shader.c
+index a82d7a3b211..df770f6a267 100644
+--- a/src/amd/vulkan/radv_shader.c
++++ b/src/amd/vulkan/radv_shader.c
+@@ -2249,8 +2249,10 @@ radv_aco_build_shader_binary(void **bin, const struct ac_shader_config *config,
+    legacy_binary->disasm_size = 0;
+    legacy_binary->ir_size = llvm_ir_size;
+ 
+-   memcpy((char *)legacy_binary->data + legacy_binary->stats_size + legacy_binary->code_size, llvm_ir_str,
+-          llvm_ir_size);
++   if (llvm_ir_size) {
++      memcpy((char *)legacy_binary->data + legacy_binary->stats_size + legacy_binary->code_size, llvm_ir_str,
++             llvm_ir_size);
++   }
+ 
+    legacy_binary->disasm_size = disasm_size;
+    if (disasm_size) {
+-- 
+2.42.0
+

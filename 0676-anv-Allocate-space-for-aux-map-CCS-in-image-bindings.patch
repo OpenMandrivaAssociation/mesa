@@ -1,0 +1,134 @@
+From cd12eec4966cf439ceb734971f00b6f370788e61 Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Fri, 25 Aug 2023 15:24:27 -0400
+Subject: [PATCH 676/834] anv: Allocate space for aux-map CCS in image bindings
+
+This makes images a bit larger by reserving space to store the
+compression control surface when the device uses an aux-map.
+
+This space is not used currently because anv still maps main surface
+addresses to space at the end of the anv_bo.
+
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_image.c   | 58 +++++++++++++++++++++++++++++++---
+ src/intel/vulkan/anv_private.h |  3 ++
+ 2 files changed, 56 insertions(+), 5 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index 44189a6dd4a..48726fd91c0 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -30,6 +30,7 @@
+ #include "drm-uapi/drm_fourcc.h"
+ 
+ #include "anv_private.h"
++#include "common/intel_aux_map.h"
+ #include "util/u_debug.h"
+ #include "vk_util.h"
+ #include "util/u_math.h"
+@@ -641,6 +642,31 @@ add_aux_state_tracking_buffer(struct anv_device *device,
+                              &image->planes[plane].fast_clear_memory_range);
+ }
+ 
++static VkResult MUST_CHECK
++add_compression_control_buffer(struct anv_device *device,
++                               struct anv_image *image,
++                               uint32_t plane,
++                               uint32_t binding,
++                               uint64_t offset)
++{
++   assert(device->info->has_aux_map);
++
++   uint64_t ratio = intel_aux_get_main_to_aux_ratio(device->aux_map_ctx);
++   assert(image->planes[plane].primary_surface.isl.size_B % ratio == 0);
++   uint64_t size = image->planes[plane].primary_surface.isl.size_B / ratio;
++
++   /* The diagram in the Bspec section, Memory Compression - Gfx12 (44930),
++    * shows that the CCS is indexed in 256B chunks for TGL, 4K chunks for MTL.
++    * When modifiers are in use, the 4K alignment requirement of the
++    * PLANE_AUX_DIST::Auxiliary Surface Distance field must be considered
++    * (Bspec 50379). Keep things simple and just use 4K.
++    */
++   uint32_t alignment = 4096;
++
++   return image_binding_grow(device, image, binding, offset, size, alignment,
++                             &image->planes[plane].compr_ctrl_memory_range);
++}
++
+ /**
+  * The return code indicates whether creation of the VkImage should continue
+  * or fail, not whether the creation of the aux surface succeeded.  If the aux
+@@ -734,6 +760,14 @@ add_aux_surface_if_supported(struct anv_device *device,
+       if (result != VK_SUCCESS)
+          return result;
+ 
++      if (anv_image_plane_uses_aux_map(device, image, plane)) {
++         result = add_compression_control_buffer(device, image, plane,
++                                                 binding,
++                                                 ANV_OFFSET_IMPLICIT);
++         if (result != VK_SUCCESS)
++            return result;
++      }
++
+       if (image->planes[plane].aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT)
+          return add_aux_state_tracking_buffer(device, image, plane);
+    } else if (aspect == VK_IMAGE_ASPECT_STENCIL_BIT) {
+@@ -743,6 +777,14 @@ add_aux_surface_if_supported(struct anv_device *device,
+          return VK_SUCCESS;
+ 
+       image->planes[plane].aux_usage = ISL_AUX_USAGE_STC_CCS;
++
++      if (device->info->has_aux_map) {
++         result = add_compression_control_buffer(device, image, plane,
++                                                 binding,
++                                                 ANV_OFFSET_IMPLICIT);
++         if (result != VK_SUCCESS)
++            return result;
++      }
+    } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && image->vk.samples == 1) {
+       if (image->n_planes != 1) {
+          /* Multiplanar images seem to hit a sampler bug with CCS and R16G16
+@@ -804,12 +846,18 @@ add_aux_surface_if_supported(struct anv_device *device,
+          image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_D;
+       }
+ 
+-      if (!device->physical->has_implicit_ccs) {
+-         result = add_surface(device, image, &image->planes[plane].aux_surface,
+-                              binding, offset);
+-         if (result != VK_SUCCESS)
+-            return result;
++      if (device->info->has_flat_ccs) {
++         result = VK_SUCCESS;
++      } else if (device->info->has_aux_map) {
++         result = add_compression_control_buffer(device, image, plane,
++                                                 binding, offset);
++      } else {
++         result = add_surface(device, image,
++                              &image->planes[plane].aux_surface, binding,
++                              offset);
+       }
++      if (result != VK_SUCCESS)
++         return result;
+ 
+       return add_aux_state_tracking_buffer(device, image, plane);
+    } else if ((aspect & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) && image->vk.samples > 1) {
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 883bde3f76a..e75ff8d02e7 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -4670,6 +4670,9 @@ struct anv_image {
+ 
+       struct anv_surface aux_surface;
+ 
++      /** Location of the compression control surface.  */
++      struct anv_image_memory_range compr_ctrl_memory_range;
++
+       /** Location of the fast clear state.  */
+       struct anv_image_memory_range fast_clear_memory_range;
+ 
+-- 
+2.42.0
+

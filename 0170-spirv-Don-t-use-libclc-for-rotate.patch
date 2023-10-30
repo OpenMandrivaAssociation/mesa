@@ -1,0 +1,29 @@
+From fe0965afa6becfc9c9aa341babd34bc5920e421b Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Wed, 11 Oct 2023 13:34:40 +0200
+Subject: [PATCH 170/834] spirv: Don't use libclc for rotate
+
+We have a nir lowering for drivers that do not support urol.
+
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25660>
+---
+ src/compiler/spirv/vtn_opencl.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/compiler/spirv/vtn_opencl.c b/src/compiler/spirv/vtn_opencl.c
+index 7e89d40447e..f881588d2fe 100644
+--- a/src/compiler/spirv/vtn_opencl.c
++++ b/src/compiler/spirv/vtn_opencl.c
+@@ -553,6 +553,8 @@ handle_special(struct vtn_builder *b, uint32_t opcode,
+       if (nb->shader->options->lower_ffma32 && srcs[0]->bit_size == 32)
+          break;
+       return nir_ffma(nb, srcs[0], srcs[1], srcs[2]);
++   case OpenCLstd_Rotate:
++      return nir_urol(nb, srcs[0], nir_u2u32(nb, srcs[1]));
+    default:
+       break;
+    }
+-- 
+2.42.0
+

@@ -1,0 +1,103 @@
+From 3c977f55f5afd8b34c233df895a4936e9d1770a8 Mon Sep 17 00:00:00 2001
+From: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Date: Wed, 27 Sep 2023 17:35:27 -0300
+Subject: [PATCH 505/834] loader: add driver list as parameter in
+ loader_open_render_node_platform_device()
+
+In a later commit in this series, we'll need to open the first supported
+render-only platform device that we can find.
+
+In order to avoid calling loader_open_render_node_platform_device()
+multiple times (what is quite expensive), change this function to take a
+driver list (instead of a single driver name) as parameter.
+
+Signed-off-by: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Reviewed-by: Simon Ser <contact@emersion.fr>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24825>
+---
+ src/gallium/drivers/tegra/tegra_screen.c |  4 +++-
+ src/loader/loader.c                      | 20 +++++++++++++++++---
+ src/loader/loader.h                      |  3 ++-
+ 3 files changed, 22 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/tegra/tegra_screen.c b/src/gallium/drivers/tegra/tegra_screen.c
+index 98bf4cd710d..31539bc5e3f 100644
+--- a/src/gallium/drivers/tegra/tegra_screen.c
++++ b/src/gallium/drivers/tegra/tegra_screen.c
+@@ -572,6 +572,7 @@ struct pipe_screen *
+ tegra_screen_create(int fd)
+ {
+    struct tegra_screen *screen;
++   const char * const drivers[] = {"nouveau"};
+ 
+    screen = calloc(1, sizeof(*screen));
+    if (!screen)
+@@ -579,7 +580,8 @@ tegra_screen_create(int fd)
+ 
+    screen->fd = fd;
+ 
+-   screen->gpu_fd = loader_open_render_node_platform_device("nouveau");
++   screen->gpu_fd =
++      loader_open_render_node_platform_device(drivers, ARRAY_SIZE(drivers));
+    if (screen->gpu_fd < 0) {
+       if (errno != ENOENT)
+          fprintf(stderr, "failed to open GPU device: %s\n", strerror(errno));
+diff --git a/src/loader/loader.c b/src/loader/loader.c
+index 643fd5bb63e..a8295215ebf 100644
+--- a/src/loader/loader.c
++++ b/src/loader/loader.c
+@@ -132,11 +132,19 @@ iris_predicate(int fd)
+    return ret;
+ }
+ 
++/**
++ * Goes through all the platform devices whose driver is on the given list and
++ * try to open their render node. It returns the fd of the first device that
++ * it can open.
++ */
+ int
+-loader_open_render_node_platform_device(const char *name)
++loader_open_render_node_platform_device(const char * const drivers[],
++                                        unsigned int n_drivers)
+ {
+    drmDevicePtr devices[MAX_DRM_DEVICES], device;
+-   int i, num_devices, fd = -1;
++   int num_devices, fd = -1;
++   int i, j;
++   bool found = false;
+ 
+    num_devices = drmGetDevices2(0, devices, MAX_DRM_DEVICES);
+    if (num_devices <= 0)
+@@ -159,7 +167,13 @@ loader_open_render_node_platform_device(const char *name)
+             continue;
+          }
+ 
+-         if (strcmp(version->name, name) != 0) {
++         for (j = 0; j < n_drivers; j++) {
++            if (strcmp(version->name, drivers[j]) == 0) {
++               found = true;
++               break;
++            }
++         }
++         if (!found) {
+             drmFreeVersion(version);
+             close(fd);
+             continue;
+diff --git a/src/loader/loader.h b/src/loader/loader.h
+index 8e8845ba2fd..52da5756018 100644
+--- a/src/loader/loader.h
++++ b/src/loader/loader.h
+@@ -44,7 +44,8 @@ int
+ loader_open_device(const char *);
+ 
+ int
+-loader_open_render_node_platform_device(const char *name);
++loader_open_render_node_platform_device(const char * const drivers[],
++                                        unsigned int n_drivers);
+ 
+ char *
+ loader_get_render_node(dev_t device);
+-- 
+2.42.0
+

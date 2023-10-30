@@ -1,0 +1,41 @@
+From a44ec366842eb0eeeaaba5be70b18c99874c0574 Mon Sep 17 00:00:00 2001
+From: Frank Binns <frank.binns@imgtec.com>
+Date: Tue, 26 Sep 2023 22:48:08 +0100
+Subject: [PATCH 121/834] pvr: fix setup of load op unresolved msaa mask
+
+Bits were being assigned rather than ORed into the mask during setup. Noticed
+through code inspection.
+
+Fixes: e089166776d ("pvr: Add support for VK_ATTACHMENT_LOAD_OP_LOAD.")
+Signed-off-by: Frank Binns <frank.binns@imgtec.com>
+Reviewed-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25487>
+---
+ src/imagination/vulkan/pvr_pass.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/imagination/vulkan/pvr_pass.c b/src/imagination/vulkan/pvr_pass.c
+index fd731be7c4b..eca2934af84 100644
+--- a/src/imagination/vulkan/pvr_pass.c
++++ b/src/imagination/vulkan/pvr_pass.c
+@@ -254,7 +254,7 @@ pvr_create_subpass_load_op(struct pvr_device *device,
+          pass->attachments[attachment_idx].vk_format;
+ 
+       if (pass->attachments[attachment_idx].sample_count > 1)
+-         load_op->clears_loads_state.unresolved_msaa_mask = BITFIELD_BIT(i);
++         load_op->clears_loads_state.unresolved_msaa_mask |= BITFIELD_BIT(i);
+ 
+       if (hw_subpass->color_initops[i] == VK_ATTACHMENT_LOAD_OP_LOAD)
+          load_op->clears_loads_state.rt_load_mask |= BITFIELD_BIT(i);
+@@ -296,7 +296,7 @@ pvr_create_render_load_op(struct pvr_device *device,
+          pass->attachments[color_init->index].vk_format;
+ 
+       if (pass->attachments[color_init->index].sample_count > 1)
+-         load_op->clears_loads_state.unresolved_msaa_mask = BITFIELD_BIT(i);
++         load_op->clears_loads_state.unresolved_msaa_mask |= BITFIELD_BIT(i);
+ 
+       if (color_init->op == VK_ATTACHMENT_LOAD_OP_LOAD)
+          load_op->clears_loads_state.rt_load_mask |= BITFIELD_BIT(i);
+-- 
+2.42.0
+

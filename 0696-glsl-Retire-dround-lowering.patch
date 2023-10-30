@@ -1,0 +1,681 @@
+From aed6a39c10c328c32e6009e6f5c00cfdd9257e73 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 08:30:22 +0200
+Subject: [PATCH 696/834] glsl: Retire dround lowering.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We have competent lowering in NIR already available.
+
+Drivers exposing CAP_DOUBLES but not SHADER_CAP_DROUND:
+- d3d12 (NIR lowers ~0 if the underlying impl doesn't do floats)
+- svga (Now sets the NIR lowering options)
+- softpipe (Doesn't do GL4 so you can't use doubles anyway)
+- llvmpipe (Lowers dround_even in NIR and passees the rest through
+            successfully)
+- zink (NIR lowers ~0 if the underlying impl doesn't do floats,
+        otherwise passes things through successfully, except needed
+        dround_even lowering to avoid lavapipe regression with
+        native doubles)
+- r600 (sets NIR rounding lowering flags, and lowers all fsign)
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25777>
+---
+ docs/gallium/screen.rst                       |   2 -
+ src/compiler/glsl/ir_optimization.h           |   1 -
+ src/compiler/glsl/lower_instructions.cpp      | 186 +-----------------
+ src/compiler/glsl/test_optpass.cpp            |   2 +-
+ src/gallium/auxiliary/gallivm/lp_bld_limits.h |   1 -
+ src/gallium/auxiliary/tgsi/tgsi_exec.h        |   1 -
+ src/gallium/drivers/asahi/agx_pipe.c          |   1 -
+ src/gallium/drivers/crocus/crocus_screen.c    |   2 -
+ src/gallium/drivers/d3d12/d3d12_screen.cpp    |   3 -
+ src/gallium/drivers/etnaviv/etnaviv_screen.c  |   1 -
+ .../drivers/freedreno/freedreno_screen.c      |   1 -
+ src/gallium/drivers/i915/i915_screen.c        |   1 -
+ src/gallium/drivers/iris/iris_screen.c        |   2 -
+ .../drivers/nouveau/nv30/nv30_screen.c        |   2 -
+ .../drivers/nouveau/nv50/nv50_screen.c        |   1 -
+ .../drivers/nouveau/nvc0/nvc0_screen.c        |   2 -
+ src/gallium/drivers/panfrost/pan_screen.c     |   1 -
+ src/gallium/drivers/r300/r300_screen.c        |   2 -
+ src/gallium/drivers/r600/r600_pipe.c          |   2 -
+ src/gallium/drivers/radeonsi/si_get.c         |   1 -
+ src/gallium/drivers/svga/svga_screen.c        |   9 +-
+ src/gallium/drivers/v3d/v3d_screen.c          |   1 -
+ src/gallium/drivers/vc4/vc4_screen.c          |   1 -
+ src/gallium/drivers/zink/zink_compiler.c      |   2 +-
+ src/gallium/drivers/zink/zink_screen.c        |   3 -
+ src/gallium/include/pipe/p_defines.h          |   1 -
+ src/mesa/state_tracker/st_glsl_to_nir.cpp     |   9 +-
+ 27 files changed, 5 insertions(+), 236 deletions(-)
+
+diff --git a/docs/gallium/screen.rst b/docs/gallium/screen.rst
+index d1105eef824..e8efe0ce554 100644
+--- a/docs/gallium/screen.rst
++++ b/docs/gallium/screen.rst
+@@ -740,8 +740,6 @@ support different features.
+   samplers.
+ * ``PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS``: The maximum number of texture
+   sampler views. Must not be lower than PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS.
+-* ``PIPE_SHADER_CAP_DROUND_SUPPORTED``: Whether double precision rounding
+-  is supported. If it is, DTRUNC/DCEIL/DFLR/DROUND opcodes may be used.
+ * ``PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE``: Whether the driver doesn't
+   ignore tgsi_declaration_range::Last for shader inputs and outputs.
+ * ``PIPE_SHADER_CAP_MAX_SHADER_BUFFERS``: Maximum number of memory buffers
+diff --git a/src/compiler/glsl/ir_optimization.h b/src/compiler/glsl/ir_optimization.h
+index 6e94adc1168..56370a7b412 100644
+--- a/src/compiler/glsl/ir_optimization.h
++++ b/src/compiler/glsl/ir_optimization.h
+@@ -55,7 +55,6 @@ bool do_tree_grafting(exec_list *instructions);
+ bool do_vec_index_to_cond_assign(exec_list *instructions);
+ void lower_discard_flow(exec_list *instructions);
+ bool lower_instructions(exec_list *instructions,
+-                        bool have_dround,
+                         bool have_gpu_shader5);
+ bool lower_clip_cull_distance(struct gl_shader_program *prog,
+                               gl_linked_shader *shader);
+diff --git a/src/compiler/glsl/lower_instructions.cpp b/src/compiler/glsl/lower_instructions.cpp
+index 95339b80a86..df7c7435f72 100644
+--- a/src/compiler/glsl/lower_instructions.cpp
++++ b/src/compiler/glsl/lower_instructions.cpp
+@@ -28,13 +28,6 @@
+  * must replace them with some other expression tree.  This pass lowers some
+  * of the most common cases, allowing the lowering code to be implemented once
+  * rather than in each driver backend.
+- *
+- * Currently supported transformations:
+- * - DOPS_TO_DFRAC
+- *
+- * DOPS_TO_DFRAC:
+- * --------------
+- * Converts double trunc, ceil, floor, round to fract
+  */
+ 
+ #include "program/prog_instruction.h" /* for swizzle */
+@@ -47,7 +40,6 @@
+ #include <math.h>
+ 
+ /* Operations for lower_instructions() */
+-#define DOPS_TO_DFRAC      0x800
+ #define FIND_LSB_TO_FLOAT_CAST    0x20000
+ #define FIND_MSB_TO_FLOAT_CAST    0x40000
+ #define IMUL_HIGH_TO_MUL          0x80000
+@@ -70,11 +62,6 @@ private:
+ 
+    void double_dot_to_fma(ir_expression *);
+    void double_lrp(ir_expression *);
+-   void dceil_to_dfrac(ir_expression *);
+-   void dfloor_to_dfrac(ir_expression *);
+-   void dround_even_to_dfrac(ir_expression *);
+-   void dtrunc_to_dfrac(ir_expression *);
+-   void dsign_to_csel(ir_expression *);
+    void find_lsb_to_float_cast(ir_expression *ir);
+    void find_msb_to_float_cast(ir_expression *ir);
+    void imul_high_to_mul(ir_expression *ir);
+@@ -95,11 +82,9 @@ private:
+ #define lowering(x) (this->lower & x)
+ 
+ bool
+-lower_instructions(exec_list *instructions,
+-                   bool have_dround, bool have_gpu_shader5)
++lower_instructions(exec_list *instructions,bool have_gpu_shader5)
+ {
+    unsigned what_to_lower =
+-      (have_dround ? 0 : DOPS_TO_DFRAC) |
+       /* Assume that if ARB_gpu_shader5 is not supported then all of the
+        * extended integer functions need lowering.  It may be necessary to add
+        * some caps for individual instructions.
+@@ -170,150 +155,6 @@ lower_instructions_visitor::double_lrp(ir_expression *ir)
+    this->progress = true;
+ }
+ 
+-void
+-lower_instructions_visitor::dceil_to_dfrac(ir_expression *ir)
+-{
+-   /*
+-    * frtemp = frac(x);
+-    * temp = sub(x, frtemp);
+-    * result = temp + ((frtemp != 0.0) ? 1.0 : 0.0);
+-    */
+-   ir_instruction &i = *base_ir;
+-   ir_constant *zero = new(ir) ir_constant(0.0, ir->operands[0]->type->vector_elements);
+-   ir_constant *one = new(ir) ir_constant(1.0, ir->operands[0]->type->vector_elements);
+-   ir_variable *frtemp = new(ir) ir_variable(ir->operands[0]->type, "frtemp",
+-                                             ir_var_temporary);
+-
+-   i.insert_before(frtemp);
+-   i.insert_before(assign(frtemp, fract(ir->operands[0])));
+-
+-   ir->operation = ir_binop_add;
+-   ir->init_num_operands();
+-   ir->operands[0] = sub(ir->operands[0]->clone(ir, NULL), frtemp);
+-   ir->operands[1] = csel(nequal(frtemp, zero), one, zero->clone(ir, NULL));
+-
+-   this->progress = true;
+-}
+-
+-void
+-lower_instructions_visitor::dfloor_to_dfrac(ir_expression *ir)
+-{
+-   /*
+-    * frtemp = frac(x);
+-    * result = sub(x, frtemp);
+-    */
+-   ir->operation = ir_binop_sub;
+-   ir->init_num_operands();
+-   ir->operands[1] = fract(ir->operands[0]->clone(ir, NULL));
+-
+-   this->progress = true;
+-}
+-void
+-lower_instructions_visitor::dround_even_to_dfrac(ir_expression *ir)
+-{
+-   /*
+-    * insane but works
+-    * temp = x + 0.5;
+-    * frtemp = frac(temp);
+-    * t2 = sub(temp, frtemp);
+-    * if (frac(x) == 0.5)
+-    *     result = frac(t2 * 0.5) == 0 ? t2 : t2 - 1;
+-    *  else
+-    *     result = t2;
+-
+-    */
+-   ir_instruction &i = *base_ir;
+-   ir_variable *frtemp = new(ir) ir_variable(ir->operands[0]->type, "frtemp",
+-                                             ir_var_temporary);
+-   ir_variable *temp = new(ir) ir_variable(ir->operands[0]->type, "temp",
+-                                           ir_var_temporary);
+-   ir_variable *t2 = new(ir) ir_variable(ir->operands[0]->type, "t2",
+-                                           ir_var_temporary);
+-   ir_constant *p5 = new(ir) ir_constant(0.5, ir->operands[0]->type->vector_elements);
+-   ir_constant *one = new(ir) ir_constant(1.0, ir->operands[0]->type->vector_elements);
+-   ir_constant *zero = new(ir) ir_constant(0.0, ir->operands[0]->type->vector_elements);
+-
+-   i.insert_before(temp);
+-   i.insert_before(assign(temp, add(ir->operands[0], p5)));
+-
+-   i.insert_before(frtemp);
+-   i.insert_before(assign(frtemp, fract(temp)));
+-
+-   i.insert_before(t2);
+-   i.insert_before(assign(t2, sub(temp, frtemp)));
+-
+-   ir->operation = ir_triop_csel;
+-   ir->init_num_operands();
+-   ir->operands[0] = equal(fract(ir->operands[0]->clone(ir, NULL)),
+-                           p5->clone(ir, NULL));
+-   ir->operands[1] = csel(equal(fract(mul(t2, p5->clone(ir, NULL))),
+-                                zero),
+-                          t2,
+-                          sub(t2, one));
+-   ir->operands[2] = new(ir) ir_dereference_variable(t2);
+-
+-   this->progress = true;
+-}
+-
+-void
+-lower_instructions_visitor::dtrunc_to_dfrac(ir_expression *ir)
+-{
+-   /*
+-    * frtemp = frac(x);
+-    * temp = sub(x, frtemp);
+-    * result = x >= 0 ? temp : temp + (frtemp == 0.0) ? 0 : 1;
+-    */
+-   ir_rvalue *arg = ir->operands[0];
+-   ir_instruction &i = *base_ir;
+-
+-   ir_constant *zero = new(ir) ir_constant(0.0, arg->type->vector_elements);
+-   ir_constant *one = new(ir) ir_constant(1.0, arg->type->vector_elements);
+-   ir_variable *frtemp = new(ir) ir_variable(arg->type, "frtemp",
+-                                             ir_var_temporary);
+-   ir_variable *temp = new(ir) ir_variable(ir->operands[0]->type, "temp",
+-                                           ir_var_temporary);
+-
+-   i.insert_before(frtemp);
+-   i.insert_before(assign(frtemp, fract(arg)));
+-   i.insert_before(temp);
+-   i.insert_before(assign(temp, sub(arg->clone(ir, NULL), frtemp)));
+-
+-   ir->operation = ir_triop_csel;
+-   ir->init_num_operands();
+-   ir->operands[0] = gequal(arg->clone(ir, NULL), zero);
+-   ir->operands[1] = new (ir) ir_dereference_variable(temp);
+-   ir->operands[2] = add(temp,
+-                         csel(equal(frtemp, zero->clone(ir, NULL)),
+-                              zero->clone(ir, NULL),
+-                              one));
+-
+-   this->progress = true;
+-}
+-
+-void
+-lower_instructions_visitor::dsign_to_csel(ir_expression *ir)
+-{
+-   /*
+-    * temp = x > 0.0 ? 1.0 : 0.0;
+-    * result = x < 0.0 ? -1.0 : temp;
+-    */
+-   ir_rvalue *arg = ir->operands[0];
+-   ir_constant *zero = new(ir) ir_constant(0.0, arg->type->vector_elements);
+-   ir_constant *one = new(ir) ir_constant(1.0, arg->type->vector_elements);
+-   ir_constant *neg_one = new(ir) ir_constant(-1.0, arg->type->vector_elements);
+-
+-   ir->operation = ir_triop_csel;
+-   ir->init_num_operands();
+-   ir->operands[0] = less(arg->clone(ir, NULL),
+-                          zero->clone(ir, NULL));
+-   ir->operands[1] = neg_one;
+-   ir->operands[2] = csel(greater(arg, zero),
+-                          one,
+-                          zero->clone(ir, NULL));
+-
+-   this->progress = true;
+-}
+-
+ void
+ lower_instructions_visitor::find_lsb_to_float_cast(ir_expression *ir)
+ {
+@@ -661,31 +502,6 @@ lower_instructions_visitor::visit_leave(ir_expression *ir)
+          double_lrp(ir);
+       break;
+ 
+-   case ir_unop_trunc:
+-      if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
+-         dtrunc_to_dfrac(ir);
+-      break;
+-
+-   case ir_unop_ceil:
+-      if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
+-         dceil_to_dfrac(ir);
+-      break;
+-
+-   case ir_unop_floor:
+-      if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
+-         dfloor_to_dfrac(ir);
+-      break;
+-
+-   case ir_unop_round_even:
+-      if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
+-         dround_even_to_dfrac(ir);
+-      break;
+-
+-   case ir_unop_sign:
+-      if (lowering(DOPS_TO_DFRAC) && ir->type->is_double())
+-         dsign_to_csel(ir);
+-      break;
+-
+    case ir_unop_find_lsb:
+       if (lowering(FIND_LSB_TO_FLOAT_CAST))
+          find_lsb_to_float_cast(ir);
+diff --git a/src/compiler/glsl/test_optpass.cpp b/src/compiler/glsl/test_optpass.cpp
+index d875444587e..36364c67f72 100644
+--- a/src/compiler/glsl/test_optpass.cpp
++++ b/src/compiler/glsl/test_optpass.cpp
+@@ -91,7 +91,7 @@ do_optimization(struct exec_list *ir, const char *optimization,
+       return do_vec_index_to_cond_assign(ir);
+    } else if (sscanf(optimization, "lower_instructions ( %d ) ",
+                      &int_0) == 1) {
+-      return lower_instructions(ir, false, false);
++      return lower_instructions(ir, false);
+    } else {
+       printf("Unrecognized optimization %s\n", optimization);
+       exit(EXIT_FAILURE);
+diff --git a/src/gallium/auxiliary/gallivm/lp_bld_limits.h b/src/gallium/auxiliary/gallivm/lp_bld_limits.h
+index 8deae32a2a7..bf93b5c0aeb 100644
+--- a/src/gallium/auxiliary/gallivm/lp_bld_limits.h
++++ b/src/gallium/auxiliary/gallivm/lp_bld_limits.h
+@@ -147,7 +147,6 @@ gallivm_get_shader_param(enum pipe_shader_cap param)
+    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return 1;
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
+       return 0;
+diff --git a/src/gallium/auxiliary/tgsi/tgsi_exec.h b/src/gallium/auxiliary/tgsi/tgsi_exec.h
+index 6213bb8a05a..6d3cb47384f 100644
+--- a/src/gallium/auxiliary/tgsi/tgsi_exec.h
++++ b/src/gallium/auxiliary/tgsi/tgsi_exec.h
+@@ -482,7 +482,6 @@ tgsi_exec_get_shader_param(enum pipe_shader_cap param)
+       return 1;
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return 1;
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
+       return 0;
+diff --git a/src/gallium/drivers/asahi/agx_pipe.c b/src/gallium/drivers/asahi/agx_pipe.c
+index a3795b1b9c1..01b2faab859 100644
+--- a/src/gallium/drivers/asahi/agx_pipe.c
++++ b/src/gallium/drivers/asahi/agx_pipe.c
+@@ -1871,7 +1871,6 @@ agx_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type shader,
+       return false;
+ 
+    case PIPE_SHADER_CAP_INT64_ATOMICS:
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return 0;
+ 
+diff --git a/src/gallium/drivers/crocus/crocus_screen.c b/src/gallium/drivers/crocus/crocus_screen.c
+index 464bebfc230..10927b1ea21 100644
+--- a/src/gallium/drivers/crocus/crocus_screen.c
++++ b/src/gallium/drivers/crocus/crocus_screen.c
+@@ -523,8 +523,6 @@ crocus_get_shader_param(struct pipe_screen *pscreen,
+       return 0;
+    case PIPE_SHADER_CAP_SUPPORTED_IRS:
+       return 1 << PIPE_SHADER_IR_NIR;
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-      return 1;
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+    case PIPE_SHADER_CAP_FP16_DERIVATIVES:
+diff --git a/src/gallium/drivers/d3d12/d3d12_screen.cpp b/src/gallium/drivers/d3d12/d3d12_screen.cpp
+index 6cdc043627f..4377361f826 100644
+--- a/src/gallium/drivers/d3d12/d3d12_screen.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_screen.cpp
+@@ -472,9 +472,6 @@ d3d12_get_shader_param(struct pipe_screen *pscreen,
+        */
+       return PIPE_MAX_SAMPLERS;
+ 
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-      return 0; /* not implemented */
+-
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return 0; /* no idea */
+ 
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_screen.c b/src/gallium/drivers/etnaviv/etnaviv_screen.c
+index fc3f63fbdc8..8f8e7c8d428 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_screen.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_screen.c
+@@ -419,7 +419,6 @@ etna_screen_get_shader_param(struct pipe_screen *pscreen,
+       return shader == PIPE_SHADER_FRAGMENT
+                 ? screen->specs.max_ps_uniforms * sizeof(float[4])
+                 : screen->specs.max_vs_uniforms * sizeof(float[4]);
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return false;
+    case PIPE_SHADER_CAP_SUPPORTED_IRS:
+diff --git a/src/gallium/drivers/freedreno/freedreno_screen.c b/src/gallium/drivers/freedreno/freedreno_screen.c
+index a2904a5cbb6..6021e062bd8 100644
+--- a/src/gallium/drivers/freedreno/freedreno_screen.c
++++ b/src/gallium/drivers/freedreno/freedreno_screen.c
+@@ -737,7 +737,6 @@ fd_screen_get_shader_param(struct pipe_screen *pscreen,
+       /* a2xx compiler doesn't handle indirect: */
+       return is_ir3(screen) ? 1 : 0;
+    case PIPE_SHADER_CAP_SUBROUTINES:
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
+diff --git a/src/gallium/drivers/i915/i915_screen.c b/src/gallium/drivers/i915/i915_screen.c
+index c0172359f28..10b21c323dc 100644
+--- a/src/gallium/drivers/i915/i915_screen.c
++++ b/src/gallium/drivers/i915/i915_screen.c
+@@ -381,7 +381,6 @@ i915_get_shader_param(struct pipe_screen *screen, enum pipe_shader_type shader,
+       case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+       case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
+          return I915_TEX_UNITS;
+-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+diff --git a/src/gallium/drivers/iris/iris_screen.c b/src/gallium/drivers/iris/iris_screen.c
+index accc1250e6d..96621660631 100644
+--- a/src/gallium/drivers/iris/iris_screen.c
++++ b/src/gallium/drivers/iris/iris_screen.c
+@@ -554,8 +554,6 @@ iris_get_shader_param(struct pipe_screen *pscreen,
+          irs |= 1 << PIPE_SHADER_IR_NIR_SERIALIZED;
+       return irs;
+    }
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-      return 1;
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+    case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+       return 0;
+diff --git a/src/gallium/drivers/nouveau/nv30/nv30_screen.c b/src/gallium/drivers/nouveau/nv30/nv30_screen.c
+index ee7f132b205..dfcebf56f9b 100644
+--- a/src/gallium/drivers/nouveau/nv30/nv30_screen.c
++++ b/src/gallium/drivers/nouveau/nv30/nv30_screen.c
+@@ -359,7 +359,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
+       case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
+       case PIPE_SHADER_CAP_INT16:
+       case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
+-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+@@ -408,7 +407,6 @@ nv30_screen_get_shader_param(struct pipe_screen *pscreen,
+       case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
+       case PIPE_SHADER_CAP_INT16:
+       case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
+-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+diff --git a/src/gallium/drivers/nouveau/nv50/nv50_screen.c b/src/gallium/drivers/nouveau/nv50/nv50_screen.c
+index 5b38bdab9a9..051c31d9785 100644
+--- a/src/gallium/drivers/nouveau/nv50/nv50_screen.c
++++ b/src/gallium/drivers/nouveau/nv50/nv50_screen.c
+@@ -374,7 +374,6 @@ nv50_screen_get_shader_param(struct pipe_screen *pscreen,
+       return shader == PIPE_SHADER_COMPUTE ? NV50_MAX_GLOBALS - 1 : 0;
+    case PIPE_SHADER_CAP_SUPPORTED_IRS:
+       return 1 << PIPE_SHADER_IR_NIR;
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+    case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTER_BUFFERS:
+diff --git a/src/gallium/drivers/nouveau/nvc0/nvc0_screen.c b/src/gallium/drivers/nouveau/nvc0/nvc0_screen.c
+index 7057a68b1db..eb21b09558e 100644
+--- a/src/gallium/drivers/nouveau/nvc0/nvc0_screen.c
++++ b/src/gallium/drivers/nouveau/nvc0/nvc0_screen.c
+@@ -438,8 +438,6 @@ nvc0_screen_get_shader_param(struct pipe_screen *pscreen,
+       return 1;
+    case PIPE_SHADER_CAP_INTEGERS:
+       return 1;
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-      return 1;
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+    case PIPE_SHADER_CAP_INT64_ATOMICS:
+    case PIPE_SHADER_CAP_FP16:
+diff --git a/src/gallium/drivers/panfrost/pan_screen.c b/src/gallium/drivers/panfrost/pan_screen.c
+index 5517c9891cb..363fc22cdea 100644
+--- a/src/gallium/drivers/panfrost/pan_screen.c
++++ b/src/gallium/drivers/panfrost/pan_screen.c
+@@ -459,7 +459,6 @@ panfrost_get_shader_param(struct pipe_screen *screen,
+       return false;
+ 
+    case PIPE_SHADER_CAP_INT64_ATOMICS:
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return 0;
+ 
+diff --git a/src/gallium/drivers/r300/r300_screen.c b/src/gallium/drivers/r300/r300_screen.c
+index 1500c07f841..776a5aca410 100644
+--- a/src/gallium/drivers/r300/r300_screen.c
++++ b/src/gallium/drivers/r300/r300_screen.c
+@@ -311,7 +311,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen,
+         case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
+         case PIPE_SHADER_CAP_INT16:
+         case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
+-        case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+@@ -400,7 +399,6 @@ static int r300_get_shader_param(struct pipe_screen *pscreen,
+         case PIPE_SHADER_CAP_INT64_ATOMICS:
+         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+         case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
+-        case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+         case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+         case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+diff --git a/src/gallium/drivers/r600/r600_pipe.c b/src/gallium/drivers/r600/r600_pipe.c
+index ab758cca833..cb381c3805d 100644
+--- a/src/gallium/drivers/r600/r600_pipe.c
++++ b/src/gallium/drivers/r600/r600_pipe.c
+@@ -615,8 +615,6 @@ static int r600_get_shader_param(struct pipe_screen* pscreen,
+ 		ir |= 1 << PIPE_SHADER_IR_NIR;
+ 		return ir;
+ 	}
+-	case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-		return 0;
+ 	case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+ 	case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+ 		if (rscreen->b.family >= CHIP_CEDAR &&
+diff --git a/src/gallium/drivers/radeonsi/si_get.c b/src/gallium/drivers/radeonsi/si_get.c
+index e794995830e..c9cdb391b3b 100644
+--- a/src/gallium/drivers/radeonsi/si_get.c
++++ b/src/gallium/drivers/radeonsi/si_get.c
+@@ -485,7 +485,6 @@ static int si_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_typ
+    case PIPE_SHADER_CAP_INTEGERS:
+    case PIPE_SHADER_CAP_INT64_ATOMICS:
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+    case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR: /* lowered in finalize_nir */
+    case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR: /* lowered in finalize_nir */
+       return 1;
+diff --git a/src/gallium/drivers/svga/svga_screen.c b/src/gallium/drivers/svga/svga_screen.c
+index 26e26bc151d..07dfaf60a8b 100644
+--- a/src/gallium/drivers/svga/svga_screen.c
++++ b/src/gallium/drivers/svga/svga_screen.c
+@@ -534,7 +534,6 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
+          return 16;
+       case PIPE_SHADER_CAP_SUPPORTED_IRS:
+          return (1 << PIPE_SHADER_IR_TGSI) | (1 << PIPE_SHADER_IR_NIR);
+-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+@@ -596,7 +595,6 @@ vgpu9_get_shader_param(struct pipe_screen *screen,
+          return 0;
+       case PIPE_SHADER_CAP_SUPPORTED_IRS:
+          return (1 << PIPE_SHADER_IR_TGSI) | (1 << PIPE_SHADER_IR_NIR);
+-      case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+       case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       case PIPE_SHADER_CAP_MAX_SHADER_BUFFERS:
+       case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+@@ -709,11 +707,6 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
+          return (1 << PIPE_SHADER_IR_TGSI) | (1 << PIPE_SHADER_IR_NIR);
+       else
+          return 0;
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-      /* For the above cases, we rely on the GLSL compiler to translate/lower
+-       * the TGIS instruction into other instructions we do support.
+-       */
+-      return 0;
+ 
+    case PIPE_SHADER_CAP_MAX_SHADER_IMAGES:
+       return sws->have_gl43 ? SVGA_MAX_IMAGES : 0;
+@@ -752,7 +745,7 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
+    .use_interpolated_input_intrinsics = true
+ 
+ #define VGPU10_OPTIONS                                                        \
+-   .lower_doubles_options = nir_lower_dfloor | nir_lower_dsign,               \
++   .lower_doubles_options = nir_lower_dfloor | nir_lower_dsign | nir_lower_dceil | nir_lower_dtrunc | nir_lower_dround_even, \
+    .lower_fmod = true,                                                        \
+    .lower_fpow = true
+ 
+diff --git a/src/gallium/drivers/v3d/v3d_screen.c b/src/gallium/drivers/v3d/v3d_screen.c
+index 6eeb86dabf4..08d02c9a73b 100644
+--- a/src/gallium/drivers/v3d/v3d_screen.c
++++ b/src/gallium/drivers/v3d/v3d_screen.c
+@@ -432,7 +432,6 @@ v3d_screen_get_shader_param(struct pipe_screen *pscreen, enum pipe_shader_type s
+         case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
+         case PIPE_SHADER_CAP_INT16:
+         case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
+-        case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+         case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+         case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
+         case PIPE_SHADER_CAP_MAX_HW_ATOMIC_COUNTERS:
+diff --git a/src/gallium/drivers/vc4/vc4_screen.c b/src/gallium/drivers/vc4/vc4_screen.c
+index c0d4e6406f0..6da53d63a65 100644
+--- a/src/gallium/drivers/vc4/vc4_screen.c
++++ b/src/gallium/drivers/vc4/vc4_screen.c
+@@ -293,7 +293,6 @@ vc4_screen_get_shader_param(struct pipe_screen *pscreen,
+         case PIPE_SHADER_CAP_FP16_CONST_BUFFERS:
+         case PIPE_SHADER_CAP_INT16:
+         case PIPE_SHADER_CAP_GLSL_16BIT_CONSTS:
+-        case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+         case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+                 return 0;
+         case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+diff --git a/src/gallium/drivers/zink/zink_compiler.c b/src/gallium/drivers/zink/zink_compiler.c
+index 38ff2ef2534..014b6cccdd7 100644
+--- a/src/gallium/drivers/zink/zink_compiler.c
++++ b/src/gallium/drivers/zink/zink_compiler.c
+@@ -1233,7 +1233,7 @@ zink_screen_init_compiler(struct zink_screen *screen)
+       .lower_usub_sat = true,
+       .lower_vector_cmp = true,
+       .lower_int64_options = 0,
+-      .lower_doubles_options = 0,
++      .lower_doubles_options = nir_lower_dround_even,
+       .lower_uniforms_to_ubo = true,
+       .has_fsub = true,
+       .has_isub = true,
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index e88e3629384..26397fce4a4 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -1240,9 +1240,6 @@ zink_get_shader_param(struct pipe_screen *pscreen,
+                        screen->info.props.limits.maxPerStageDescriptorSampledImages),
+                   PIPE_MAX_SAMPLERS);
+ 
+-   case PIPE_SHADER_CAP_DROUND_SUPPORTED:
+-      return 0; /* not implemented */
+-
+    case PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE:
+       return 0; /* no idea */
+ 
+diff --git a/src/gallium/include/pipe/p_defines.h b/src/gallium/include/pipe/p_defines.h
+index 38ab5f4a158..cefce408ef0 100644
+--- a/src/gallium/include/pipe/p_defines.h
++++ b/src/gallium/include/pipe/p_defines.h
+@@ -1027,7 +1027,6 @@ enum pipe_shader_cap
+    PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS,
+    PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED,
+    PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS,
+-   PIPE_SHADER_CAP_DROUND_SUPPORTED, /* all rounding modes */
+    PIPE_SHADER_CAP_TGSI_ANY_INOUT_DECL_RANGE,
+    PIPE_SHADER_CAP_MAX_SHADER_BUFFERS,
+    PIPE_SHADER_CAP_SUPPORTED_IRS,
+diff --git a/src/mesa/state_tracker/st_glsl_to_nir.cpp b/src/mesa/state_tracker/st_glsl_to_nir.cpp
+index 1d6e4a2e461..0255b0cca90 100644
+--- a/src/mesa/state_tracker/st_glsl_to_nir.cpp
++++ b/src/mesa/state_tracker/st_glsl_to_nir.cpp
+@@ -488,7 +488,6 @@ st_link_glsl_to_nir(struct gl_context *ctx,
+                     struct gl_shader_program *shader_program)
+ {
+    struct st_context *st = st_context(ctx);
+-   struct pipe_screen *pscreen = st->screen;
+    struct gl_linked_shader *linked_shader[MESA_SHADER_STAGES];
+    unsigned num_shaders = 0;
+ 
+@@ -509,19 +508,13 @@ st_link_glsl_to_nir(struct gl_context *ctx,
+ 
+          struct gl_linked_shader *shader = shader_program->_LinkedShaders[i];
+          exec_list *ir = shader->ir;
+-         gl_shader_stage stage = shader->Stage;
+-
+-         enum pipe_shader_type ptarget = pipe_shader_type_from_mesa(stage);
+-         bool have_dround = pscreen->get_shader_param(pscreen, ptarget,
+-                                                      PIPE_SHADER_CAP_DROUND_SUPPORTED);
+ 
+          lower_packing_builtins(ir, ctx->Extensions.ARB_shading_language_packing,
+                                 ctx->Extensions.ARB_gpu_shader5,
+                                 ctx->st->has_half_float_packing);
+          do_mat_op_to_vec(ir);
+ 
+-         lower_instructions(ir, have_dround,
+-                            ctx->Extensions.ARB_gpu_shader5);
++         lower_instructions(ir, ctx->Extensions.ARB_gpu_shader5);
+ 
+          do_vec_index_to_cond_assign(ir);
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,31 @@
+From 42907365f869ca5c60c3f0d8f2823cae706183cc Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Fri, 11 Aug 2023 17:26:37 +0800
+Subject: [PATCH 069/834] radeonsi: fill aco shader info for ps part
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24989>
+---
+ src/gallium/drivers/radeonsi/si_shader_aco.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/gallium/drivers/radeonsi/si_shader_aco.c b/src/gallium/drivers/radeonsi/si_shader_aco.c
+index a5d29acdf80..d04d534c9dc 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_aco.c
++++ b/src/gallium/drivers/radeonsi/si_shader_aco.c
+@@ -106,6 +106,8 @@ si_fill_aco_shader_info(struct si_shader *shader, struct aco_shader_info *info,
+       info->ps.num_interp = si_get_ps_num_interp(shader);
+       info->ps.spi_ps_input_ena = shader->config.spi_ps_input_ena;
+       info->ps.spi_ps_input_addr = shader->config.spi_ps_input_addr;
++      info->ps.alpha_reference = args->alpha_reference;
++      info->has_epilog = !shader->is_monolithic;
+       break;
+    default:
+       break;
+-- 
+2.42.0
+

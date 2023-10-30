@@ -1,0 +1,62 @@
+From 90455ac864ee06bcb61141d5b0a96294ee4d6b9b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Mon, 16 Oct 2023 13:07:46 +0200
+Subject: [PATCH 551/834] ac: Print IP type for IBs.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This makes it clearer what is what when reading IBs
+for debugging purposes.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25769>
+---
+ src/amd/common/ac_debug.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/src/amd/common/ac_debug.c b/src/amd/common/ac_debug.c
+index 54fd6ebc8bf..73585011450 100644
+--- a/src/amd/common/ac_debug.c
++++ b/src/amd/common/ac_debug.c
+@@ -774,6 +774,20 @@ void ac_parse_ib_chunk(FILE *f, uint32_t *ib_ptr, int num_dw, const int *trace_i
+    }
+ }
+ 
++static const char *ip_name(const enum amd_ip_type ip)
++{
++   switch (ip) {
++   case AMD_IP_GFX:
++      return "GFX";
++   case AMD_IP_COMPUTE:
++      return "COMPUTE";
++   case AMD_IP_SDMA:
++      return "SDMA";
++   default:
++      return "Unknown";
++   }
++}
++
+ /**
+  * Parse and print an IB into a file.
+  *
+@@ -794,12 +808,12 @@ void ac_parse_ib(FILE *f, uint32_t *ib, int num_dw, const int *trace_ids, unsign
+                  const char *name, enum amd_gfx_level gfx_level, enum radeon_family family,
+                  enum amd_ip_type ip_type, ac_debug_addr_callback addr_callback, void *addr_callback_data)
+ {
+-   fprintf(f, "------------------ %s begin ------------------\n", name);
++   fprintf(f, "------------------ %s begin - %s ------------------\n", name, ip_name(ip_type));
+ 
+    ac_parse_ib_chunk(f, ib, num_dw, trace_ids, trace_id_count, gfx_level, family, ip_type,
+                      addr_callback, addr_callback_data);
+ 
+-   fprintf(f, "------------------- %s end -------------------\n\n", name);
++   fprintf(f, "------------------- %s end - %s -------------------\n\n", name, ip_name(ip_type));
+ }
+ 
+ /**
+-- 
+2.42.0
+

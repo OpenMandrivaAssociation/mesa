@@ -1,0 +1,40 @@
+From 65b663cc9d49b8cb95ee6622e10e77cb9abd11c8 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Fri, 13 Oct 2023 00:06:51 +0200
+Subject: [PATCH 225/834] rusticl/kernel: Fix creation from programs not built
+ for every device
+
+OpenCL does not require that a kernel is created for every device. So we
+shouldn't assume there is a build for every device.
+
+API validation around launching kernels already takes this possibility
+into account.
+
+I did not verify if the commit below is actually the culprit and whether
+this bug existed before that, but a fix for older code also would have to
+look differently anyway.
+
+Fixes: 323dcbb4b52 ("rusticl: Move NirKernelBuild to ProgramDevBuild")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9968
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25696>
+---
+ src/gallium/frontends/rusticl/core/kernel.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/kernel.rs b/src/gallium/frontends/rusticl/core/kernel.rs
+index 539dfbcea46..8ef491e1a91 100644
+--- a/src/gallium/frontends/rusticl/core/kernel.rs
++++ b/src/gallium/frontends/rusticl/core/kernel.rs
+@@ -788,7 +788,7 @@ impl Kernel {
+         let builds = prog_build
+             .builds
+             .iter()
+-            .map(|(k, v)| (*k, v.kernels.get(&name).unwrap().clone()))
++            .filter_map(|(&dev, b)| b.kernels.get(&name).map(|k| (dev, k.clone())))
+             .collect();
+ 
+         // can't use vec!...
+-- 
+2.42.0
+

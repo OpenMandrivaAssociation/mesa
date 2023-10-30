@@ -1,0 +1,48 @@
+From bf1a68833b3ddf09ccc9d08f393a168d6a9812e0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Mon, 23 Oct 2023 09:59:35 +0200
+Subject: [PATCH 666/834] venus: Change the only occurrence of
+ VN_TRACE_BEGIN/END to VN_TRACE_SCOPE
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is the only part of venus using this macro, let's replace it with the scope
+one.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/virtio/vulkan/vn_pipeline.c | 15 ++++++++-------
+ 1 file changed, 8 insertions(+), 7 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_pipeline.c b/src/virtio/vulkan/vn_pipeline.c
+index 94afb324f70..1637fc96b26 100644
+--- a/src/virtio/vulkan/vn_pipeline.c
++++ b/src/virtio/vulkan/vn_pipeline.c
+@@ -1333,14 +1333,15 @@ vn_CreateGraphicsPipelines(VkDevice device,
+                createInfoCount);
+    struct vn_graphics_pipeline_fix_tmp *fix_tmp = NULL;
+ 
+-   VN_TRACE_BEGIN("fill_states");
+-   for (uint32_t i = 0; i < createInfoCount; i++) {
+-      struct vn_graphics_pipeline *pipeline =
+-         vn_graphics_pipeline_from_handle(pPipelines[i]);
+-      vn_graphics_pipeline_state_fill(&pCreateInfos[i], &pipeline->state,
+-                                      &fix_descs[i]);
++   {
++      VN_TRACE_SCOPE("fill_states");
++      for (uint32_t i = 0; i < createInfoCount; i++) {
++         struct vn_graphics_pipeline *pipeline =
++            vn_graphics_pipeline_from_handle(pPipelines[i]);
++         vn_graphics_pipeline_state_fill(&pCreateInfos[i], &pipeline->state,
++                                         &fix_descs[i]);
++      }
+    }
+-   VN_TRACE_END();
+ 
+    pCreateInfos = vn_fix_graphics_pipeline_create_infos(
+       dev, createInfoCount, pCreateInfos, fix_descs, &fix_tmp, alloc);
+-- 
+2.42.0
+

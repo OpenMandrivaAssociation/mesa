@@ -1,0 +1,25 @@
+From 7368a897528af1cd3d9869af1d5a5034d51d1795 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Tue, 10 Oct 2023 12:09:47 +0200
+Subject: [PATCH 096/834] ci/etnaviv: update ci expectation
+
+Reviewed-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25635>
+---
+ src/etnaviv/ci/etnaviv-gc2000-fails.txt | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/etnaviv/ci/etnaviv-gc2000-fails.txt b/src/etnaviv/ci/etnaviv-gc2000-fails.txt
+index ada8e01600a..b9f99903a16 100644
+--- a/src/etnaviv/ci/etnaviv-gc2000-fails.txt
++++ b/src/etnaviv/ci/etnaviv-gc2000-fails.txt
+@@ -2017,3 +2017,5 @@ spec@!opengl 2.1@pbo,Fail
+ spec@!opengl 2.1@pbo@test_polygon_stip,Fail
+ spec@!opengl 2.1@polygon-stipple-fs,Fail
+ spec@!opengl es 2.0@glsl-fs-pointcoord,Fail
++
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410,Fail
+-- 
+2.42.0
+

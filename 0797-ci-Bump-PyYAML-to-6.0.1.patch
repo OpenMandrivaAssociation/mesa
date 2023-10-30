@@ -1,0 +1,29 @@
+From a53a394d30b7290a9f455ee430acb15c12cba1a0 Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Wed, 25 Oct 2023 10:35:47 +0200
+Subject: [PATCH 797/834] ci: Bump PyYAML to 6.0.1
+
+Fixes an issue I am seeing on Fedora 39. For more details
+about the upstream fix see https://github.com/yaml/pyyaml/pull/702
+
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25878>
+---
+ bin/ci/requirements.txt | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/bin/ci/requirements.txt b/bin/ci/requirements.txt
+index 6015acd56e8..e329e510617 100644
+--- a/bin/ci/requirements.txt
++++ b/bin/ci/requirements.txt
+@@ -4,6 +4,6 @@ filecache==0.81
+ gql==3.4.0
+ python-dateutil==2.8.2
+ python-gitlab==3.5.0
+-PyYAML==6.0
++PyYAML==6.0.1
+ ruamel.yaml.clib==0.2.7
+ ruamel.yaml==0.17.21
+-- 
+2.42.0
+

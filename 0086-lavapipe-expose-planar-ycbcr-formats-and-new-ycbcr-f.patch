@@ -1,0 +1,117 @@
+From af062126ae1f26b01cad1165a4e31dc40e141b6b Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Mon, 9 Oct 2023 14:52:22 +1000
+Subject: [PATCH 086/834] lavapipe: expose planar ycbcr formats and new ycbcr
+ features
+
+This enables some extensions and a bunch of formats for ycbcr
+support.
+
+dEQP-VK.api.info.format_properties.g8_b8_r8_3plane_420_unorm,Fail
+dEQP-VK.api.info.format_properties.g8_b8r8_2plane_420_unorm,Fail
+
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/frontends/lavapipe/ci/lvp-fails.txt |  3 ---
+ src/gallium/frontends/lavapipe/lvp_device.c     |  3 +++
+ src/gallium/frontends/lavapipe/lvp_formats.c    | 17 ++++++++++++++---
+ src/gallium/frontends/lavapipe/lvp_private.h    | 14 +-------------
+ src/virtio/ci/venus-fails.txt                   |  2 --
+ 5 files changed, 18 insertions(+), 21 deletions(-)
+
+diff --git a/src/gallium/frontends/lavapipe/ci/lvp-fails.txt b/src/gallium/frontends/lavapipe/ci/lvp-fails.txt
+index b4400c18373..dbc3ab238c4 100644
+--- a/src/gallium/frontends/lavapipe/ci/lvp-fails.txt
++++ b/src/gallium/frontends/lavapipe/ci/lvp-fails.txt
+@@ -4,6 +4,3 @@ dEQP-VK.rasterization.provoking_vertex.transform_feedback.first.line_strip_with_
+ dEQP-VK.rasterization.provoking_vertex.transform_feedback.per_pipeline.triangle_strip_with_adjacency,Fail
+ 
+ dEQP-VK.binding_model.descriptor_buffer.basic.limits,Fail
+-
+-# New CTS failures in 1.3.6.3
+-dEQP-VK.api.info.image_format_properties.2d.linear.g8_b8r8_2plane_420_unorm,Fail
+diff --git a/src/gallium/frontends/lavapipe/lvp_device.c b/src/gallium/frontends/lavapipe/lvp_device.c
+index ddb31c5ebea..a816e02a06e 100644
+--- a/src/gallium/frontends/lavapipe/lvp_device.c
++++ b/src/gallium/frontends/lavapipe/lvp_device.c
+@@ -129,6 +129,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported =
+    .KHR_pipeline_library                  = true,
+    .KHR_relaxed_block_layout              = true,
+    .KHR_sampler_mirror_clamp_to_edge      = true,
++   .KHR_sampler_ycbcr_conversion          = true,
+    .KHR_separate_depth_stencil_layouts    = true,
+    .KHR_shader_atomic_int64               = true,
+    .KHR_shader_clock                      = true,
+@@ -212,6 +213,8 @@ static const struct vk_device_extension_table lvp_device_extensions_supported =
+    .EXT_transform_feedback                = true,
+    .EXT_vertex_attribute_divisor          = true,
+    .EXT_vertex_input_dynamic_state        = true,
++   .EXT_ycbcr_image_arrays                = true,
++   .EXT_ycbcr_2plane_444_formats          = true,
+    .EXT_custom_border_color               = true,
+    .EXT_provoking_vertex                  = true,
+    .EXT_line_rasterization                = true,
+diff --git a/src/gallium/frontends/lavapipe/lvp_formats.c b/src/gallium/frontends/lavapipe/lvp_formats.c
+index dd5fde6470a..b797f4ea2c6 100644
+--- a/src/gallium/frontends/lavapipe/lvp_formats.c
++++ b/src/gallium/frontends/lavapipe/lvp_formats.c
+@@ -137,9 +137,20 @@ lvp_physical_device_get_format_properties(struct lvp_physical_device *physical_d
+          features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+       if (lvp_is_filter_minmax_format_supported(format))
+          features |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_MINMAX_BIT;
+-      if (vk_format_get_ycbcr_info(format)) {
+-         features |= VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT |
+-                     VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT;
++      const struct vk_format_ycbcr_info *ycbcr_info =
++         vk_format_get_ycbcr_info(format);
++      if (ycbcr_info) {
++         if (ycbcr_info->n_planes > 1)
++            features |= VK_FORMAT_FEATURE_DISJOINT_BIT;
++         else
++            features |= VK_FORMAT_FEATURE_2_MIDPOINT_CHROMA_SAMPLES_BIT;
++
++         for (uint8_t plane = 0; plane < ycbcr_info->n_planes; plane++) {
++            const struct vk_format_ycbcr_plane *plane_info = &ycbcr_info->planes[plane];
++            if (plane_info->denominator_scales[0] > 1 ||
++                plane_info->denominator_scales[1] > 1)
++               features |= VK_FORMAT_FEATURE_2_COSITED_CHROMA_SAMPLES_BIT;
++         }
+ 
+          /* The subsampled formats have no support for linear filters. */
+          const struct util_format_description *desc = util_format_description(pformat);
+diff --git a/src/gallium/frontends/lavapipe/lvp_private.h b/src/gallium/frontends/lavapipe/lvp_private.h
+index 5c6d73ae7f8..01627b6e19b 100644
+--- a/src/gallium/frontends/lavapipe/lvp_private.h
++++ b/src/gallium/frontends/lavapipe/lvp_private.h
+@@ -676,19 +676,7 @@ lvp_vk_format_to_pipe_format(VkFormat format)
+        format == VK_FORMAT_R64G64B64_SFLOAT ||
+        format == VK_FORMAT_A2R10G10B10_SINT_PACK32 ||
+        format == VK_FORMAT_A2B10G10R10_SINT_PACK32 ||
+-       format == VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM ||
+-       format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
+-       format == VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM ||
+-       format == VK_FORMAT_G8_B8R8_2PLANE_422_UNORM ||
+-       format == VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM ||
+-       format == VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM ||
+-       format == VK_FORMAT_G16_B16R16_2PLANE_420_UNORM ||
+-       format == VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM ||
+-       format == VK_FORMAT_G16_B16R16_2PLANE_422_UNORM ||
+-       format == VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM ||
+-       format == VK_FORMAT_D16_UNORM_S8_UINT ||
+-       format == VK_FORMAT_R10X6G10X6_UNORM_2PACK16 ||
+-       format == VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16)
++       format == VK_FORMAT_D16_UNORM_S8_UINT)
+       return PIPE_FORMAT_NONE;
+ 
+    return vk_format_to_pipe_format(format);
+diff --git a/src/virtio/ci/venus-fails.txt b/src/virtio/ci/venus-fails.txt
+index 1ccf418ff9f..e69de29bb2d 100644
+--- a/src/virtio/ci/venus-fails.txt
++++ b/src/virtio/ci/venus-fails.txt
+@@ -1,2 +0,0 @@
+-# New CTS failures in 1.3.6.3
+-dEQP-VK.api.info.image_format_properties.2d.linear.g8_b8r8_2plane_420_unorm,Fail
+-- 
+2.42.0
+

@@ -1,0 +1,53 @@
+From f60a9d89c1cce91a1c8155f312e450effffa0fc3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Wed, 20 Sep 2023 16:36:14 +0200
+Subject: [PATCH 663/834] freedreno/drm/virtio: Use MESA_TRACE_SCOPE instead of
+ _BEGIN/_END
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The MESA_TRACE_SCOPE macro is an exact replacement for this.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/freedreno/drm/virtio/virtio_device.c | 3 +--
+ src/freedreno/drm/virtio/virtio_priv.h   | 3 +--
+ 2 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/freedreno/drm/virtio/virtio_device.c b/src/freedreno/drm/virtio/virtio_device.c
+index f2daf0aa09f..6b3efd29a5a 100644
+--- a/src/freedreno/drm/virtio/virtio_device.c
++++ b/src/freedreno/drm/virtio/virtio_device.c
+@@ -369,11 +369,10 @@ out_unlock:
+       return ret;
+ 
+    if (sync) {
+-      MESA_TRACE_BEGIN("virtio_execbuf sync");
++      MESA_TRACE_SCOPE("virtio_execbuf sync");
+       sync_wait(fence_fd, -1);
+       close(fence_fd);
+       virtio_host_sync(dev, req);
+-      MESA_TRACE_END();
+    }
+ 
+    return 0;
+diff --git a/src/freedreno/drm/virtio/virtio_priv.h b/src/freedreno/drm/virtio/virtio_priv.h
+index 58d09ff2635..e0f50018040 100644
+--- a/src/freedreno/drm/virtio/virtio_priv.h
++++ b/src/freedreno/drm/virtio/virtio_priv.h
+@@ -86,9 +86,8 @@ struct virtio_device {
+ FD_DEFINE_CAST(fd_device, virtio_device);
+ 
+ #define virtio_ioctl(fd, name, args) ({                              \
+-      MESA_TRACE_BEGIN(#name);                                       \
++      MESA_TRACE_SCOPE(#name);                                       \
+       int ret = drmIoctl((fd), DRM_IOCTL_ ## name, (args));          \
+-      MESA_TRACE_END();                                              \
+       ret;                                                           \
+    })
+ 
+-- 
+2.42.0
+

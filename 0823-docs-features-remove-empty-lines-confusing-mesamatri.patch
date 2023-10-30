@@ -1,0 +1,35 @@
+From 6aef22af77065c8aacf2a1ce31cd6fb7d85edf5b Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Wed, 25 Oct 2023 15:16:14 +0200
+Subject: [PATCH 823/834] docs/features: remove empty lines confusing
+ mesamatrix
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25886>
+---
+ docs/features.txt | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index a03af715a0c..1dd49e3d5a0 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -796,7 +796,6 @@ Clover extensions that are not part of any OpenCL version:
+   cl_khr_terminate_context                              not started
+   cl_khr_throttle_hints                                 not started
+   cl_khr_work_group_uniform_arithmetic                  not started
+-
+   cl_arm_non_uniform_work_group_size                    not started
+   cl_arm_shared_virtual_memory                          DONE (nvc0)
+   cl_intel_unified_shared_memory                        not started
+@@ -951,7 +950,6 @@ Rusticl extensions that are not part of any OpenCL version:
+   cl_khr_terminate_context                              not started
+   cl_khr_throttle_hints                                 not started
+   cl_khr_work_group_uniform_arithmetic                  not started
+-
+   cl_arm_non_uniform_work_group_size                    not started
+   cl_arm_shared_virtual_memory                          in progress (nvc0)
+   cl_intel_unified_shared_memory                        not started
+-- 
+2.42.0
+

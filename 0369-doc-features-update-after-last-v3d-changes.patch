@@ -1,0 +1,46 @@
+From bd674bf6289bc2b7a847401ef13b3a854479e99a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alejandro=20Pi=C3=B1eiro?= <apinheiro@igalia.com>
+Date: Wed, 4 Oct 2023 13:55:35 +0200
+Subject: [PATCH 369/834] doc/features: update after last v3d changes
+
+V3D v71 supports new hw features, like 8 draw buffers.
+
+As we are here, we also update some features that have been working
+for some time now, even on v41.
+
+Reviewed-by: Juan A. Suarez <jasuarez@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ docs/features.txt | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index dfd6aa9d69c..d76e9f34f59 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -61,10 +61,10 @@ GL 3.0, GLSL 1.30 --- all DONE: freedreno, nv50, nvc0, r600, radeonsi, llvmpipe,
+   glGetStringi command                                  DONE
+   glTexParameterI, glGetTexParameterI commands          DONE
+   glVertexAttribI commands                              DONE
+-  Depth format cube textures                            DONE ()
++  Depth format cube textures                            DONE (v3d)
+   GLX_ARB_create_context (GLX 1.4 is required)          DONE (v3d, vc4)
+-  Multisample anti-aliasing                             DONE (freedreno/a5xx+, freedreno (*), llvmpipe (*), softpipe (*)))
+-  8 draw buffers                                        DONE (panfrost/t760+)
++  Multisample anti-aliasing                             DONE (freedreno/a5xx+, freedreno (*), llvmpipe (*), softpipe (*)), v3d)
++  8 draw buffers                                        DONE (panfrost/t760+, v3d/vc7+)
+ 
+ (*) freedreno (a2xx-a4xx), llvmpipe, and softpipe have fake Multisample anti-aliasing support
+ 
+@@ -75,7 +75,7 @@ GL 3.1, GLSL 1.40 --- all DONE: freedreno, nv50, nvc0, r600, radeonsi, llvmpipe,
+   GL_ARB_draw_instanced (Instanced drawing)             DONE (etnaviv/HALTI2, v3d, crocus)
+   GL_ARB_copy_buffer (Buffer copying)                   DONE (v3d, vc4, lima, crocus)
+   GL_NV_primitive_restart (Primitive restart)           DONE (v3d, crocus)
+-  16 vertex texture image units                         DONE ()
++  16 vertex texture image units                         DONE (v3d)
+   GL_ARB_texture_buffer_object (Texture buffer objs)    DONE (v3d)
+   GL_ARB_texture_rectangle (Rectangular textures)       DONE (v3d, vc4, lima, crocus, etnaviv)
+   GL_ARB_uniform_buffer_object (Uniform buffer objs)    DONE (v3d, crocus)
+-- 
+2.42.0
+

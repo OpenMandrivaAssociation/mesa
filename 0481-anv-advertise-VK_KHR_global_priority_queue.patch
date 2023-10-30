@@ -1,0 +1,27 @@
+From abf5eb57530b71e1f9aa047a443ee31261b61cdb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Iv=C3=A1n=20Briano?= <ivan.briano@intel.com>
+Date: Mon, 16 Oct 2023 12:16:58 -0700
+Subject: [PATCH 481/834] anv: advertise VK_KHR_global_priority_queue
+
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25758>
+---
+ src/intel/vulkan/anv_device.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index f68ee8290e8..edb1a3dc77f 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -240,6 +240,8 @@ get_device_extensions(const struct anv_physical_device *device,
+       .KHR_format_feature_flags2             = true,
+       .KHR_fragment_shading_rate             = device->info.ver >= 11,
+       .KHR_get_memory_requirements2          = true,
++      .KHR_global_priority                   = device->max_context_priority >=
++                                               VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR,
+       .KHR_image_format_list                 = true,
+       .KHR_imageless_framebuffer             = true,
+ #ifdef ANV_USE_WSI_PLATFORM
+-- 
+2.42.0
+

@@ -1,0 +1,104 @@
+From ca42706dbaf5f144ee2817313f06d62659160ba9 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 10:53:32 +0200
+Subject: [PATCH 006/834] docs: apply some trivial redirects
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+These were found by using the linkcheck builder.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/ci/docker.rst        | 2 +-
+ docs/ci/index.rst         | 2 +-
+ docs/codingstyle.rst      | 4 ++--
+ docs/drivers/llvmpipe.rst | 2 +-
+ docs/drivers/zink.rst     | 2 +-
+ docs/egl.rst              | 2 +-
+ 6 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/docs/ci/docker.rst b/docs/ci/docker.rst
+index 7d571ab59bc..4a3c842416d 100644
+--- a/docs/ci/docker.rst
++++ b/docs/ci/docker.rst
+@@ -3,7 +3,7 @@ Docker CI
+ 
+ For LLVMpipe and Softpipe CI, we run tests in a container containing
+ VK-GL-CTS, on the shared GitLab runners provided by `freedesktop
+-<https://freedesktop.org>`__
++<https://www.freedesktop.org>`__
+ 
+ Software architecture
+ ---------------------
+diff --git a/docs/ci/index.rst b/docs/ci/index.rst
+index 4db0719e9d4..dcc2e4d9db2 100644
+--- a/docs/ci/index.rst
++++ b/docs/ci/index.rst
+@@ -107,7 +107,7 @@ non-redistributable traces can request permission to Daniel Stone <daniels@colla
+ 
+ gitlab.freedesktop.org accounts that are to be granted access to these traces will be
+ added to the OPA policy for the MinIO repository as per
+-https://gitlab.freedesktop.org/freedesktop/helm-gitlab-config/-/commit/a3cd632743019f68ac8a829267deb262d9670958 .
++https://gitlab.freedesktop.org/freedesktop/helm-gitlab-infra/-/commit/a3cd632743019f68ac8a829267deb262d9670958 .
+ 
+ So the jobs are created in personal repositories, the name of the user's account needs
+ to be added to the rules attribute of the GitLab CI job that accesses the restricted
+diff --git a/docs/codingstyle.rst b/docs/codingstyle.rst
+index 0b495d3bc9b..cf4d4ba9fd0 100644
+--- a/docs/codingstyle.rst
++++ b/docs/codingstyle.rst
+@@ -84,8 +84,8 @@ Add this to your ``.emacs`` to automatically format any C & C++ file
+ If ``/usr/share/clang/clang-format.el`` doesn't exist, look through the
+ files in the package providing ``clang-format`` in your distro. If you
+ can't find anything (eg. on Debian/Ubuntu), refer to `this StackOverflow
+-answer <https://stackoverflow.com/a/59850773>`__ to install clang-format
+-through Emacs instead.
++answer <https://stackoverflow.com/questions/59690583/how-do-you-use-clang-format-on-emacs-ubuntu/59850773#59850773>`__
++to install clang-format through Emacs instead.
+ 
+ git ``pre-commit`` hook
+ ***********************
+diff --git a/docs/drivers/llvmpipe.rst b/docs/drivers/llvmpipe.rst
+index cd2d4eb9d03..b6595afc012 100644
+--- a/docs/drivers/llvmpipe.rst
++++ b/docs/drivers/llvmpipe.rst
+@@ -223,7 +223,7 @@ Recommended Reading
+ -  Rasterization
+ 
+    -  `Triangle Scan Conversion using 2D Homogeneous
+-      Coordinates <https://www.csee.umbc.edu/~olano/papers/2dh-tri/>`__
++      Coordinates <https://redirect.cs.umbc.edu/~olano/papers/2dh-tri/>`__
+    -  `Rasterization on
+       Larrabee <https://www.drdobbs.com/parallel/rasterization-on-larrabee/217200602>`__
+    -  `Rasterization using half-space
+diff --git a/docs/drivers/zink.rst b/docs/drivers/zink.rst
+index 09652ba5d39..6efa63e2e1d 100644
+--- a/docs/drivers/zink.rst
++++ b/docs/drivers/zink.rst
+@@ -324,7 +324,7 @@ Vulkan Validation Layers
+ ^^^^^^^^^^^^^^^^^^^^^^^^
+ 
+ Another useful tool for debugging is the `Vulkan Validation Layers
+-<https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/README.md>`__.
++<https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/main/README.md>`__.
+ 
+ The validation layers effectively insert extra checking between Zink and the
+ Vulkan driver, pointing out incorrect usage of the Vulkan API. The layers can
+diff --git a/docs/egl.rst b/docs/egl.rst
+index e706a84801b..9d17ca266ae 100644
+--- a/docs/egl.rst
++++ b/docs/egl.rst
+@@ -160,7 +160,7 @@ EGL Drivers
+    This driver can share DRI drivers with ``libGL``.
+ 
+ ``haiku``
+-   This driver supports only the `Haiku <https://haiku-os.org>`__
++   This driver supports only the `Haiku <https://www.haiku-os.org/>`__
+    platform. It is also much less feature-complete than ``egl_dri2``,
+    supporting only part of EGL 1.4 and none of the extensions beyond it.
+ 
+-- 
+2.42.0
+

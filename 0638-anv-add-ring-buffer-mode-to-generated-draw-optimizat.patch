@@ -1,0 +1,671 @@
+From 11b4c23d19b26c3510e27d3b5e51271ca52c6bd5 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Wed, 20 Sep 2023 20:04:16 +0300
+Subject: [PATCH 638/834] anv: add ring buffer mode to generated draw
+ optimization
+
+When the number of draw calls is very large, instead of allocating
+large amounts of batch buffer space for the draws, use a ring buffer
+and process the draw calls by batches.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8645
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/anv_batch_chain.c            |  11 +
+ src/intel/vulkan/anv_device.c                 |   3 +
+ src/intel/vulkan/anv_internal_kernels.c       |   4 +-
+ src/intel/vulkan/anv_private.h                |  11 +-
+ .../vulkan/genX_cmd_draw_generated_indirect.h | 329 ++++++++++++++++--
+ .../shaders/common_generated_draws.glsl       |  24 +-
+ .../vulkan/shaders/gfx11_generated_draws.glsl |   4 +-
+ .../vulkan/shaders/gfx9_generated_draws.glsl  |   4 +-
+ src/intel/vulkan/shaders/interface.h          |  15 +
+ src/util/driconf.h                            |   4 +
+ 10 files changed, 367 insertions(+), 42 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_batch_chain.c b/src/intel/vulkan/anv_batch_chain.c
+index 57c24265f47..eb39ae6e85b 100644
+--- a/src/intel/vulkan/anv_batch_chain.c
++++ b/src/intel/vulkan/anv_batch_chain.c
+@@ -908,6 +908,11 @@ anv_cmd_buffer_fini_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
+       list_del(&bbo->link);
+       anv_batch_bo_destroy(bbo, cmd_buffer);
+    }
++
++   if (cmd_buffer->generation.ring_bo) {
++      anv_bo_pool_free(&cmd_buffer->device->batch_bo_pool,
++                       cmd_buffer->generation.ring_bo);
++   }
+ }
+ 
+ void
+@@ -958,6 +963,12 @@ anv_cmd_buffer_reset_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
+    cmd_buffer->generation.batch.end   = NULL;
+    cmd_buffer->generation.batch.next  = NULL;
+ 
++   if (cmd_buffer->generation.ring_bo) {
++      anv_bo_pool_free(&cmd_buffer->device->batch_bo_pool,
++                       cmd_buffer->generation.ring_bo);
++      cmd_buffer->generation.ring_bo = NULL;
++   }
++
+    cmd_buffer->total_batch_size = 0;
+ }
+ 
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index b1444977190..f574a69ef19 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -81,6 +81,7 @@ static const driOptionDescription anv_dri_options[] = {
+       DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
+       DRI_CONF_ANV_FP64_WORKAROUND_ENABLED(false)
+       DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(4)
++      DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(100)
+       DRI_CONF_NO_16BIT(false)
+       DRI_CONF_INTEL_ENABLE_WA_14018912822(false)
+       DRI_CONF_ANV_QUERY_CLEAR_WITH_BLORP_THRESHOLD(6)
+@@ -1597,6 +1598,8 @@ anv_init_dri_options(struct anv_instance *instance)
+             driQueryOptionb(&instance->dri_options, "fp64_workaround_enabled");
+     instance->generated_indirect_threshold =
+             driQueryOptioni(&instance->dri_options, "generated_indirect_threshold");
++    instance->generated_indirect_ring_threshold =
++            driQueryOptioni(&instance->dri_options, "generated_indirect_ring_threshold");
+     instance->query_clear_with_blorp_threshold =
+        driQueryOptioni(&instance->dri_options, "query_clear_with_blorp_threshold");
+     instance->query_copy_with_shader_threshold =
+diff --git a/src/intel/vulkan/anv_internal_kernels.c b/src/intel/vulkan/anv_internal_kernels.c
+index af3622809d6..ade3795b90d 100644
+--- a/src/intel/vulkan/anv_internal_kernels.c
++++ b/src/intel/vulkan/anv_internal_kernels.c
+@@ -355,8 +355,8 @@ anv_device_init_internal_kernels(struct anv_device *device)
+                        ARRAY_SIZE(gfx11_generated_draws_spv_source) :
+                        ARRAY_SIZE(gfx9_generated_draws_spv_source),
+          .send_count = device->info->ver >= 11 ?
+-                       12 /* 2 * (2 loads + 3 stores) + 1 load + 1 store */ :
+-                       18 /* 2 * (2 loads + 6 stores) + 1 load + 1 store */,
++                       14 /* 2 * (2 loads + 3 stores) + 1 load + 3 store */ :
++                       20 /* 2 * (2 loads + 6 stores) + 1 load + 3 store */,
+          .bind_map   = {
+             .num_bindings = 5,
+             .bindings     = {
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 03d96cc458b..883bde3f76a 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -1058,6 +1058,7 @@ struct anv_instance {
+     bool                                        fp64_workaround_enabled;
+     float                                       lower_depth_range_rate;
+     unsigned                                    generated_indirect_threshold;
++    unsigned                                    generated_indirect_ring_threshold;
+     unsigned                                    query_clear_with_blorp_threshold;
+     unsigned                                    query_copy_with_shader_threshold;
+     unsigned                                    force_vk_vendor;
+@@ -3610,8 +3611,16 @@ struct anv_cmd_buffer {
+        */
+       struct list_head                          batch_bos;
+ 
++      /** Ring buffer of generated commands
++       *
++       * When generating draws in ring mode, this buffer will hold generated
++       * 3DPRIMITIVE commands.
++       */
++      struct anv_bo                            *ring_bo;
++
+       /**
+-       * State tracking of the generation shader.
++       * State tracking of the generation shader (only used for the non-ring
++       * mode).
+        */
+       struct anv_simple_shader                  shader_state;
+    } generation;
+diff --git a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+index b7c78e935c4..2928e674090 100644
+--- a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
++++ b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+@@ -39,8 +39,11 @@
+  */
+ #define MAX_GENERATED_DRAW_COUNT (8192 * 8192)
+ 
+-static struct anv_generated_indirect_params *
++#define MAX_RING_BO_ITEMS (8192)
++
++static struct anv_state
+ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
++                                     struct anv_simple_shader *simple_state,
+                                      struct anv_address generated_cmds_addr,
+                                      uint32_t generated_cmd_stride,
+                                      struct anv_address indirect_data_addr,
+@@ -50,12 +53,13 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+                                      uint32_t item_count,
+                                      struct anv_address count_addr,
+                                      uint32_t max_count,
+-                                     bool indexed)
++                                     bool indexed,
++                                     uint32_t ring_count)
+ {
+    struct anv_device *device = cmd_buffer->device;
+ 
+    struct anv_state push_data_state =
+-      genX(simple_shader_alloc_push)(&cmd_buffer->generation.shader_state,
++      genX(simple_shader_alloc_push)(simple_state,
+                                      sizeof(struct anv_generated_indirect_params));
+ 
+    struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+@@ -64,8 +68,7 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+    struct anv_address draw_count_addr;
+    if (anv_address_is_null(count_addr)) {
+       draw_count_addr = anv_address_add(
+-         genX(simple_shader_push_state_address)(
+-            &cmd_buffer->generation.shader_state, push_data_state),
++         genX(simple_shader_push_state_address)(simple_state, push_data_state),
+          offsetof(struct anv_generated_indirect_params, draw_count));
+    } else {
+       draw_count_addr = count_addr;
+@@ -86,9 +89,13 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+                                    (vs_prog_data->uses_drawid ? ANV_GENERATED_FLAG_DRAWID : 0) |
+                                    (anv_mocs(device, indirect_data_addr.bo,
+                                              ISL_SURF_USAGE_VERTEX_BUFFER_BIT) << 8) |
++                                   (!anv_address_is_null(count_addr) ?
++                                    ANV_GENERATED_FLAG_COUNT : 0) |
++                                   (ring_count != 0 ? ANV_GENERATED_FLAG_RING_MODE : 0) |
+                                    ((generated_cmd_stride / 4) << 16),
+          .draw_base              = item_base,
+          .max_draw_count         = max_count,
++         .ring_count             = ring_count,
+          .instance_multiplier    = pipeline->instance_multiplier,
+       },
+       .draw_count                = anv_address_is_null(count_addr) ? max_count : 0,
+@@ -98,10 +105,9 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+       .draw_count_addr           = anv_address_physical(draw_count_addr),
+    };
+ 
+-   genX(emit_simple_shader_dispatch)(&cmd_buffer->generation.shader_state,
+-                                     item_count, push_data_state);
++   genX(emit_simple_shader_dispatch)(simple_state, item_count, push_data_state);
+ 
+-   return push_data;
++   return push_data_state;
+ }
+ 
+ static void
+@@ -211,12 +217,12 @@ genX(cmd_buffer_rewrite_forward_end_addr)(struct anv_cmd_buffer *cmd_buffer,
+ }
+ 
+ static void
+-genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer,
+-                                               struct anv_address indirect_data_addr,
+-                                               uint32_t indirect_data_stride,
+-                                               struct anv_address count_addr,
+-                                               uint32_t max_draw_count,
+-                                               bool indexed)
++genX(cmd_buffer_emit_indirect_generated_draws_inplace)(struct anv_cmd_buffer *cmd_buffer,
++                                                       struct anv_address indirect_data_addr,
++                                                       uint32_t indirect_data_stride,
++                                                       struct anv_address count_addr,
++                                                       uint32_t max_draw_count,
++                                                       bool indexed)
+ {
+    const bool start_generation_batch =
+       anv_address_is_null(cmd_buffer->generation.return_addr);
+@@ -270,18 +276,6 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
+    if (start_generation_batch)
+       genX(cmd_buffer_emit_indirect_generated_draws_init)(cmd_buffer);
+ 
+-   /* In order to have the vertex fetch gather the data we need to have a non
+-    * 0 stride. It's possible to have a 0 stride given by the application when
+-    * draw_count is 1, but we need a correct value for the
+-    * VERTEX_BUFFER_STATE::BufferPitch, so ensure the caller set this
+-    * correctly :
+-    *
+-    * Vulkan spec, vkCmdDrawIndirect:
+-    *
+-    *   "If drawCount is less than or equal to one, stride is ignored."
+-    */
+-   assert(indirect_data_stride > 0);
+-
+    if (cmd_buffer->state.conditional_render_enabled)
+       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
+ 
+@@ -310,9 +304,10 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
+       if (result != VK_SUCCESS)
+          return;
+ 
+-      struct anv_generated_indirect_params *params =
++      struct anv_state params_state =
+          genX(cmd_buffer_emit_generate_draws)(
+             cmd_buffer,
++            &cmd_buffer->generation.shader_state,
+             anv_batch_current_address(&cmd_buffer->batch),
+             draw_cmd_stride,
+             indirect_data_addr,
+@@ -322,7 +317,9 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
+             item_count,
+             count_addr,
+             max_draw_count,
+-            indexed);
++            indexed,
++            0 /* ring_count */);
++      struct anv_generated_indirect_params *params = params_state.map;
+ 
+       anv_batch_advance(&cmd_buffer->batch, draw_cmd_size);
+ 
+@@ -339,6 +336,282 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
+ #endif
+ }
+ 
++static void
++genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd_buffer,
++                                                      struct anv_address indirect_data_addr,
++                                                      uint32_t indirect_data_stride,
++                                                      struct anv_address count_addr,
++                                                      uint32_t max_draw_count,
++                                                      bool indexed)
++{
++   struct anv_device *device = cmd_buffer->device;
++
++   genX(flush_pipeline_select_3d)(cmd_buffer);
++
++   const uint32_t draw_cmd_stride =
++      genX(cmd_buffer_get_generated_draw_stride)(cmd_buffer);
++
++   if (cmd_buffer->generation.ring_bo == NULL) {
++      const uint32_t bo_size = align(
++         draw_cmd_stride * MAX_RING_BO_ITEMS +
++#if GFX_VER == 9
++         4 * MAX_RING_BO_ITEMS +
++#endif
++         GENX(MI_BATCH_BUFFER_START_length) * 4,
++         4096);
++      VkResult result = anv_bo_pool_alloc(&device->batch_bo_pool, bo_size,
++                                          &cmd_buffer->generation.ring_bo);
++      if (result != VK_SUCCESS) {
++         anv_batch_set_error(&cmd_buffer->batch, result);
++         return;
++      }
++   }
++
++   /* How many items will be generated by each iteration of the generation
++    * shader dispatch.
++    */
++   const uint32_t ring_count = MIN2(MAX_RING_BO_ITEMS, max_draw_count);
++
++   /* The ring bo has the following layout:
++    *
++    *   --------------------------------------------------
++    *   |            ring_count * 3DPRIMITIVE            |
++    *   |------------------------------------------------|
++    *   | jump instruction (either back to generate more |
++    *   | commands or to the next set of commands)       |
++    *   |------------------------------------------------|
++    *   |          draw ids (only used on Gfx9)          |
++    *   --------------------------------------------------
++    */
++
++   struct anv_address draw_id_addr = (struct anv_address) {
++      .bo     = cmd_buffer->generation.ring_bo,
++      .offset = ring_count * draw_cmd_stride +
++                GENX(MI_BATCH_BUFFER_START_length) * 4,
++   };
++
++#if GFX_VER == 9
++   /* Mark the VB-0 as using the entire ring_bo, but only for the draw call
++    * starting the generation batch. All the following ones will use the same
++    * area.
++    */
++   genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(
++      cmd_buffer, 0,
++      (struct anv_address) {
++         .bo = cmd_buffer->generation.ring_bo,
++      },
++      cmd_buffer->generation.ring_bo->size);
++
++   struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
++   const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
++
++   if (vs_prog_data->uses_baseinstance ||
++       vs_prog_data->uses_firstvertex) {
++      /* We're using the indirect buffer directly to source base instance &
++       * first vertex values. Mark the entire area as used.
++       */
++      genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, ANV_SVGS_VB_INDEX,
++                                                     indirect_data_addr,
++                                                     indirect_data_stride * max_draw_count);
++   }
++
++   if (vs_prog_data->uses_drawid) {
++      /* Mark the whole draw id buffer as used. */
++      genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(cmd_buffer, ANV_SVGS_VB_INDEX,
++                                                     draw_id_addr,
++                                                     sizeof(uint32_t) * max_draw_count);
++   }
++#endif
++
++   /* Apply the pipeline flush here so the indirect data is available for the
++    * generation shader.
++    */
++   genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
++
++   trace_intel_begin_generate_draws(&cmd_buffer->trace);
++
++   /***
++    * This is where the command buffer below will jump back to if we need to
++    * generate more draws.
++    */
++   struct anv_address gen_addr = anv_batch_current_address(&cmd_buffer->batch);
++
++#if GFX_VER >= 12
++   /* Prior to Gfx12 we cannot disable the CS prefetch but it doesn't matter
++    * as the prefetch shouldn't follow the MI_BATCH_BUFFER_START.
++    */
++   anv_batch_emit(&cmd_buffer->batch, GENX(MI_ARB_CHECK), arb) {
++      arb.PreParserDisableMask = true;
++      arb.PreParserDisable = true;
++   }
++#endif
++
++   struct anv_simple_shader simple_state = (struct anv_simple_shader) {
++      .device               = device,
++      .cmd_buffer           = cmd_buffer,
++      .dynamic_state_stream = &cmd_buffer->dynamic_state_stream,
++      .general_state_stream = &cmd_buffer->general_state_stream,
++      .batch                = &cmd_buffer->batch,
++      .kernel               = device->internal_kernels[
++         ANV_INTERNAL_KERNEL_GENERATED_DRAWS],
++      .l3_config            = device->internal_kernels_l3_config,
++   };
++   genX(emit_simple_shader_init)(&simple_state);
++
++   struct anv_state params_state =
++      genX(cmd_buffer_emit_generate_draws)(
++         cmd_buffer,
++         &simple_state,
++         (struct anv_address) {
++            .bo = cmd_buffer->generation.ring_bo,
++         },
++         draw_cmd_stride,
++         indirect_data_addr,
++         indirect_data_stride,
++         draw_id_addr,
++         0 /* item_base */,
++         MIN2(MAX_RING_BO_ITEMS, max_draw_count) /* item_count */,
++         count_addr,
++         max_draw_count,
++         indexed,
++         ring_count);
++   struct anv_generated_indirect_params *params = params_state.map;
++
++   anv_add_pending_pipe_bits(cmd_buffer,
++#if GFX_VER == 9
++                             ANV_PIPE_VF_CACHE_INVALIDATE_BIT |
++#endif
++                             ANV_PIPE_DATA_CACHE_FLUSH_BIT |
++                             ANV_PIPE_CS_STALL_BIT,
++                             "after generation flush");
++
++#if GFX_VER >= 12
++   anv_batch_emit(&cmd_buffer->batch, GENX(MI_ARB_CHECK), arb) {
++      arb.PreParserDisableMask = true;
++      arb.PreParserDisable = false;
++   }
++#endif
++
++   trace_intel_end_generate_draws(&cmd_buffer->trace);
++
++   if (cmd_buffer->state.conditional_render_enabled)
++      genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
++
++   /* Emit the 3D state in the main batch. */
++   genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
++
++   if (max_draw_count > 0) {
++      /* Jump into the ring buffer. */
++      anv_batch_emit(&cmd_buffer->batch, GENX(MI_BATCH_BUFFER_START), bbs) {
++         bbs.AddressSpaceIndicator = ASI_PPGTT;
++         bbs.BatchBufferStartAddress = (struct anv_address) {
++            .bo = cmd_buffer->generation.ring_bo,
++         };
++      }
++
++      /***
++       * This is the location at which the ring buffer jumps to if it needs to
++       * generate more draw calls. We do the following :
++       *    - wait for draws in the ring buffer to complete (cs stall) so we're
++       *      sure the push constant data we're about to edit is not read anymore
++       *    - increment the base draw number by the number of draws
++       *      executed in the ring
++       *    - invalidate the constant cache since the
++       *      anv_generated_indirect_params::draw::draw_base is updated
++       *    - jump back to the generation shader
++       */
++      struct anv_address inc_addr =
++         anv_batch_current_address(&cmd_buffer->batch);
++
++      anv_add_pending_pipe_bits(cmd_buffer,
++                                ANV_PIPE_STALL_AT_SCOREBOARD_BIT |
++                                ANV_PIPE_CS_STALL_BIT,
++                                "after generated draws batch");
++      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
++
++      struct mi_builder b;
++      mi_builder_init(&b, cmd_buffer->device->info, &cmd_buffer->batch);
++
++      struct anv_address draw_base_addr = anv_address_add(
++         genX(simple_shader_push_state_address)(
++            &simple_state, params_state),
++         offsetof(struct anv_generated_indirect_params, draw.draw_base));
++
++      const uint32_t mocs = anv_mocs_for_address(cmd_buffer->device,
++                                                 &draw_base_addr);
++      mi_builder_set_mocs(&b, mocs);
++
++      mi_store(&b, mi_mem32(draw_base_addr),
++                   mi_iadd(&b, mi_mem32(draw_base_addr),
++                               mi_imm(ring_count)));
++
++      anv_add_pending_pipe_bits(cmd_buffer,
++                                ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT,
++                                "after generated draws batch increment");
++      genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
++
++      anv_batch_emit(&cmd_buffer->batch, GENX(MI_BATCH_BUFFER_START), bbs) {
++         bbs.AddressSpaceIndicator = ASI_PPGTT;
++         bbs.BatchBufferStartAddress = gen_addr;
++      }
++
++      /***
++       * This is the location at which the ring buffer jump to once all the draw
++       * calls have executed.
++       */
++      struct anv_address end_addr = anv_batch_current_address(&cmd_buffer->batch);
++
++      /* Reset the draw_base field in case we ever replay the command buffer. */
++      mi_store(&b, mi_mem32(draw_base_addr), mi_imm(0));
++
++      anv_add_pending_pipe_bits(cmd_buffer,
++                                ANV_PIPE_CONSTANT_CACHE_INVALIDATE_BIT,
++                                "after generated draws end");
++
++      params->draw.gen_addr = anv_address_physical(inc_addr);
++      params->draw.end_addr = anv_address_physical(end_addr);
++   }
++}
++
++static void
++genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer,
++                                               struct anv_address indirect_data_addr,
++                                               uint32_t indirect_data_stride,
++                                               struct anv_address count_addr,
++                                               uint32_t max_draw_count,
++                                               bool indexed)
++{
++   /* In order to have the vertex fetch gather the data we need to have a non
++    * 0 stride. It's possible to have a 0 stride given by the application when
++    * draw_count is 1, but we need a correct value for the
++    * VERTEX_BUFFER_STATE::BufferPitch, so ensure the caller set this
++    * correctly :
++    *
++    * Vulkan spec, vkCmdDrawIndirect:
++    *
++    *   "If drawCount is less than or equal to one, stride is ignored."
++    */
++   assert(indirect_data_stride > 0);
++
++   const bool use_ring_buffer = max_draw_count >=
++      cmd_buffer->device->physical->instance->generated_indirect_ring_threshold;
++   if (use_ring_buffer) {
++      genX(cmd_buffer_emit_indirect_generated_draws_inring)(cmd_buffer,
++                                                            indirect_data_addr,
++                                                            indirect_data_stride,
++                                                            count_addr,
++                                                            max_draw_count,
++                                                            indexed);
++   } else {
++      genX(cmd_buffer_emit_indirect_generated_draws_inplace)(cmd_buffer,
++                                                             indirect_data_addr,
++                                                             indirect_data_stride,
++                                                             count_addr,
++                                                             max_draw_count,
++                                                             indexed);
++   }
++}
++
+ static void
+ genX(cmd_buffer_flush_generated_draws)(struct anv_cmd_buffer *cmd_buffer)
+ {
+diff --git a/src/intel/vulkan/shaders/common_generated_draws.glsl b/src/intel/vulkan/shaders/common_generated_draws.glsl
+index 8a68a87728e..9754c8fd3f5 100644
+--- a/src/intel/vulkan/shaders/common_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/common_generated_draws.glsl
+@@ -23,7 +23,7 @@
+ 
+ #include "interface.h"
+ 
+-/* These 3 bindings will be accessed through A64 messages */
++/* All storage bindings will be accessed through A64 messages */
+ layout(set = 0, binding = 0, std430) buffer Storage0 {
+    uint indirect_data[];
+ };
+@@ -132,17 +132,27 @@ void write_MI_BATCH_BUFFER_START(uint write_offset,
+    commands[write_offset + 2] = uint(addr >> 32);
+ }
+ 
+-void end_generated_draws(uint cmd_idx, uint draw_id, uint draw_count)
++void end_generated_draws(uint item_idx, uint cmd_idx, uint draw_id, uint draw_count)
+ {
+    uint _3dprim_dw_size = (params.flags >> 16) & 0xff;
++   bool indirect_count = (params.flags & ANV_GENERATED_FLAG_COUNT) != 0;
++   bool ring_mode = (params.flags & ANV_GENERATED_FLAG_RING_MODE) != 0;
+    /* We can have an indirect draw count = 0. */
+    uint last_draw_id = draw_count == 0 ? 0 : (min(draw_count, params.max_draw_count) - 1);
+    uint jump_offset = draw_count == 0 ? 0 : _3dprim_dw_size;
+ 
+-   if (draw_id == last_draw_id && draw_count < params.max_draw_count) {
+-      /* Only write a jump forward in the batch if we have fewer elements than
+-       * the max draw count.
+-       */
+-      write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.end_addr);
++   if (ring_mode) {
++      if (draw_id == last_draw_id) {
++         /* Exit the ring buffer to the next user commands */
++         write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.end_addr);
++      } else if (item_idx == (params.ring_count - 1)) {
++         /* Jump back to the generation shader to generate mode draws */
++         write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.gen_addr);
++      }
++   } else {
++      if (draw_id == last_draw_id && draw_count < params.max_draw_count) {
++         /* Skip forward to the end of the generated draws */
++         write_MI_BATCH_BUFFER_START(cmd_idx + jump_offset, params.end_addr);
++      }
+    }
+ }
+diff --git a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+index 0a3ccf1d6ec..dca89fc9cec 100644
+--- a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+@@ -82,8 +82,8 @@ void main()
+    uint draw_id = params.draw_base + item_idx;
+    uint draw_count = _draw_count;
+ 
+-   if (draw_id < draw_count)
++   if (draw_id < min(draw_count, params.max_draw_count))
+       write_draw(item_idx, cmd_idx, draw_id);
+ 
+-   end_generated_draws(cmd_idx, draw_id, draw_count);
++   end_generated_draws(item_idx, cmd_idx, draw_id, draw_count);
+ }
+diff --git a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+index fd50f8eff86..9024f09cd13 100644
+--- a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+@@ -140,8 +140,8 @@ void main()
+    uint draw_id = params.draw_base + item_idx;
+    uint draw_count = _draw_count;
+ 
+-   if (draw_id < draw_count)
++   if (draw_id < min(draw_count, params.max_draw_count))
+       write_draw(item_idx, cmd_idx, draw_id);
+ 
+-   end_generated_draws(cmd_idx, draw_id, draw_count);
++   end_generated_draws(item_idx, cmd_idx, draw_id, draw_count);
+ }
+diff --git a/src/intel/vulkan/shaders/interface.h b/src/intel/vulkan/shaders/interface.h
+index 2148fbb1dbd..7acefe83cda 100644
+--- a/src/intel/vulkan/shaders/interface.h
++++ b/src/intel/vulkan/shaders/interface.h
+@@ -36,8 +36,16 @@
+ 
+ #define ANV_GENERATED_FLAG_INDEXED    BITFIELD_BIT(0)
+ #define ANV_GENERATED_FLAG_PREDICATED BITFIELD_BIT(1)
++/* Only used on Gfx9, means the pipeline is using gl_DrawID */
+ #define ANV_GENERATED_FLAG_DRAWID     BITFIELD_BIT(2)
++/* Only used on Gfx9, means the pipeline is using gl_BaseVertex or
++ * gl_BaseInstance
++ */
+ #define ANV_GENERATED_FLAG_BASE       BITFIELD_BIT(3)
++/* Whether the count is indirect  */
++#define ANV_GENERATED_FLAG_COUNT      BITFIELD_BIT(4)
++/* Whether the generation shader writes to the ring buffer */
++#define ANV_GENERATED_FLAG_RING_MODE  BITFIELD_BIT(5)
+ 
+ struct anv_generated_indirect_draw_params {
+    /* Draw ID buffer address (only used on Gfx9) */
+@@ -57,10 +65,17 @@ struct anv_generated_indirect_draw_params {
+    uint32_t max_draw_count;
+    /* Instance multiplier for multi view */
+    uint32_t instance_multiplier;
++   /* Address where to jump at to generate further draws (used with ring mode)
++    */
++   uint64_t gen_addr;
+    /* Address where to jump at after the generated draw (only used with
+     * indirect draw count variants)
+     */
+    uint64_t end_addr;
++   /* Number of draws to generate in the ring buffer (only useful in ring
++    * buffer mode)
++    */
++   uint32_t ring_count;
+ };
+ 
+ #define ANV_COPY_QUERY_FLAG_RESULT64  BITFIELD_BIT(0)
+diff --git a/src/util/driconf.h b/src/util/driconf.h
+index 6c589bbe9f1..12649eb8e2d 100644
+--- a/src/util/driconf.h
++++ b/src/util/driconf.h
+@@ -709,6 +709,10 @@
+    DRI_CONF_OPT_I(generated_indirect_threshold, def, 0, INT32_MAX, \
+                   "Indirect threshold count above which we start generating commands")
+ 
++#define DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(def) \
++   DRI_CONF_OPT_I(generated_indirect_ring_threshold, def, 0, INT32_MAX, \
++                  "Indirect threshold count above which we start generating commands in a ring buffer")
++
+ #define DRI_CONF_ANV_QUERY_CLEAR_WITH_BLORP_THRESHOLD(def) \
+    DRI_CONF_OPT_I(query_clear_with_blorp_threshold, def, 0, INT32_MAX, \
+                   "Query threshold count above which query buffers are cleared with blorp")
+-- 
+2.42.0
+

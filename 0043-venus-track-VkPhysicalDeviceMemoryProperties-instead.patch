@@ -1,0 +1,161 @@
+From 123f37c8035ec44f48be102b98819f0b13197127 Mon Sep 17 00:00:00 2001
+From: Yiwei Zhang <zzyiwei@chromium.org>
+Date: Sat, 9 Sep 2023 01:01:30 -0700
+Subject: [PATCH 043/834] venus: track VkPhysicalDeviceMemoryProperties instead
+
+For code simplicity.
+
+Signed-off-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25611>
+---
+ src/virtio/vulkan/vn_android.c         |  2 +-
+ src/virtio/vulkan/vn_device_memory.c   |  8 +++----
+ src/virtio/vulkan/vn_feedback.c        |  2 +-
+ src/virtio/vulkan/vn_physical_device.c | 31 ++++++++++++--------------
+ src/virtio/vulkan/vn_physical_device.h |  2 +-
+ 5 files changed, 21 insertions(+), 24 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_android.c b/src/virtio/vulkan/vn_android.c
+index 28c16cf508f..2723555fde8 100644
+--- a/src/virtio/vulkan/vn_android.c
++++ b/src/virtio/vulkan/vn_android.c
+@@ -1116,7 +1116,7 @@ vn_android_device_allocate_ahb(struct vn_device *dev,
+       usage = vn_android_get_ahb_usage(image_info->usage, image_info->flags);
+    } else {
+       const VkPhysicalDeviceMemoryProperties *mem_props =
+-         &dev->physical_device->memory_properties.memoryProperties;
++         &dev->physical_device->memory_properties;
+ 
+       assert(alloc_info->memoryTypeIndex < mem_props->memoryTypeCount);
+ 
+diff --git a/src/virtio/vulkan/vn_device_memory.c b/src/virtio/vulkan/vn_device_memory.c
+index 3a1589b31e1..ebb1998be33 100644
+--- a/src/virtio/vulkan/vn_device_memory.c
++++ b/src/virtio/vulkan/vn_device_memory.c
+@@ -40,8 +40,8 @@ vn_device_memory_pool_grow_alloc(struct vn_device *dev,
+ 
+    vn_object_base_init(&mem->base, VK_OBJECT_TYPE_DEVICE_MEMORY, &dev->base);
+    mem->size = size;
+-   mem->type = dev->physical_device->memory_properties.memoryProperties
+-                  .memoryTypes[mem_type_index];
++   mem->type =
++      dev->physical_device->memory_properties.memoryTypes[mem_type_index];
+ 
+    mem_handle = vn_device_memory_to_handle(mem);
+    result = vn_call_vkAllocateMemory(
+@@ -253,7 +253,7 @@ vn_device_memory_import_dma_buf(struct vn_device *dev,
+    VkDevice device = vn_device_to_handle(dev);
+    VkDeviceMemory memory = vn_device_memory_to_handle(mem);
+    const VkPhysicalDeviceMemoryProperties *mem_props =
+-      &dev->physical_device->memory_properties.memoryProperties;
++      &dev->physical_device->memory_properties;
+    VkMemoryPropertyFlags mem_flags =
+       mem_props->memoryTypes[alloc_info->memoryTypeIndex].propertyFlags;
+    struct vn_renderer_bo *bo;
+@@ -539,7 +539,7 @@ vn_AllocateMemory(VkDevice device,
+ 
+    vn_object_base_init(&mem->base, VK_OBJECT_TYPE_DEVICE_MEMORY, &dev->base);
+    mem->size = pAllocateInfo->allocationSize;
+-   mem->type = dev->physical_device->memory_properties.memoryProperties
++   mem->type = dev->physical_device->memory_properties
+                   .memoryTypes[pAllocateInfo->memoryTypeIndex];
+    mem->is_import = import_ahb_info || import_fd_info;
+    mem->is_external = mem->is_import || export_info;
+diff --git a/src/virtio/vulkan/vn_feedback.c b/src/virtio/vulkan/vn_feedback.c
+index 4f3fb9ee8d0..660549f48f2 100644
+--- a/src/virtio/vulkan/vn_feedback.c
++++ b/src/virtio/vulkan/vn_feedback.c
+@@ -35,7 +35,7 @@ vn_feedback_buffer_create(struct vn_device *dev,
+ {
+    const bool exclusive = dev->queue_family_count == 1;
+    const VkPhysicalDeviceMemoryProperties *mem_props =
+-      &dev->physical_device->memory_properties.memoryProperties;
++      &dev->physical_device->memory_properties;
+    VkDevice dev_handle = vn_device_to_handle(dev);
+    struct vn_feedback_buffer *feedback_buf;
+    VkResult result;
+diff --git a/src/virtio/vulkan/vn_physical_device.c b/src/virtio/vulkan/vn_physical_device.c
+index 2f90b540b6b..a67c238d354 100644
+--- a/src/virtio/vulkan/vn_physical_device.c
++++ b/src/virtio/vulkan/vn_physical_device.c
+@@ -709,14 +709,13 @@ vn_physical_device_init_memory_properties(
+    struct vn_physical_device *physical_dev)
+ {
+    struct vn_instance *instance = physical_dev->instance;
+-   VkPhysicalDeviceMemoryProperties2 *props2 =
+-      &physical_dev->memory_properties;
+-   VkPhysicalDeviceMemoryProperties *props1 = &props2->memoryProperties;
+-
+-   props2->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+-
++   VkPhysicalDeviceMemoryProperties2 props2 = {
++      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
++   };
+    vn_call_vkGetPhysicalDeviceMemoryProperties2(
+-      instance, vn_physical_device_to_handle(physical_dev), props2);
++      instance, vn_physical_device_to_handle(physical_dev), &props2);
++
++   physical_dev->memory_properties = props2.memoryProperties;
+ 
+    /* Kernel makes every mapping coherent. If a memory type is truly
+     * incoherent, it's better to remove the host-visible flag than silently
+@@ -726,10 +725,9 @@ vn_physical_device_init_memory_properties(
+     */
+    uint32_t coherent_uncached = VK_MAX_MEMORY_TYPES;
+    uint32_t incoherent_cached = VK_MAX_MEMORY_TYPES;
+-
+-   for (uint32_t i = 0; i < props1->memoryTypeCount; i++) {
+-      const VkMemoryPropertyFlags flags =
+-         props1->memoryTypes[i].propertyFlags;
++   VkPhysicalDeviceMemoryProperties *props = &physical_dev->memory_properties;
++   for (uint32_t i = 0; i < props->memoryTypeCount; i++) {
++      const VkMemoryPropertyFlags flags = props->memoryTypes[i].propertyFlags;
+       const bool coherent = flags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+       const bool cached = flags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+       if (coherent && cached) {
+@@ -743,15 +741,15 @@ vn_physical_device_init_memory_properties(
+       }
+    }
+ 
+-   for (uint32_t i = 0; i < props1->memoryTypeCount; i++) {
+-      VkMemoryType *type = &props1->memoryTypes[i];
++   for (uint32_t i = 0; i < props->memoryTypeCount; i++) {
++      VkMemoryType *type = &props->memoryTypes[i];
+       if (i == incoherent_cached) {
+          /* Only get here if no coherent+cached type is available, and the
+           * spec guarantees that there is at least one coherent type, so it
+           * must be coherent+uncached, hence the index is always valid.
+           */
+-         assert(coherent_uncached < props1->memoryTypeCount);
+-         type->heapIndex = props1->memoryTypes[coherent_uncached].heapIndex;
++         assert(coherent_uncached < props->memoryTypeCount);
++         type->heapIndex = props->memoryTypes[coherent_uncached].heapIndex;
+       } else if (!(type->propertyFlags &
+                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+          type->propertyFlags &= ~(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+@@ -1836,8 +1834,7 @@ vn_GetPhysicalDeviceMemoryProperties2(
+     * our cached version.  Our cached version may differ from the server's
+     * version due to workarounds.
+     */
+-   pMemoryProperties->memoryProperties =
+-      physical_dev->memory_properties.memoryProperties;
++   pMemoryProperties->memoryProperties = physical_dev->memory_properties;
+ }
+ 
+ void
+diff --git a/src/virtio/vulkan/vn_physical_device.h b/src/virtio/vulkan/vn_physical_device.h
+index af1f4fb3322..fe3419f2acd 100644
+--- a/src/virtio/vulkan/vn_physical_device.h
++++ b/src/virtio/vulkan/vn_physical_device.h
+@@ -74,7 +74,7 @@ struct vn_physical_device {
+    uint32_t queue_family_count;
+    bool sparse_binding_disabled;
+ 
+-   VkPhysicalDeviceMemoryProperties2 memory_properties;
++   VkPhysicalDeviceMemoryProperties memory_properties;
+    uint32_t coherent_uncached;
+    uint32_t incoherent_cached;
+ 
+-- 
+2.42.0
+

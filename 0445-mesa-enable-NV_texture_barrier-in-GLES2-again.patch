@@ -1,0 +1,57 @@
+From 04260c3654f79d395eadbab05f7c3e62837b9b0a Mon Sep 17 00:00:00 2001
+From: Lucas Stach <dev@lynxeye.de>
+Date: Sat, 14 Oct 2023 17:50:33 +0200
+Subject: [PATCH 445/834] mesa: enable NV_texture_barrier in GLES2+ (again)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This re-enables NV_texture_barrier in GL ES2+ contexts. This had
+previously been tried, but caused CI issues and thus had been
+reverted.
+
+c7da969f8fe1 ("mesa: Enable NV_texture_barrier in GLES2+") was
+buggy, as it added the es2 annotation to the category instead of
+the function in the XML, which lead to the extension being
+advertised, but calling glTextureBarrierNV in a GLES context
+only yielded a GL_INVALID_OPERATION instead of the desired
+barrier operation.
+
+Signed-off-by: Lucas Stach <dev@lynxeye.de>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25728>
+---
+ src/mapi/glapi/gen/NV_texture_barrier.xml | 2 +-
+ src/mesa/main/extensions_table.h          | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/mapi/glapi/gen/NV_texture_barrier.xml b/src/mapi/glapi/gen/NV_texture_barrier.xml
+index b4d3d88d64f..fd341a80157 100644
+--- a/src/mapi/glapi/gen/NV_texture_barrier.xml
++++ b/src/mapi/glapi/gen/NV_texture_barrier.xml
+@@ -7,7 +7,7 @@
+ <OpenGLAPI>
+ 
+ <category name="GL_NV_texture_barrier" number="381">
+-    <function name="TextureBarrierNV" exec="dlist" />
++    <function name="TextureBarrierNV" exec="dlist" es2="2.0" />
+ </category>
+ 
+ </OpenGLAPI>
+diff --git a/src/mesa/main/extensions_table.h b/src/mesa/main/extensions_table.h
+index e2ef94f6b12..afde488af69 100644
+--- a/src/mesa/main/extensions_table.h
++++ b/src/mesa/main/extensions_table.h
+@@ -424,7 +424,7 @@ EXT(NV_shader_atomic_float                  , NV_shader_atomic_float
+ EXT(NV_shader_atomic_int64                  , NV_shader_atomic_int64                 , GLL, GLC,  x ,  x , 2014)
+ EXT(NV_shader_noperspective_interpolation   , EXT_gpu_shader4                        ,  x ,  x ,  x ,  30, 2014)
+ EXT(NV_texgen_reflection                    , dummy_true                             , GLL,  x ,  x ,  x , 1999)
+-EXT(NV_texture_barrier                      , NV_texture_barrier                     , GLL, GLC,  x ,  x , 2009)
++EXT(NV_texture_barrier                      , NV_texture_barrier                     , GLL, GLC,  x , ES2, 2009)
+ EXT(NV_texture_env_combine4                 , NV_texture_env_combine4                , GLL,  x ,  x ,  x , 1999)
+ EXT(NV_texture_rectangle                    , NV_texture_rectangle                   , GLL,  x ,  x ,  x , 2000)
+ EXT(NV_vdpau_interop                        , NV_vdpau_interop                       , GLL, GLC,  x ,  x , 2010)
+-- 
+2.42.0
+

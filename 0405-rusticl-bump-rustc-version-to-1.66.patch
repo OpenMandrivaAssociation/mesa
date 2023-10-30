@@ -1,0 +1,81 @@
+From 02c433dd878e564ed00ddcb7cbab023686138eed Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Mon, 2 Oct 2023 23:27:59 +0200
+Subject: [PATCH 405/834] rusticl: bump rustc version to 1.66
+
+This adds a few goodies I care about:
+- bool::then_some (1.62)
+- let-else statements (1.65)
+
+FireFox ESR is at 1.66 so this bump is according to the Rust updated
+policy.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ .gitlab-ci/container/build-rust.sh | 4 ++--
+ .gitlab-ci/image-tags.yml          | 8 ++++----
+ docs/rusticl.rst                   | 2 +-
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/.gitlab-ci/container/build-rust.sh b/.gitlab-ci/container/build-rust.sh
+index 6cc8536300d..920925e05f3 100644
+--- a/.gitlab-ci/container/build-rust.sh
++++ b/.gitlab-ci/container/build-rust.sh
+@@ -11,11 +11,11 @@ set -ex
+ mkdir -p "$HOME"/.cargo
+ ln -s /usr/local/bin "$HOME"/.cargo/bin
+ 
+-# Rusticl requires at least Rust 1.60.0
++# Rusticl requires at least Rust 1.66.0
+ #
+ # Also, pick a specific snapshot from rustup so the compiler doesn't drift on
+ # us.
+-RUST_VERSION=1.60.0-2022-04-07
++RUST_VERSION=1.66.1-2023-01-10
+ 
+ # For rust in Mesa, we use rustup to install.  This lets us pick an arbitrary
+ # version of the compiler, rather than whatever the container's Debian comes
+diff --git a/.gitlab-ci/image-tags.yml b/.gitlab-ci/image-tags.yml
+index fac71060e12..3ea0e4377e8 100644
+--- a/.gitlab-ci/image-tags.yml
++++ b/.gitlab-ci/image-tags.yml
+@@ -7,7 +7,7 @@
+ 
+ variables:
+    DEBIAN_X86_64_BUILD_BASE_IMAGE: "debian/x86_64_build-base"
+-   DEBIAN_BASE_TAG: "2023-10-12-virglrenderer"
++   DEBIAN_BASE_TAG: "2023-10-13-rust-1.66"
+ 
+    DEBIAN_X86_64_BUILD_IMAGE_PATH: "debian/x86_64_build"
+    DEBIAN_BUILD_TAG: "2023-09-30-shader-db"
+@@ -21,9 +21,9 @@ variables:
+    DEBIAN_X86_64_TEST_IMAGE_VK_PATH: "debian/x86_64_test-vk"
+    DEBIAN_X86_64_TEST_ANDROID_IMAGE_PATH: "debian/x86_64_test-android"
+ 
+-   DEBIAN_X86_64_TEST_ANDROID_TAG: "2023-10-07-deqp-version"
+-   DEBIAN_X86_64_TEST_GL_TAG: "2023-10-07-deqp-version"
+-   DEBIAN_X86_64_TEST_VK_TAG: "2023-10-07-deqp-version"
++   DEBIAN_X86_64_TEST_ANDROID_TAG: "2023-10-13-rust-1.66"
++   DEBIAN_X86_64_TEST_GL_TAG: "2023-10-13-rust-1.66"
++   DEBIAN_X86_64_TEST_VK_TAG: "2023-10-13-rust-1.66"
+ 
+    ALPINE_X86_64_BUILD_TAG: "2023-10-04-ephemeral"
+    ALPINE_X86_64_LAVA_SSH_TAG: "2023-06-26-first-version"
+diff --git a/docs/rusticl.rst b/docs/rusticl.rst
+index 703bf9b94e5..a9d135a28d0 100644
+--- a/docs/rusticl.rst
++++ b/docs/rusticl.rst
+@@ -29,7 +29,7 @@ To build Rusticl you need to satisfy the following build dependencies:
+ 
+ The minimum versions to build Rusticl are:
+ 
+--  Rust: 1.60
++-  Rust: 1.66
+ -  Meson: 1.2.0
+ -  Bindgen: 0.62.0
+ -  LLVM: 11.0.0 (recommended: 15.0.0)
+-- 
+2.42.0
+

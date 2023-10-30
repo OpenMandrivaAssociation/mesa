@@ -1,0 +1,239 @@
+From e2e3e4cbf3bf1865e1e80013046f8379cf8beaa7 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 15:18:40 +0200
+Subject: [PATCH 569/834] ci: Stop doing internal retries in bare-metal.
+
+We have job-level retry on failure now, and will continue to need to in
+order to work around fd.o infrastructure flakes.  If we stop doing retry
+inside the job, then we can crank down the gitlab-level timeouts on test
+jobs to be closer to our CI guidelines and avoid blocking a runner for an
+hour when things go wrong (for example, cheza #16 failing to boot in a
+recognized way and continuously looping due to the intra-job retry).
+Plus, the job logs will be more readable when you don't have two boots in
+one job, and we'll get the flakes surfaced in our monitoring dashboards.
+
+If internal retries were really doing useful work we may see an increase
+in flakes as a result of this.  I'm committing to turning off boards or
+reducing coverage as necessary to handle this.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25790>
+---
+ .gitlab-ci/bare-metal/cros_servo_run.py | 48 ++++++++++++-------------
+ .gitlab-ci/bare-metal/fastboot_run.py   | 41 ++++++++++-----------
+ 2 files changed, 41 insertions(+), 48 deletions(-)
+
+diff --git a/.gitlab-ci/bare-metal/cros_servo_run.py b/.gitlab-ci/bare-metal/cros_servo_run.py
+index 4583acfd982..01ff28b5882 100755
+--- a/.gitlab-ci/bare-metal/cros_servo_run.py
++++ b/.gitlab-ci/bare-metal/cros_servo_run.py
+@@ -61,8 +61,8 @@ class CrosServoRun:
+                 tftp_failures += 1
+                 if tftp_failures >= 10:
+                     self.print_error(
+-                        "Detected intermittent tftp failure, restarting run...")
+-                    return 2
++                        "Detected intermittent tftp failure, restarting run.")
++                    return 1
+ 
+             # If the board has a netboot firmware and we made it to booting the
+             # kernel, proceed to processing of the test run.
+@@ -75,12 +75,12 @@ class CrosServoRun:
+             # in the farm.
+             if re.search("POWER_GOOD not seen in time", line):
+                 self.print_error(
+-                    "Detected intermittent poweron failure, restarting run...")
+-                return 2
++                    "Detected intermittent poweron failure, abandoning run.")
++                return 1
+ 
+         if not bootloader_done:
+-            print("Failed to make it through bootloader, restarting run...")
+-            return 2
++            print("Failed to make it through bootloader, abandoning run.")
++            return 1
+ 
+         for line in self.cpu_ser.lines(timeout=self.test_timeout, phase="test"):
+             if re.search("---. end Kernel panic", line):
+@@ -90,14 +90,14 @@ class CrosServoRun:
+             # on cheza, which we don't expect to be the case on future boards.
+             if re.search("Kernel panic - not syncing: Asynchronous SError Interrupt", line):
+                 self.print_error(
+-                    "Detected cheza power management bus error, restarting run...")
+-                return 2
++                    "Detected cheza power management bus error, abandoning run.")
++                return 1
+ 
+             # If the network device dies, it's probably not graphics's fault, just try again.
+             if re.search("NETDEV WATCHDOG", line):
+                 self.print_error(
+-                    "Detected network device failure, restarting run...")
+-                return 2
++                    "Detected network device failure, abandoning run.")
++                return 1
+ 
+             # These HFI response errors started appearing with the introduction
+             # of piglit runs.  CosmicPenguin says:
+@@ -110,17 +110,17 @@ class CrosServoRun:
+             # break many tests after that, just restart the whole run.
+             if re.search("a6xx_hfi_send_msg.*Unexpected message id .* on the response queue", line):
+                 self.print_error(
+-                    "Detected cheza power management bus error, restarting run...")
+-                return 2
++                    "Detected cheza power management bus error, abandoning run.")
++                return 1
+ 
+             if re.search("coreboot.*bootblock starting", line):
+                 self.print_error(
+-                    "Detected spontaneous reboot, restarting run...")
+-                return 2
++                    "Detected spontaneous reboot, abandoning run.")
++                return 1
+ 
+             if re.search("arm-smmu 5040000.iommu: TLB sync timed out -- SMMU may be deadlocked", line):
+-                self.print_error("Detected cheza MMU fail, restarting run...")
+-                return 2
++                self.print_error("Detected cheza MMU fail, abandoning run.")
++                return 1
+ 
+             result = re.search("hwci: mesa: (\S*)", line)
+             if result:
+@@ -131,7 +131,7 @@ class CrosServoRun:
+ 
+         self.print_error(
+             "Reached the end of the CPU serial log without finding a result")
+-        return 2
++        return 1
+ 
+ 
+ def main():
+@@ -144,16 +144,14 @@ def main():
+         '--test-timeout', type=int, help='Test phase timeout (minutes)', required=True)
+     args = parser.parse_args()
+ 
+-    while True:
+-        servo = CrosServoRun(args.cpu, args.ec, args.test_timeout * 60)
+-        retval = servo.run()
++    servo = CrosServoRun(args.cpu, args.ec, args.test_timeout * 60)
++    retval = servo.run()
+ 
+-        # power down the CPU on the device
+-        servo.ec_write("power off\n")
+-        servo.close()
++    # power down the CPU on the device
++    servo.ec_write("power off\n")
++    servo.close()
+ 
+-        if retval != 2:
+-            sys.exit(retval)
++    sys.exit(retval)
+ 
+ 
+ if __name__ == '__main__':
+diff --git a/.gitlab-ci/bare-metal/fastboot_run.py b/.gitlab-ci/bare-metal/fastboot_run.py
+index 3dcb3b7ca37..ca3229f6d28 100755
+--- a/.gitlab-ci/bare-metal/fastboot_run.py
++++ b/.gitlab-ci/bare-metal/fastboot_run.py
+@@ -51,8 +51,8 @@ class FastbootRun:
+         try:
+             return subprocess.call(cmd, shell=True, timeout=timeout)
+         except subprocess.TimeoutExpired:
+-            self.print_error("timeout, restarting run...")
+-            return 2
++            self.print_error("timeout, abandoning run.")
++            return 1
+ 
+     def run(self):
+         if ret := self.logged_system(self.powerup):
+@@ -67,13 +67,13 @@ class FastbootRun:
+ 
+             if re.search("data abort", line):
+                 self.print_error(
+-                    "Detected crash during boot, restarting run...")
+-                return 2
++                    "Detected crash during boot, abandoning run.")
++                return 1
+ 
+         if not fastboot_ready:
+             self.print_error(
+-                "Failed to get to fastboot prompt, restarting run...")
+-            return 2
++                "Failed to get to fastboot prompt, abandoning run.")
++            return 1
+ 
+         if ret := self.logged_system(self.fastboot):
+             return ret
+@@ -81,7 +81,7 @@ class FastbootRun:
+         print_more_lines = -1
+         for line in self.ser.lines(timeout=self.test_timeout, phase="test"):
+             if print_more_lines == 0:
+-                return 2
++                return 1
+             if print_more_lines > 0:
+                 print_more_lines -= 1
+ 
+@@ -92,20 +92,20 @@ class FastbootRun:
+             # when if we see a reboot after we got past fastboot.
+             if re.search("PON REASON", line):
+                 self.print_error(
+-                    "Detected spontaneous reboot, restarting run...")
+-                return 2
++                    "Detected spontaneous reboot, abandoning run.")
++                return 1
+ 
+             # db820c sometimes wedges around iommu fault recovery
+             if re.search("watchdog: BUG: soft lockup - CPU.* stuck", line):
+                 self.print_error(
+-                    "Detected kernel soft lockup, restarting run...")
+-                return 2
++                    "Detected kernel soft lockup, abandoning run.")
++                return 1
+ 
+             # If the network device dies, it's probably not graphics's fault, just try again.
+             if re.search("NETDEV WATCHDOG", line):
+                 self.print_error(
+-                    "Detected network device failure, restarting run...")
+-                return 2
++                    "Detected network device failure, abandoning run.")
++                return 1
+ 
+             # A3xx recovery doesn't quite work. Sometimes the GPU will get
+             # wedged and recovery will fail (because power can't be reset?)
+@@ -115,7 +115,7 @@ class FastbootRun:
+             # of the hang. Once a hang happens, it's pretty chatty.
+             if "[drm:adreno_recover] *ERROR* gpu hw init failed: -22" in line:
+                 self.print_error(
+-                    "Detected GPU hang, restarting run...")
++                    "Detected GPU hang, abandoning run.")
+                 if print_more_lines == -1:
+                     print_more_lines = 30
+ 
+@@ -127,8 +127,8 @@ class FastbootRun:
+                     return 1
+ 
+         self.print_error(
+-            "Reached the end of the CPU serial log without finding a result, restarting run...")
+-        return 2
++            "Reached the end of the CPU serial log without finding a result, abandoning run.")
++        return 1
+ 
+ 
+ def main():
+@@ -147,13 +147,8 @@ def main():
+ 
+     fastboot = FastbootRun(args, args.test_timeout * 60)
+ 
+-    while True:
+-        retval = fastboot.run()
+-        fastboot.close()
+-        if retval != 2:
+-            break
+-
+-        fastboot = FastbootRun(args, args.test_timeout * 60)
++    retval = fastboot.run()
++    fastboot.close()
+ 
+     fastboot.logged_system(args.powerdown)
+ 
+-- 
+2.42.0
+

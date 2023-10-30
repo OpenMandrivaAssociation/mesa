@@ -1,0 +1,39 @@
+From ef60f6db0d62137dc0adf924f66e5aea72ef938c Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Wed, 29 Sep 2021 09:07:28 +0200
+Subject: [PATCH 332/834] v3dv: handle RTs with no color targets in v71
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/vulkan/v3dvx_cmd_buffer.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/broadcom/vulkan/v3dvx_cmd_buffer.c b/src/broadcom/vulkan/v3dvx_cmd_buffer.c
+index 5484d7597c6..504cd2fee7a 100644
+--- a/src/broadcom/vulkan/v3dvx_cmd_buffer.c
++++ b/src/broadcom/vulkan/v3dvx_cmd_buffer.c
+@@ -1175,6 +1175,17 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
+ #endif
+    }
+ 
++#if V3D_VERSION >= 71
++   /* If we don't have any color RTs, we still need to emit one and flag
++    * it as not used using stride = 1.
++    */
++   if (subpass->color_count == 0) {
++      cl_emit(rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART1, rt) {
++         rt.stride = 1;
++      }
++   }
++#endif
++
+ #if V3D_VERSION == 42
+    cl_emit(rcl, TILE_RENDERING_MODE_CFG_COLOR, rt) {
+       cmd_buffer_render_pass_setup_render_target
+-- 
+2.42.0
+

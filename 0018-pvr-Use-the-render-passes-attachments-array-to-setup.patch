@@ -1,0 +1,55 @@
+From 7f510fe39f7773f9cd776bd5645638934e71248b Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Thu, 21 Sep 2023 15:16:09 +0100
+Subject: [PATCH 018/834] pvr: Use the render passes' attachments array to
+ setup ISP state
+
+`pvr_setup_isp_faces_and_control()` can be called from a secondary
+command buffer. The render pass info's `attachments` array is only
+populated in the primary command buffer on which the render pass
+was started, thus the `ds_aspect` being used always ended up being
+`0` leading to incorrect ISP state being setup.
+
+This commit changes the function to use the `attachments` array
+from the render pass struct instead of the one from the recording
+state.
+
+dEQP tests fixed:
+  dEQP-VK.renderpass.suballocation.attachment
+    .{1.13, 1.65, 1.74, 3.219, 3.236, 3.314, 3.385, 4.426}
+
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25351>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index 5beaebf8aac..f7ae345f885 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -4853,9 +4853,9 @@ pvr_setup_isp_faces_and_control(struct pvr_cmd_buffer *const cmd_buffer,
+    const uint32_t subpass_idx = pass_info->subpass_idx;
+    const uint32_t depth_stencil_attachment_idx =
+       pass_info->pass->subpasses[subpass_idx].depth_stencil_attachment;
+-   const struct pvr_image_view *const attachment =
++   const struct pvr_render_pass_attachment *const attachment =
+       depth_stencil_attachment_idx != VK_ATTACHMENT_UNUSED
+-         ? pass_info->attachments[depth_stencil_attachment_idx]
++         ? &pass_info->pass->attachments[depth_stencil_attachment_idx]
+          : NULL;
+ 
+    const enum PVRX(TA_OBJTYPE)
+@@ -4863,7 +4863,7 @@ pvr_setup_isp_faces_and_control(struct pvr_cmd_buffer *const cmd_buffer,
+ 
+    const VkImageAspectFlags ds_aspects =
+       (!rasterizer_discard && attachment)
+-         ? vk_format_aspects(attachment->vk.format) &
++         ? vk_format_aspects(attachment->vk_format) &
+               (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+          : VK_IMAGE_ASPECT_NONE;
+ 
+-- 
+2.42.0
+

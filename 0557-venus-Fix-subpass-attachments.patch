@@ -1,0 +1,48 @@
+From b0530d2c94ba63bf1b0da61bbbc607264712b028 Mon Sep 17 00:00:00 2001
+From: Lina Versace <linyaa@google.com>
+Date: Fri, 9 Jun 2023 16:08:04 -0700
+Subject: [PATCH 557/834] venus: Fix subpass attachments
+
+We must check for VK_ATTACHMENT_UNUSED.
+
+Signed-off-by: Lina Versace <linyaa@google.com>
+Reviewed-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/22419>
+---
+ src/virtio/vulkan/vn_render_pass.c | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_render_pass.c b/src/virtio/vulkan/vn_render_pass.c
+index f4edce92ef6..4e796e7bebc 100644
+--- a/src/virtio/vulkan/vn_render_pass.c
++++ b/src/virtio/vulkan/vn_render_pass.c
+@@ -53,10 +53,22 @@
+ #define INIT_SUBPASSES(_pass, _pCreateInfo)                                  \
+    do {                                                                      \
+       for (uint32_t i = 0; i < _pCreateInfo->subpassCount; i++) {            \
+-         _pass->subpasses[i].has_color_attachment =                          \
+-            (_pCreateInfo->pSubpasses[i].colorAttachmentCount > 0);          \
+-         _pass->subpasses[i].has_depth_stencil_attachment =                  \
+-            (_pCreateInfo->pSubpasses[i].pDepthStencilAttachment != NULL);   \
++         __auto_type subpass_desc = &_pCreateInfo->pSubpasses[i];            \
++         struct vn_subpass *subpass = &_pass->subpasses[i];                  \
++                                                                             \
++         for (uint32_t j = 0; j < subpass_desc->colorAttachmentCount; j++) { \
++            if (subpass_desc->pColorAttachments[j].attachment !=             \
++                VK_ATTACHMENT_UNUSED) {                                      \
++               subpass->has_color_attachment = true;                         \
++               break;                                                        \
++            }                                                                \
++         }                                                                   \
++                                                                             \
++         if (subpass_desc->pDepthStencilAttachment &&                        \
++             subpass_desc->pDepthStencilAttachment->attachment !=            \
++                VK_ATTACHMENT_UNUSED) {                                      \
++            subpass->has_depth_stencil_attachment = true;                    \
++         }                                                                   \
+       }                                                                      \
+    } while (false)
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,43 @@
+From 3fda1d9691d11d46288fc7913793f36ba806b3b0 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Fri, 30 Jun 2023 14:21:29 -0400
+Subject: [PATCH 107/834] nir/opt_preamble: Preserve IR when replacing phis
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Connor Abbott <cwabbott0@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/compiler/nir/nir_opt_preamble.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/compiler/nir/nir_opt_preamble.c b/src/compiler/nir/nir_opt_preamble.c
+index 2ac0be97e7b..64a5e472ba1 100644
+--- a/src/compiler/nir/nir_opt_preamble.c
++++ b/src/compiler/nir/nir_opt_preamble.c
+@@ -592,17 +592,22 @@ nir_opt_preamble(nir_shader *shader, const nir_opt_preamble_options *options,
+    nir_builder builder = nir_builder_create(impl);
+    b = &builder;
+ 
++   unsigned max_index = impl->ssa_alloc;
+    nir_foreach_block(block, impl) {
+       nir_foreach_instr_safe(instr, block) {
+          nir_def *def = nir_instr_def(instr);
+          if (!def)
+             continue;
+ 
++         /* Ignore new load_preamble instructions */
++         if (def->index >= max_index)
++            continue;
++
+          def_state *state = &ctx.states[def->index];
+          if (!state->replace)
+             continue;
+ 
+-         b->cursor = nir_before_instr(instr);
++         b->cursor = nir_after_instr_and_phis(instr);
+ 
+          nir_def *new_def =
+             nir_load_preamble(b, def->num_components, def->bit_size,
+-- 
+2.42.0
+

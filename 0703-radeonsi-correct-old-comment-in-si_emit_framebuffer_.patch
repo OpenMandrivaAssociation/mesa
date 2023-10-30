@@ -1,0 +1,35 @@
+From b1111f35c634bb2243cbe78cf4cf6f2545a84d4d Mon Sep 17 00:00:00 2001
+From: Yogesh Mohan Marimuthu <yogesh.mohanmarimuthu@amd.com>
+Date: Mon, 11 Sep 2023 15:30:42 +0530
+Subject: [PATCH 703/834] radeonsi: correct old comment in
+ si_emit_framebuffer_state()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+si_init_cs_preamble_state() function does not exist anymore and
+PA_SC_WINDOW_SCISSOR_TL is set to 0,0. Update the comments with
+this information.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25148>
+---
+ src/gallium/drivers/radeonsi/si_state.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_state.c b/src/gallium/drivers/radeonsi/si_state.c
+index 88b43d89d45..924cfb127a1 100644
+--- a/src/gallium/drivers/radeonsi/si_state.c
++++ b/src/gallium/drivers/radeonsi/si_state.c
+@@ -3560,7 +3560,7 @@ static void si_emit_framebuffer_state(struct si_context *sctx, unsigned index)
+    }
+ 
+    /* Framebuffer dimensions. */
+-   /* PA_SC_WINDOW_SCISSOR_TL is set in si_init_cs_preamble_state */
++   /* PA_SC_WINDOW_SCISSOR_TL is set to 0,0 in gfx*_init_gfx_preamble_state */
+    radeon_set_context_reg(R_028208_PA_SC_WINDOW_SCISSOR_BR,
+                           S_028208_BR_X(state->width) | S_028208_BR_Y(state->height));
+ 
+-- 
+2.42.0
+

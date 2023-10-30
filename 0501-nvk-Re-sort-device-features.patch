@@ -1,0 +1,44 @@
+From 8639c311bdb13a073104354f104ef0137edf45b8 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 17 Oct 2023 09:31:32 -0500
+Subject: [PATCH 501/834] nvk: Re-sort device features
+
+Vulkan versions, then KHR, then EXT, then vendor.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25765>
+---
+ src/nouveau/vulkan/nvk_physical_device.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index 7f8faee1026..ce9d8318bc5 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -246,6 +246,10 @@ nvk_get_device_features(const struct nv_device_info *info,
+       .dynamicRendering = true,
+       .maintenance4 = true,
+ 
++      /* VK_KHR_shader_clock */
++      .shaderSubgroupClock = true,
++      .shaderDeviceClock = true,
++
+       /* VK_EXT_4444_formats */
+       .formatA4R4G4B4 = true,
+       .formatA4B4G4R4 = true,
+@@ -355,12 +359,8 @@ nvk_get_device_features(const struct nv_device_info *info,
+       /* VK_EXT_ycbcr_image_arrays */
+       .ycbcrImageArrays = true,
+ 
+-      /* VALVE_mutable_descriptor_type */
++      /* VK_VALVE_mutable_descriptor_type */
+       .mutableDescriptorType = true,
+-
+-      /* VK_KHR_shader_clock */
+-      .shaderSubgroupClock = true,
+-      .shaderDeviceClock = true,
+    };
+ }
+ 
+-- 
+2.42.0
+

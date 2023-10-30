@@ -1,0 +1,65 @@
+From 2c1dff3851dfa98c7c76a34fadd65c76400e7c81 Mon Sep 17 00:00:00 2001
+From: David Rosca <nowrep@gmail.com>
+Date: Fri, 20 Oct 2023 10:27:41 +0200
+Subject: [PATCH 646/834] frontends/va: Fix locking in vlVaBeginPicture
+
+The assert in vlVaSetSurfaceContext would very rarely fail because
+the mutex was already unlocked when calling this function from
+vlVaBeginPicture.
+
+Keep the lock until returning from vlVaBeginPicture, as that's what
+other functions are already doing.
+
+Reviewed-by: Leo Liu <leo.liu@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25823>
+---
+ src/gallium/frontends/va/picture.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/frontends/va/picture.c b/src/gallium/frontends/va/picture.c
+index ee845b3a42f..cc83f05c062 100644
+--- a/src/gallium/frontends/va/picture.c
++++ b/src/gallium/frontends/va/picture.c
+@@ -97,9 +97,10 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
+    }
+ 
+    surf = handle_table_get(drv->htab, render_target);
+-   mtx_unlock(&drv->mutex);
+-   if (!surf || !surf->buffer)
++   if (!surf || !surf->buffer) {
++      mtx_unlock(&drv->mutex);
+       return VA_STATUS_ERROR_INVALID_SURFACE;
++   }
+ 
+    context->target_id = render_target;
+    vlVaSetSurfaceContext(drv, surf, context);
+@@ -116,8 +117,10 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
+           context->target->buffer_format != PIPE_FORMAT_R8G8B8X8_UNORM &&
+           context->target->buffer_format != PIPE_FORMAT_NV12 &&
+           context->target->buffer_format != PIPE_FORMAT_P010 &&
+-          context->target->buffer_format != PIPE_FORMAT_P016)
++          context->target->buffer_format != PIPE_FORMAT_P016) {
++         mtx_unlock(&drv->mutex);
+          return VA_STATUS_ERROR_UNIMPLEMENTED;
++      }
+ 
+       if (drv->pipe->screen->get_video_param(drv->pipe->screen,
+                               PIPE_VIDEO_PROFILE_UNKNOWN,
+@@ -126,12 +129,14 @@ vlVaBeginPicture(VADriverContextP ctx, VAContextID context_id, VASurfaceID rende
+          context->needs_begin_frame = true;
+       }
+ 
++      mtx_unlock(&drv->mutex);
+       return VA_STATUS_SUCCESS;
+    }
+ 
+    if (context->decoder->entrypoint != PIPE_VIDEO_ENTRYPOINT_ENCODE)
+       context->needs_begin_frame = true;
+ 
++   mtx_unlock(&drv->mutex);
+    return VA_STATUS_SUCCESS;
+ }
+ 
+-- 
+2.42.0
+

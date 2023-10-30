@@ -1,0 +1,88 @@
+From 8e81aff4bb9bd09dc3418c34534acc232bf10a3d Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 3 Oct 2023 12:13:36 -0700
+Subject: [PATCH 022/834] i915: Don't log I915_DEBUG=fs output for blit
+ shaders.
+
+Unless you have NIR_DEBUG=print_internal, the rest of the shader debug
+pipeline is also hidden.  Cleans up output when looking at shader-db
+compiles.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25533>
+---
+ src/gallium/drivers/i915/i915_context.h       | 4 ++++
+ src/gallium/drivers/i915/i915_fpc_translate.c | 7 +++++--
+ src/gallium/drivers/i915/i915_state.c         | 2 ++
+ 3 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/i915/i915_context.h b/src/gallium/drivers/i915/i915_context.h
+index b85a25b31e1..b24f716e2f0 100644
+--- a/src/gallium/drivers/i915/i915_context.h
++++ b/src/gallium/drivers/i915/i915_context.h
+@@ -132,6 +132,10 @@ struct i915_fragment_shader {
+    } texcoords[I915_TEX_UNITS];
+ 
+    bool reads_pntc;
++
++   /* Set if the shader is an internal (blit, etc.) shader that shouldn't debug
++    * log by default. */
++   bool internal;
+ };
+ 
+ struct i915_cache_context;
+diff --git a/src/gallium/drivers/i915/i915_fpc_translate.c b/src/gallium/drivers/i915/i915_fpc_translate.c
+index deb7ffe00ac..e54e9aba2be 100644
+--- a/src/gallium/drivers/i915/i915_fpc_translate.c
++++ b/src/gallium/drivers/i915/i915_fpc_translate.c
+@@ -33,6 +33,7 @@
+ #include "i915_fpc.h"
+ #include "i915_reg.h"
+ 
++#include "nir/nir.h"
+ #include "pipe/p_shader_tokens.h"
+ #include "tgsi/tgsi_dump.h"
+ #include "tgsi/tgsi_info.h"
+@@ -1086,8 +1087,10 @@ i915_translate_fragment_program(struct i915_context *i915,
+    struct i915_fp_compile *p;
+    const struct tgsi_token *tokens = fs->state.tokens;
+    struct i915_token_list *i_tokens;
++   bool debug =
++      I915_DBG_ON(DBG_FS) && (!fs->internal || NIR_DEBUG(PRINT_INTERNAL));
+ 
+-   if (I915_DBG_ON(DBG_FS)) {
++   if (debug) {
+       mesa_logi("TGSI fragment shader:");
+       tgsi_dump(tokens, 0);
+    }
+@@ -1101,7 +1104,7 @@ i915_translate_fragment_program(struct i915_context *i915,
+    i915_fini_compile(i915, p);
+    i915_optimize_free(i_tokens);
+ 
+-   if (I915_DBG_ON(DBG_FS)) {
++   if (debug) {
+       mesa_logi("i915 fragment shader with %d constants%s", fs->num_constants,
+                 fs->num_constants ? ":" : "");
+ 
+diff --git a/src/gallium/drivers/i915/i915_state.c b/src/gallium/drivers/i915/i915_state.c
+index eff9ce2e836..b380ccc1022 100644
+--- a/src/gallium/drivers/i915/i915_state.c
++++ b/src/gallium/drivers/i915/i915_state.c
+@@ -547,6 +547,7 @@ i915_create_fs_state(struct pipe_context *pipe,
+ 
+    if (templ->type == PIPE_SHADER_IR_NIR) {
+       nir_shader *s = templ->ir.nir;
++      ifs->internal = s->info.internal;
+ 
+       static const struct nir_to_tgsi_options ntt_options = {
+          .lower_fabs = true,
+@@ -556,6 +557,7 @@ i915_create_fs_state(struct pipe_context *pipe,
+       assert(templ->type == PIPE_SHADER_IR_TGSI);
+       /* we need to keep a local copy of the tokens */
+       ifs->state.tokens = tgsi_dup_tokens(templ->tokens);
++      ifs->internal = i915->no_log_program_errors;
+    }
+ 
+    ifs->state.type = PIPE_SHADER_IR_TGSI;
+-- 
+2.42.0
+

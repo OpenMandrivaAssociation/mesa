@@ -1,0 +1,68 @@
+From 24431419cece531b2f0117e356945c9b3c53c19b Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Fri, 1 Sep 2023 11:29:57 +0100
+Subject: [PATCH 734/834] ac/nir: remove dead code
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25040>
+---
+ src/amd/common/ac_nir_lower_ngg.c | 32 ++-----------------------------
+ 1 file changed, 2 insertions(+), 30 deletions(-)
+
+diff --git a/src/amd/common/ac_nir_lower_ngg.c b/src/amd/common/ac_nir_lower_ngg.c
+index 874c51017f1..a731c4d4d24 100644
+--- a/src/amd/common/ac_nir_lower_ngg.c
++++ b/src/amd/common/ac_nir_lower_ngg.c
+@@ -137,8 +137,8 @@ typedef struct
+ enum {
+    /* DW0: number of primitives */
+    lds_ms_num_prims = 0,
+-   /* DW1: reserved for future use */
+-   lds_ms_dw1_reserved = 4,
++   /* DW1: number of vertices */
++   lds_ms_num_vtx = 4,
+    /* DW2: workgroup index within the current dispatch */
+    lds_ms_wg_index = 8,
+    /* DW3: number of API workgroups in flight */
+@@ -3655,34 +3655,6 @@ ms_store_prim_indices(nir_builder *b,
+    nir_store_shared(b, nir_u2u8(b, val), offset_src, .base = s->layout.lds.indices_addr);
+ }
+ 
+-static nir_def *
+-ms_load_prim_indices(nir_builder *b,
+-                     nir_def *offset_src,
+-                     lower_ngg_ms_state *s)
+-{
+-   if (!offset_src)
+-      offset_src = nir_imm_int(b, 0);
+-
+-   return nir_load_shared(b, 1, 8, offset_src, .base = s->layout.lds.indices_addr);
+-}
+-
+-static void
+-ms_store_num_prims(nir_builder *b,
+-                   nir_def *store_val,
+-                   lower_ngg_ms_state *s)
+-{
+-   nir_def *addr = nir_imm_int(b, 0);
+-   nir_store_shared(b, nir_u2u32(b, store_val), addr, .base = s->layout.lds.workgroup_info_addr + lds_ms_num_prims);
+-}
+-
+-static nir_def *
+-ms_load_num_prims(nir_builder *b,
+-                  lower_ngg_ms_state *s)
+-{
+-   nir_def *addr = nir_imm_int(b, 0);
+-   return nir_load_shared(b, 1, 32, addr, .base = s->layout.lds.workgroup_info_addr + lds_ms_num_prims);
+-}
+-
+ static void
+ ms_store_cull_flag(nir_builder *b,
+                    nir_def *val,
+-- 
+2.42.0
+

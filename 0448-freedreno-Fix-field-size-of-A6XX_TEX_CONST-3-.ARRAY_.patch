@@ -1,0 +1,35 @@
+From b3043434d9c1baa48b7d840efc8ffb966fe7981c Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Fri, 13 Oct 2023 17:25:34 +0200
+Subject: [PATCH 448/834] freedreno: Fix field size of
+ A6XX_TEX_CONST[3].ARRAY_PITCH
+
+We silently dropped higher bits of layer size, which was not
+caught by CTS because it requires image to be big.
+
+Fixes rendering in shadowmappingcascade Vulkan demo.
+
+Cc: mesa-stable
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25717>
+---
+ src/freedreno/registers/adreno/a6xx.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/freedreno/registers/adreno/a6xx.xml b/src/freedreno/registers/adreno/a6xx.xml
+index 4c5511539f6..e167e4f0679 100644
+--- a/src/freedreno/registers/adreno/a6xx.xml
++++ b/src/freedreno/registers/adreno/a6xx.xml
+@@ -4471,7 +4471,7 @@ to upconvert to 32b float internally?
+ 		layer size at the point that it stops being reduced moving to
+ 		higher (smaller) mipmap levels
+ 		 -->
+-		<bitfield name="ARRAY_PITCH" low="0" high="13" shr="12" type="uint"/>
++		<bitfield name="ARRAY_PITCH" low="0" high="22" shr="12" type="uint"/>
+ 		<bitfield name="MIN_LAYERSZ" low="23" high="26" shr="12"/>
+ 		<!--
+ 		by default levels with w < 16 are linear
+-- 
+2.42.0
+

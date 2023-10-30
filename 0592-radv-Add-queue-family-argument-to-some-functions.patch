@@ -1,0 +1,323 @@
+From ff6c58512121aa84499e3db467cd8c3052d91ae6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Wed, 18 Oct 2023 15:37:21 +0200
+Subject: [PATCH 592/834] radv: Add queue family argument to some functions.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25770>
+---
+ src/amd/vulkan/radv_cmd_buffer.c  | 34 +++++++++++++++----------------
+ src/amd/vulkan/radv_perfcounter.c |  6 +++---
+ src/amd/vulkan/radv_private.h     |  9 ++++----
+ src/amd/vulkan/radv_query.c       |  9 ++++----
+ src/amd/vulkan/radv_queue.c       |  3 +--
+ src/amd/vulkan/radv_sqtt.c        | 19 +++++++++++++++--
+ src/amd/vulkan/si_cmd_buffer.c    | 24 ++++++++++++----------
+ 7 files changed, 59 insertions(+), 45 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_cmd_buffer.c b/src/amd/vulkan/radv_cmd_buffer.c
+index 2c2bab9dd88..a5a905adac2 100644
+--- a/src/amd/vulkan/radv_cmd_buffer.c
++++ b/src/amd/vulkan/radv_cmd_buffer.c
+@@ -587,7 +587,7 @@ radv_gang_cache_flush(struct radv_cmd_buffer *cmd_buffer)
+    enum rgp_flush_bits sqtt_flush_bits = 0;
+ 
+    si_cs_emit_cache_flush(cmd_buffer->device->ws, ace_cs, cmd_buffer->device->physical_device->rad_info.gfx_level, NULL,
+-                          0, true, flush_bits, &sqtt_flush_bits, 0);
++                          0, RADV_QUEUE_COMPUTE, flush_bits, &sqtt_flush_bits, 0);
+ 
+    cmd_buffer->gang.flush_bits = 0;
+ }
+@@ -629,10 +629,9 @@ radv_flush_gang_leader_semaphore(struct radv_cmd_buffer *cmd_buffer)
+    ASSERTED unsigned cdw_max = radeon_check_space(cmd_buffer->device->ws, cmd_buffer->cs, 12);
+ 
+    /* GFX writes a value to the semaphore which ACE can wait for.*/
+-   si_cs_emit_write_event_eop(cmd_buffer->cs, cmd_buffer->device->physical_device->rad_info.gfx_level,
+-                              radv_cmd_buffer_uses_mec(cmd_buffer), V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
+-                              EOP_DATA_SEL_VALUE_32BIT, cmd_buffer->gang.sem.va, cmd_buffer->gang.sem.leader_value,
+-                              cmd_buffer->gfx9_eop_bug_va);
++   si_cs_emit_write_event_eop(cmd_buffer->cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
++                              V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT,
++                              cmd_buffer->gang.sem.va, cmd_buffer->gang.sem.leader_value, cmd_buffer->gfx9_eop_bug_va);
+ 
+    cmd_buffer->gang.sem.emitted_leader_value = cmd_buffer->gang.sem.leader_value;
+ 
+@@ -711,14 +710,13 @@ radv_cmd_buffer_after_draw(struct radv_cmd_buffer *cmd_buffer, enum radv_cmd_flu
+ 
+       /* Force wait for graphics or compute engines to be idle. */
+       si_cs_emit_cache_flush(device->ws, cmd_buffer->cs, device->physical_device->rad_info.gfx_level,
+-                             &cmd_buffer->gfx9_fence_idx, cmd_buffer->gfx9_fence_va,
+-                             radv_cmd_buffer_uses_mec(cmd_buffer), flags, &sqtt_flush_bits,
+-                             cmd_buffer->gfx9_eop_bug_va);
++                             &cmd_buffer->gfx9_fence_idx, cmd_buffer->gfx9_fence_va, cmd_buffer->qf, flags,
++                             &sqtt_flush_bits, cmd_buffer->gfx9_eop_bug_va);
+ 
+       if ((flags & RADV_CMD_FLAG_PS_PARTIAL_FLUSH) && radv_cmdbuf_has_stage(cmd_buffer, MESA_SHADER_TASK)) {
+          /* Force wait for compute engines to be idle on the internal cmdbuf. */
+          si_cs_emit_cache_flush(device->ws, cmd_buffer->gang.cs, device->physical_device->rad_info.gfx_level, NULL, 0,
+-                                true, RADV_CMD_FLAG_CS_PARTIAL_FLUSH, &sqtt_flush_bits, 0);
++                                RADV_QUEUE_COMPUTE, RADV_CMD_FLAG_CS_PARTIAL_FLUSH, &sqtt_flush_bits, 0);
+       }
+    }
+ 
+@@ -10593,9 +10591,9 @@ write_event(struct radv_cmd_buffer *cmd_buffer, struct radv_event *event, VkPipe
+          event_type = V_028A90_BOTTOM_OF_PIPE_TS;
+       }
+ 
+-      si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level,
+-                                 radv_cmd_buffer_uses_mec(cmd_buffer), event_type, 0, EOP_DST_SEL_MEM,
+-                                 EOP_DATA_SEL_VALUE_32BIT, va, value, cmd_buffer->gfx9_eop_bug_va);
++      si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
++                                 event_type, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, va, value,
++                                 cmd_buffer->gfx9_eop_bug_va);
+    }
+ 
+    assert(cmd_buffer->cs->cdw <= cdw_max);
+@@ -11058,9 +11056,9 @@ radv_CmdEndTransformFeedbackEXT(VkCommandBuffer commandBuffer, uint32_t firstCou
+             }
+          } else {
+             if (append) {
+-               si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level,
+-                                          radv_cmd_buffer_uses_mec(cmd_buffer), V_028A90_PS_DONE, 0, EOP_DST_SEL_TC_L2,
+-                                          EOP_DATA_SEL_GDS, va, EOP_DATA_GDS(i, 1), 0);
++               si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
++                                          V_028A90_PS_DONE, 0, EOP_DST_SEL_TC_L2, EOP_DATA_SEL_GDS, va,
++                                          EOP_DATA_GDS(i, 1), 0);
+             }
+          }
+       } else {
+@@ -11174,9 +11172,9 @@ radv_CmdWriteBufferMarker2AMD(VkCommandBuffer commandBuffer, VkPipelineStageFlag
+       radeon_emit(cs, va);
+       radeon_emit(cs, va >> 32);
+    } else {
+-      si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level,
+-                                 radv_cmd_buffer_uses_mec(cmd_buffer), V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
+-                                 EOP_DATA_SEL_VALUE_32BIT, va, marker, cmd_buffer->gfx9_eop_bug_va);
++      si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
++                                 V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, va, marker,
++                                 cmd_buffer->gfx9_eop_bug_va);
+    }
+ 
+    assert(cmd_buffer->cs->cdw <= cdw_max);
+diff --git a/src/amd/vulkan/radv_perfcounter.c b/src/amd/vulkan/radv_perfcounter.c
+index 5737c480432..e24a7af20f6 100644
+--- a/src/amd/vulkan/radv_perfcounter.c
++++ b/src/amd/vulkan/radv_perfcounter.c
+@@ -710,9 +710,9 @@ radv_pc_end_query(struct radv_cmd_buffer *cmd_buffer, struct radv_pc_query_pool
+    radv_cs_add_buffer(cmd_buffer->device->ws, cmd_buffer->cs, cmd_buffer->device->perf_counter_bo);
+ 
+    uint64_t perf_ctr_va = radv_buffer_get_va(cmd_buffer->device->perf_counter_bo) + PERF_CTR_BO_FENCE_OFFSET;
+-   si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level,
+-                              radv_cmd_buffer_uses_mec(cmd_buffer), V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
+-                              EOP_DATA_SEL_VALUE_32BIT, perf_ctr_va, 1, cmd_buffer->gfx9_fence_va);
++   si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
++                              V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, perf_ctr_va, 1,
++                              cmd_buffer->gfx9_fence_va);
+    radv_cp_wait_mem(cs, cmd_buffer->qf, WAIT_REG_MEM_EQUAL, perf_ctr_va, 1, 0xffffffff);
+ 
+    radv_pc_wait_idle(cmd_buffer);
+diff --git a/src/amd/vulkan/radv_private.h b/src/amd/vulkan/radv_private.h
+index 46f19263a52..77e1206a7f8 100644
+--- a/src/amd/vulkan/radv_private.h
++++ b/src/amd/vulkan/radv_private.h
+@@ -1979,8 +1979,8 @@ VkResult radv_init_shadowed_regs_buffer_state(const struct radv_device *device,
+ uint32_t si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer, bool instanced_draw, bool indirect_draw,
+                                    bool count_from_stream_output, uint32_t draw_vertex_count, unsigned topology,
+                                    bool prim_restart_enable, unsigned patch_control_points, unsigned num_tess_patches);
+-void si_cs_emit_write_event_eop(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level, bool is_mec, unsigned event,
+-                                unsigned event_flags, unsigned dst_sel, unsigned data_sel, uint64_t va,
++void si_cs_emit_write_event_eop(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level, enum radv_queue_family qf,
++                                unsigned event, unsigned event_flags, unsigned dst_sel, unsigned data_sel, uint64_t va,
+                                 uint32_t new_fence, uint64_t gfx9_eop_bug_va);
+ 
+ struct radv_vgt_shader_key {
+@@ -1997,8 +1997,9 @@ struct radv_vgt_shader_key {
+ };
+ 
+ void si_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level,
+-                            uint32_t *flush_cnt, uint64_t flush_va, bool is_mec, enum radv_cmd_flush_bits flush_bits,
+-                            enum rgp_flush_bits *sqtt_flush_bits, uint64_t gfx9_eop_bug_va);
++                            uint32_t *flush_cnt, uint64_t flush_va, enum radv_queue_family qf,
++                            enum radv_cmd_flush_bits flush_bits, enum rgp_flush_bits *sqtt_flush_bits,
++                            uint64_t gfx9_eop_bug_va);
+ void si_emit_cache_flush(struct radv_cmd_buffer *cmd_buffer);
+ void si_emit_set_predication_state(struct radv_cmd_buffer *cmd_buffer, bool draw_visible, unsigned pred_op,
+                                    uint64_t va);
+diff --git a/src/amd/vulkan/radv_query.c b/src/amd/vulkan/radv_query.c
+index e1d82061034..6596e93199b 100644
+--- a/src/amd/vulkan/radv_query.c
++++ b/src/amd/vulkan/radv_query.c
+@@ -1929,9 +1929,9 @@ emit_end_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *pool,
+             cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
+       }
+ 
+-      si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level,
+-                                 radv_cmd_buffer_uses_mec(cmd_buffer), V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
+-                                 EOP_DATA_SEL_VALUE_32BIT, avail_va, 1, cmd_buffer->gfx9_eop_bug_va);
++      si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
++                                 V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, avail_va, 1,
++                                 cmd_buffer->gfx9_eop_bug_va);
+       break;
+    }
+    case VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT:
+@@ -2066,7 +2066,6 @@ radv_CmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 sta
+ {
+    RADV_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+    RADV_FROM_HANDLE(radv_query_pool, pool, queryPool);
+-   bool mec = radv_cmd_buffer_uses_mec(cmd_buffer);
+    struct radeon_cmdbuf *cs = cmd_buffer->cs;
+    uint64_t va = radv_buffer_get_va(pool->bo);
+    uint64_t query_va = va + pool->stride * query;
+@@ -2096,7 +2095,7 @@ radv_CmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 sta
+          radeon_emit(cs, query_va);
+          radeon_emit(cs, query_va >> 32);
+       } else {
+-         si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, mec,
++         si_cs_emit_write_event_eop(cs, cmd_buffer->device->physical_device->rad_info.gfx_level, cmd_buffer->qf,
+                                     V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM, EOP_DATA_SEL_TIMESTAMP, query_va, 0,
+                                     cmd_buffer->gfx9_eop_bug_va);
+       }
+diff --git a/src/amd/vulkan/radv_queue.c b/src/amd/vulkan/radv_queue.c
+index cf95c30db7e..e6eee92e5bf 100644
+--- a/src/amd/vulkan/radv_queue.c
++++ b/src/amd/vulkan/radv_queue.c
+@@ -1056,7 +1056,6 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
+       if (i < 2) {
+          /* The two initial preambles have a cache flush at the beginning. */
+          const enum amd_gfx_level gfx_level = device->physical_device->rad_info.gfx_level;
+-         const bool is_mec = queue->qf == RADV_QUEUE_COMPUTE && gfx_level >= GFX7;
+          enum radv_cmd_flush_bits flush_bits = RADV_CMD_FLAG_INV_ICACHE | RADV_CMD_FLAG_INV_SCACHE |
+                                                RADV_CMD_FLAG_INV_VCACHE | RADV_CMD_FLAG_INV_L2 |
+                                                RADV_CMD_FLAG_START_PIPELINE_STATS;
+@@ -1068,7 +1067,7 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
+                flush_bits |= RADV_CMD_FLAG_PS_PARTIAL_FLUSH;
+          }
+ 
+-         si_cs_emit_cache_flush(ws, cs, gfx_level, NULL, 0, is_mec, flush_bits, &sqtt_flush_bits, 0);
++         si_cs_emit_cache_flush(ws, cs, gfx_level, NULL, 0, queue->qf, flush_bits, &sqtt_flush_bits, 0);
+       }
+ 
+       result = ws->cs_finalize(cs);
+diff --git a/src/amd/vulkan/radv_sqtt.c b/src/amd/vulkan/radv_sqtt.c
+index bdb9ec46544..6c3fa93861a 100644
+--- a/src/amd/vulkan/radv_sqtt.c
++++ b/src/amd/vulkan/radv_sqtt.c
+@@ -59,13 +59,28 @@ gfx10_get_sqtt_ctrl(const struct radv_device *device, bool enable)
+    return sqtt_ctrl;
+ }
+ 
++static enum radv_queue_family
++radv_ip_to_queue_family(enum amd_ip_type t)
++{
++   switch (t) {
++   case AMD_IP_GFX:
++      return RADV_QUEUE_GENERAL;
++   case AMD_IP_COMPUTE:
++      return RADV_QUEUE_COMPUTE;
++   case AMD_IP_SDMA:
++      return RADV_QUEUE_TRANSFER;
++   default:
++      unreachable("Unknown IP type");
++   }
++}
++
+ static void
+ radv_emit_wait_for_idle(const struct radv_device *device, struct radeon_cmdbuf *cs, int family)
+ {
++   const enum radv_queue_family qf = radv_ip_to_queue_family(family);
+    enum rgp_flush_bits sqtt_flush_bits = 0;
+    si_cs_emit_cache_flush(
+-      device->ws, cs, device->physical_device->rad_info.gfx_level, NULL, 0,
+-      family == AMD_IP_COMPUTE && device->physical_device->rad_info.gfx_level >= GFX7,
++      device->ws, cs, device->physical_device->rad_info.gfx_level, NULL, 0, qf,
+       (family == RADV_QUEUE_COMPUTE ? RADV_CMD_FLAG_CS_PARTIAL_FLUSH
+                                     : (RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH)) |
+          RADV_CMD_FLAG_INV_ICACHE | RADV_CMD_FLAG_INV_SCACHE | RADV_CMD_FLAG_INV_VCACHE | RADV_CMD_FLAG_INV_L2,
+diff --git a/src/amd/vulkan/si_cmd_buffer.c b/src/amd/vulkan/si_cmd_buffer.c
+index e6336967b7e..d74328e3a42 100644
+--- a/src/amd/vulkan/si_cmd_buffer.c
++++ b/src/amd/vulkan/si_cmd_buffer.c
+@@ -946,10 +946,11 @@ si_get_ia_multi_vgt_param(struct radv_cmd_buffer *cmd_buffer, bool instanced_dra
+ }
+ 
+ void
+-si_cs_emit_write_event_eop(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level, bool is_mec, unsigned event,
+-                           unsigned event_flags, unsigned dst_sel, unsigned data_sel, uint64_t va, uint32_t new_fence,
+-                           uint64_t gfx9_eop_bug_va)
++si_cs_emit_write_event_eop(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level, enum radv_queue_family qf,
++                           unsigned event, unsigned event_flags, unsigned dst_sel, unsigned data_sel, uint64_t va,
++                           uint32_t new_fence, uint64_t gfx9_eop_bug_va)
+ {
++   const bool is_mec = qf == RADV_QUEUE_COMPUTE && gfx_level >= GFX7;
+    unsigned op =
+       EVENT_TYPE(event) | EVENT_INDEX(event == V_028A90_CS_DONE || event == V_028A90_PS_DONE ? 6 : 5) | event_flags;
+    unsigned is_gfx8_mec = is_mec && gfx_level < GFX9;
+@@ -1053,9 +1054,10 @@ si_emit_acquire_mem(struct radeon_cmdbuf *cs, bool is_mec, bool is_gfx9, unsigne
+ 
+ static void
+ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level, uint32_t *flush_cnt,
+-                          uint64_t flush_va, bool is_mec, enum radv_cmd_flush_bits flush_bits,
++                          uint64_t flush_va, enum radv_queue_family qf, enum radv_cmd_flush_bits flush_bits,
+                           enum rgp_flush_bits *sqtt_flush_bits, uint64_t gfx9_eop_bug_va)
+ {
++   const bool is_mec = qf == RADV_QUEUE_COMPUTE;
+    uint32_t gcr_cntl = 0;
+    unsigned cb_db_event = 0;
+ 
+@@ -1225,13 +1227,12 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level
+          assert(flush_cnt);
+          (*flush_cnt)++;
+ 
+-         si_cs_emit_write_event_eop(cs, gfx_level, false, cb_db_event,
++         si_cs_emit_write_event_eop(cs, gfx_level, qf, cb_db_event,
+                                     S_490_GLM_WB(glm_wb) | S_490_GLM_INV(glm_inv) | S_490_GLV_INV(glv_inv) |
+                                        S_490_GL1_INV(gl1_inv) | S_490_GL2_INV(gl2_inv) | S_490_GL2_WB(gl2_wb) |
+                                        S_490_SEQ(gcr_seq),
+                                     EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT, flush_va, *flush_cnt, gfx9_eop_bug_va);
+ 
+-         const enum radv_queue_family qf = is_mec ? RADV_QUEUE_COMPUTE : RADV_QUEUE_GENERAL;
+          radv_cp_wait_mem(cs, qf, WAIT_REG_MEM_EQUAL, flush_va, *flush_cnt, 0xffffffff);
+       }
+    }
+@@ -1277,8 +1278,9 @@ gfx10_cs_emit_cache_flush(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level
+ 
+ void
+ si_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_level,
+-                       uint32_t *flush_cnt, uint64_t flush_va, bool is_mec, enum radv_cmd_flush_bits flush_bits,
+-                       enum rgp_flush_bits *sqtt_flush_bits, uint64_t gfx9_eop_bug_va)
++                       uint32_t *flush_cnt, uint64_t flush_va, enum radv_queue_family qf,
++                       enum radv_cmd_flush_bits flush_bits, enum rgp_flush_bits *sqtt_flush_bits,
++                       uint64_t gfx9_eop_bug_va)
+ {
+    unsigned cp_coher_cntl = 0;
+    uint32_t flush_cb_db = flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB);
+@@ -1287,11 +1289,12 @@ si_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enum
+ 
+    if (gfx_level >= GFX10) {
+       /* GFX10 cache flush handling is quite different. */
+-      gfx10_cs_emit_cache_flush(cs, gfx_level, flush_cnt, flush_va, is_mec, flush_bits, sqtt_flush_bits,
+-                                gfx9_eop_bug_va);
++      gfx10_cs_emit_cache_flush(cs, gfx_level, flush_cnt, flush_va, qf, flush_bits, sqtt_flush_bits, gfx9_eop_bug_va);
+       return;
+    }
+ 
++   const bool is_mec = qf == RADV_QUEUE_COMPUTE && gfx_level >= GFX7;
++
+    if (flush_bits & RADV_CMD_FLAG_INV_ICACHE) {
+       cp_coher_cntl |= S_0085F0_SH_ICACHE_ACTION_ENA(1);
+       *sqtt_flush_bits |= RGP_FLUSH_INVAL_ICACHE;
+@@ -1394,7 +1397,6 @@ si_cs_emit_cache_flush(struct radeon_winsys *ws, struct radeon_cmdbuf *cs, enum
+ 
+       si_cs_emit_write_event_eop(cs, gfx_level, false, cb_db_event, tc_flags, EOP_DST_SEL_MEM, EOP_DATA_SEL_VALUE_32BIT,
+                                  flush_va, *flush_cnt, gfx9_eop_bug_va);
+-      const enum radv_queue_family qf = is_mec ? RADV_QUEUE_COMPUTE : RADV_QUEUE_GENERAL;
+       radv_cp_wait_mem(cs, qf, WAIT_REG_MEM_EQUAL, flush_va, *flush_cnt, 0xffffffff);
+    }
+ 
+-- 
+2.42.0
+

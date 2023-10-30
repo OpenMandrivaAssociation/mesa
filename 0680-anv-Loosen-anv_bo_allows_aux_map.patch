@@ -1,0 +1,38 @@
+From 2cbec810419e88c2f6acd18355b14b3d9568623c Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Mon, 23 Oct 2023 10:32:57 -0400
+Subject: [PATCH 680/834] anv: Loosen anv_bo_allows_aux_map
+
+Instead of requiring that a BO has the has_implicit_ccs flag set, simply
+require that the BO is aligned according to aux-map requirements.
+
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/intel/vulkan/anv_private.h | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 9d64ef4b9d7..c150ab84313 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -4926,11 +4926,13 @@ anv_bo_allows_aux_map(const struct anv_device *device,
+    if (device->aux_map_ctx == NULL)
+       return false;
+ 
+-   if (bo->has_implicit_ccs == false)
++   /* Technically, we really only care about what offset the image is bound
++    * into on the BO, but we don't have that information here. As a heuristic,
++    * rely on the BO offset instead.
++    */
++   if (bo->offset % intel_aux_map_get_alignment(device->aux_map_ctx) != 0)
+       return false;
+ 
+-   assert(bo->offset % intel_aux_map_get_alignment(device->aux_map_ctx) == 0);
+-
+    return true;
+ }
+ 
+-- 
+2.42.0
+

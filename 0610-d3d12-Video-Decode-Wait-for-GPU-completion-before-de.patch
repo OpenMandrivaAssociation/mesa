@@ -1,0 +1,41 @@
+From d38fff5907d5915e2c95787198b38c17fd0a862a Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Mon, 11 Sep 2023 14:48:22 -0400
+Subject: [PATCH 610/834] d3d12: Video Decode - Wait for GPU completion before
+ destroying decoder in-flight objects
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ src/gallium/drivers/d3d12/d3d12_video_dec.cpp | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_dec.cpp b/src/gallium/drivers/d3d12/d3d12_video_dec.cpp
+index 92f83cd5f43..499eb982933 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_dec.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_dec.cpp
+@@ -145,12 +145,16 @@ d3d12_video_decoder_destroy(struct pipe_video_codec *codec)
+       return;
+    }
+ 
+-   // Flush pending work before destroying.
+    struct d3d12_video_decoder *pD3D12Dec = (struct d3d12_video_decoder *) codec;
+-   uint64_t curBatchFence = pD3D12Dec->m_fenceValue;
+-   if (pD3D12Dec->m_needsGPUFlush) {
+-      d3d12_video_decoder_flush(codec);
+-      d3d12_video_decoder_sync_completion(codec, pD3D12Dec->m_spFence.Get(), curBatchFence, OS_TIMEOUT_INFINITE);
++   // Flush and wait for completion of any in-flight GPU work before destroying objects
++   d3d12_video_decoder_flush(codec);
++   if (pD3D12Dec->m_fenceValue > 1 /* Check we submitted at least one frame */) {
++      auto decode_queue_completion_fence = pD3D12Dec->m_inflightResourcesPool[(pD3D12Dec->m_fenceValue - 1u) % D3D12_VIDEO_DEC_ASYNC_DEPTH].m_FenceData;
++      d3d12_video_decoder_sync_completion(codec, decode_queue_completion_fence.cmdqueue_fence, decode_queue_completion_fence.value, OS_TIMEOUT_INFINITE);
++      struct pipe_fence_handle *context_queue_completion_fence = NULL;
++      pD3D12Dec->base.context->flush(pD3D12Dec->base.context, &context_queue_completion_fence, PIPE_FLUSH_ASYNC | PIPE_FLUSH_HINT_FINISH);
++      pD3D12Dec->m_pD3D12Screen->base.fence_finish(&pD3D12Dec->m_pD3D12Screen->base, NULL, context_queue_completion_fence, OS_TIMEOUT_INFINITE);
++      pD3D12Dec->m_pD3D12Screen->base.fence_reference(&pD3D12Dec->m_pD3D12Screen->base, &context_queue_completion_fence, NULL);
+    }
+ 
+    //
+-- 
+2.42.0
+

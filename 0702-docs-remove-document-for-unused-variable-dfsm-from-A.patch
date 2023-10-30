@@ -1,0 +1,40 @@
+From e373b7c07e9b5cb206c33e61ec19a1602381f8b2 Mon Sep 17 00:00:00 2001
+From: Yogesh Mohan Marimuthu <yogesh.mohanmarimuthu@amd.com>
+Date: Tue, 18 Oct 2022 23:41:25 +0530
+Subject: [PATCH 702/834] docs: remove document for unused variable dfsm from
+ AMD_DEBUG
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25148>
+---
+ docs/envvars.rst | 4 ----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/docs/envvars.rst b/docs/envvars.rst
+index 176d144eb05..4e3a047cf29 100644
+--- a/docs/envvars.rst
++++ b/docs/envvars.rst
+@@ -1424,8 +1424,6 @@ RadeonSI driver environment variables
+       Disable DCC for MSAA
+    ``nodpbb``
+       Disable DPBB. Overrules the dpbb enable option.
+-   ``nodfsm``
+-      Disable DFSM.
+    ``notiling``
+       Disable tiling
+    ``nofmask``
+@@ -1500,8 +1498,6 @@ RadeonSI driver environment variables
+       Disable out-of-order rasterization
+    ``dpbb``
+       Enable DPBB. Enable DPBB for gfx9 dGPU. Default enabled for gfx9 APU and >= gfx10.
+-   ``dfsm``
+-      Enable DFSM.
+    ``extra_md``
+       add extra information in bo metadatas to help tools (umr)
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,27 @@
+From 7078cd3652b9689a4921b4d0045f0ef6e4c345b7 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 10 Oct 2023 11:44:04 -0400
+Subject: [PATCH 126/834] zink: set ZINK_DEBUG=quiet for polaris jobs
+
+modifiers aren't supported here, so this will otherwise spam infinitely
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25645>
+---
+ src/gallium/drivers/zink/ci/gitlab-ci.yml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/zink/ci/gitlab-ci.yml b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+index 08543c06e4b..4ad4da698c7 100644
+--- a/src/gallium/drivers/zink/ci/gitlab-ci.yml
++++ b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+@@ -113,6 +113,7 @@ zink-radv-polaris10-valve:
+     - .zink-radv-manual-rules
+   variables:
+     GPU_VERSION: zink-radv-polaris10
++    ZINK_DEBUG: quiet
+ 
+ zink-radv-navi10-valve:
+   extends:
+-- 
+2.42.0
+

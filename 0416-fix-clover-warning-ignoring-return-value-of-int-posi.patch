@@ -1,0 +1,43 @@
+From 2320ad1da6d1bcb0bcbb7d3aae1e7fa11cf4d8ce Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Kai=20Wasserb=C3=A4ch?= <kai@dev.carbon-project.org>
+Date: Fri, 13 Oct 2023 14:04:37 +0200
+Subject: [PATCH 416/834] =?UTF-8?q?fix:=20clover:=20warning:=20ignoring=20?=
+ =?UTF-8?q?return=20value=20of=20=E2=80=98int=20posix=5Fmemalign(=E2=80=A6?=
+ =?UTF-8?q?)=E2=80=99=20[-Wunused-result]?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+During builds GCC 13.2 issues the following warning:
+src/gallium/frontends/clover/api/memory.cpp:612:21: warning: ignoring return value of ‘int posix_memalign(void**, size_t, size_t)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  612 |       posix_memalign(&ptr, alignment, size);
+      |       ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+
+Fix this by checking the returned value is actually 0 and if not we now
+report a nullptr.
+
+Signed-off-by: Kai Wasserbäch <kai@dev.carbon-project.org>
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25724>
+---
+ src/gallium/frontends/clover/api/memory.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/clover/api/memory.cpp b/src/gallium/frontends/clover/api/memory.cpp
+index 062fbb98c5b..ea553efe1f4 100644
+--- a/src/gallium/frontends/clover/api/memory.cpp
++++ b/src/gallium/frontends/clover/api/memory.cpp
+@@ -609,7 +609,9 @@ clSVMAlloc(cl_context d_ctx,
+       void *ptr = nullptr;
+       if (alignment < sizeof(void*))
+          alignment = sizeof(void*);
+-      posix_memalign(&ptr, alignment, size);
++      int ret = posix_memalign(&ptr, alignment, size);
++      if (ret)
++         return nullptr;
+ 
+       if (ptr)
+          ctx.add_svm_allocation(ptr, size);
+-- 
+2.42.0
+

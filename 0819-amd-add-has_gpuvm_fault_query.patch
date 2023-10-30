@@ -1,0 +1,49 @@
+From bdc62108be282d550925563ce5097f9d938703b9 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Thu, 25 May 2023 15:04:56 +0200
+Subject: [PATCH 819/834] amd: add has_gpuvm_fault_query
+
+Whether the kernel allows to query the last GPUVM fault.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/23238>
+---
+ src/amd/common/ac_gpu_info.c | 2 ++
+ src/amd/common/ac_gpu_info.h | 1 +
+ 2 files changed, 3 insertions(+)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 777aa493298..418a1989344 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -1025,6 +1025,7 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+    info->has_sparse_vm_mappings = info->gfx_level >= GFX7;
+    info->has_scheduled_fence_dependency = info->drm_minor >= 28;
+    info->has_gang_submit = info->drm_minor >= 49;
++   info->has_gpuvm_fault_query = info->drm_minor >= 55;
+    /* WARNING: Register shadowing decreases performance by up to 50% on GFX11 with current FW. */
+    info->register_shadowing_required = device_info.ids_flags & AMDGPU_IDS_FLAGS_PREEMPTION &&
+                                        info->gfx_level < GFX11;
+@@ -1814,6 +1815,7 @@ void ac_print_gpu_info(const struct radeon_info *info, FILE *f)
+    fprintf(f, "    has_stable_pstate = %u\n", info->has_stable_pstate);
+    fprintf(f, "    has_scheduled_fence_dependency = %u\n", info->has_scheduled_fence_dependency);
+    fprintf(f, "    has_gang_submit = %u\n", info->has_gang_submit);
++   fprintf(f, "    has_gpuvm_fault_query = %u\n", info->has_gpuvm_fault_query);
+    fprintf(f, "    register_shadowing_required = %u\n", info->register_shadowing_required);
+    fprintf(f, "    has_fw_based_shadowing = %u\n", info->has_fw_based_shadowing);
+    if (info->has_fw_based_shadowing) {
+diff --git a/src/amd/common/ac_gpu_info.h b/src/amd/common/ac_gpu_info.h
+index 07323199089..c9d66f7aaba 100644
+--- a/src/amd/common/ac_gpu_info.h
++++ b/src/amd/common/ac_gpu_info.h
+@@ -204,6 +204,7 @@ struct radeon_info {
+    bool has_sparse_vm_mappings;
+    bool has_scheduled_fence_dependency;
+    bool has_gang_submit;
++   bool has_gpuvm_fault_query;
+    bool has_pcie_bandwidth_info;
+    bool has_stable_pstate;
+    /* Whether SR-IOV is enabled or amdgpu.mcbp=1 was set on the kernel command line. */
+-- 
+2.42.0
+

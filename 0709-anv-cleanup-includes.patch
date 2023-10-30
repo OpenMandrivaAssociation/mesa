@@ -1,0 +1,32 @@
+From f85d8d908c7fb3419c0ba65a3f9b864ae91637d1 Mon Sep 17 00:00:00 2001
+From: Rohan Garg <rohan.garg@intel.com>
+Date: Tue, 17 Oct 2023 17:11:13 +0200
+Subject: [PATCH 709/834] anv: cleanup includes
+
+Signed-off-by: Rohan Garg <rohan.garg@intel.com>
+Acked-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25766>
+---
+ src/intel/vulkan/genX_init_state.c | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/src/intel/vulkan/genX_init_state.c b/src/intel/vulkan/genX_init_state.c
+index deb900753b6..e514857026e 100644
+--- a/src/intel/vulkan/genX_init_state.c
++++ b/src/intel/vulkan/genX_init_state.c
+@@ -21,12 +21,6 @@
+  * IN THE SOFTWARE.
+  */
+ 
+-#include <assert.h>
+-#include <stdbool.h>
+-#include <string.h>
+-#include <unistd.h>
+-#include <fcntl.h>
+-
+ #include "anv_private.h"
+ 
+ #include "common/intel_aux_map.h"
+-- 
+2.42.0
+

@@ -1,0 +1,26 @@
+From 6e73b1c5b2f9cfa6755297689ec7b1f2cd8ee744 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Thu, 19 Oct 2023 12:52:30 -0400
+Subject: [PATCH 602/834] ci: don't set GALLIUM_DRIVER for zink
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25640>
+---
+ src/gallium/drivers/zink/ci/gitlab-ci.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/ci/gitlab-ci.yml b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+index 9b91b6da1ec..a2c3ac83cb9 100644
+--- a/src/gallium/drivers/zink/ci/gitlab-ci.yml
++++ b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+@@ -13,7 +13,7 @@ zink-lvp:
+     # Enable validation (except for on piglit, see deqp-zink-lvp.toml), logging
+     # to stdout and aborting on unknown failures.
+     ZINK_DEBUG: validation
+-    XVFB_SCRIPT: "GALLIUM_DRIVER=zink VK_DRIVER=lvp install/deqp-runner.sh"
++    XVFB_SCRIPT: "VK_DRIVER=lvp install/deqp-runner.sh"
+   script: |
+     xvfb-run --server-args='-noreset' bash -c ". $SCRIPTS_DIR/setup-test-env.sh && ${XVFB_SCRIPT}"
+ 
+-- 
+2.42.0
+

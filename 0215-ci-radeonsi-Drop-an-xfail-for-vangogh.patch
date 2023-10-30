@@ -1,0 +1,27 @@
+From 534511935d5e33a8b88c8d31e5ed083e25232eec Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Thu, 12 Oct 2023 12:17:50 -0700
+Subject: [PATCH 215/834] ci/radeonsi: Drop an xfail for vangogh.
+
+It's passed in the last 3 nightly runs.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25693>
+---
+ src/amd/ci/radeonsi-vangogh-fails.txt | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/amd/ci/radeonsi-vangogh-fails.txt b/src/amd/ci/radeonsi-vangogh-fails.txt
+index 980790cc860..d1faab95965 100644
+--- a/src/amd/ci/radeonsi-vangogh-fails.txt
++++ b/src/amd/ci/radeonsi-vangogh-fails.txt
+@@ -67,7 +67,6 @@ spec@arb_viewport_array@display-list,Fail
+ spec@egl 1.4@eglterminate then unbind context,Fail
+ spec@egl_khr_surfaceless_context@viewport,Fail
+ spec@ext_framebuffer_blit@fbo-blit-check-limits,Fail
+-spec@ext_transform_feedback@generatemipmap prims_generated,Crash
+ spec@glsl-4.00@execution@conversion@frag-conversion-explicit-dmat2-mat2,Fail
+ spec@glsl-4.00@execution@conversion@frag-conversion-explicit-dmat2x3-mat2x3,Fail
+ spec@glsl-4.00@execution@conversion@frag-conversion-explicit-dmat2x4-mat2x4,Fail
+-- 
+2.42.0
+

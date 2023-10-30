@@ -1,0 +1,36 @@
+From 3fb822dbab0e58b9bc0fb31a0c3849556b0ec2ea Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 15 Oct 2023 13:29:24 +0200
+Subject: [PATCH 447/834] zink: properly emit PhysicalStorageBufferAddresses
+ cap
+
+The PhysicalStorageBuffer64 addressing model requires this cap. Fixes
+vulkan validation error.
+
+Fixes: ddc5c304899 ("zink: handle global and scratch vars")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25736>
+---
+ src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index 401e1d8f242..bb944fdafa4 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -4410,9 +4410,10 @@ nir_to_spirv(struct nir_shader *s, const struct zink_shader_info *sinfo, uint32_
+    if (gl_shader_stage_is_compute(s->info.stage)) {
+       if (s->info.cs.ptr_size == 32)
+          model = SpvAddressingModelPhysical32;
+-      else if (s->info.cs.ptr_size == 64)
++      else if (s->info.cs.ptr_size == 64) {
++         spirv_builder_emit_cap(&ctx.builder, SpvCapabilityPhysicalStorageBufferAddresses);
+          model = SpvAddressingModelPhysicalStorageBuffer64;
+-      else
++      } else
+          model = SpvAddressingModelLogical;
+    }
+ 
+-- 
+2.42.0
+

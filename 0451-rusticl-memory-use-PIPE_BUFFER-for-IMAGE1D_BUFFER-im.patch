@@ -1,0 +1,31 @@
+From bdd255bd04713d27cce8e9f2cbd3ea2ca5fea857 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 15 Oct 2023 15:32:59 +0200
+Subject: [PATCH 451/834] rusticl/memory: use PIPE_BUFFER for IMAGE1D_BUFFER
+ images
+
+Fixes samplerless 1Dbuffer tests with Zink.
+
+Fixes: 20c90fed5a0 ("rusticl: added")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25739>
+---
+ src/gallium/frontends/rusticl/core/util.rs | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/util.rs b/src/gallium/frontends/rusticl/core/util.rs
+index ad73f6e2f0d..27f03d7303b 100644
+--- a/src/gallium/frontends/rusticl/core/util.rs
++++ b/src/gallium/frontends/rusticl/core/util.rs
+@@ -12,7 +12,7 @@ pub fn cl_mem_type_to_texture_target(mem_type: cl_mem_object_type) -> pipe_textu
+         CL_MEM_OBJECT_IMAGE3D => pipe_texture_target::PIPE_TEXTURE_3D,
+         CL_MEM_OBJECT_IMAGE1D_ARRAY => pipe_texture_target::PIPE_TEXTURE_1D_ARRAY,
+         CL_MEM_OBJECT_IMAGE2D_ARRAY => pipe_texture_target::PIPE_TEXTURE_2D_ARRAY,
+-        CL_MEM_OBJECT_IMAGE1D_BUFFER => pipe_texture_target::PIPE_TEXTURE_1D,
++        CL_MEM_OBJECT_IMAGE1D_BUFFER => pipe_texture_target::PIPE_BUFFER,
+         _ => pipe_texture_target::PIPE_TEXTURE_2D,
+     }
+ }
+-- 
+2.42.0
+

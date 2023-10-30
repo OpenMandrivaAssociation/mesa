@@ -1,0 +1,33 @@
+From 4c61de56c53614d6984f8cb97c8944681a68a9cd Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 09:47:16 +0200
+Subject: [PATCH 694/834] llvmpipe: Set nir_lower_dround_even.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Avoids a regression when disabling GLSL-level lowering of the dround class
+of ops, while passing through doubles to llvm for the other rounding ops.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25777>
+---
+ src/gallium/drivers/llvmpipe/lp_screen.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/llvmpipe/lp_screen.c b/src/gallium/drivers/llvmpipe/lp_screen.c
+index da0dfe5f6f8..b518da49e72 100644
+--- a/src/gallium/drivers/llvmpipe/lp_screen.c
++++ b/src/gallium/drivers/llvmpipe/lp_screen.c
+@@ -622,6 +622,7 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
+    .lower_mul_2x32_64 = true,
+    .lower_ifind_msb = true,
+    .lower_int64_options = nir_lower_imul_2x32_64,
++   .lower_doubles_options = nir_lower_dround_even,
+    .max_unroll_iterations = 32,
+    .use_interpolated_input_intrinsics = true,
+    .lower_to_scalar = true,
+-- 
+2.42.0
+

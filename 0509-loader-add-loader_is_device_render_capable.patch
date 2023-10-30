@@ -1,0 +1,60 @@
+From e10d8cd5dd2bd1ea5a0475d0c2160255f94643c1 Mon Sep 17 00:00:00 2001
+From: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Date: Thu, 21 Sep 2023 22:01:32 -0300
+Subject: [PATCH 509/834] loader: add loader_is_device_render_capable()
+
+Add helper function to check if a device is render-capable.
+
+Signed-off-by: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Reviewed-by: Simon Ser <contact@emersion.fr>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24825>
+---
+ src/loader/loader.c | 16 ++++++++++++++++
+ src/loader/loader.h |  3 +++
+ 2 files changed, 19 insertions(+)
+
+diff --git a/src/loader/loader.c b/src/loader/loader.c
+index 4abb5649fa1..4b8f532fe74 100644
+--- a/src/loader/loader.c
++++ b/src/loader/loader.c
+@@ -192,6 +192,22 @@ loader_open_render_node_platform_device(const char * const drivers[],
+    return fd;
+ }
+ 
++bool
++loader_is_device_render_capable(int fd)
++{
++   drmDevicePtr dev_ptr;
++   bool ret;
++
++   if (drmGetDevice2(fd, 0, &dev_ptr) != 0)
++      return false;
++
++   ret = (dev_ptr->available_nodes & (1 << DRM_NODE_RENDER));
++
++   drmFreeDevice(&dev_ptr);
++
++   return ret;
++}
++
+ char *
+ loader_get_render_node(dev_t device)
+ {
+diff --git a/src/loader/loader.h b/src/loader/loader.h
+index 9c50c91d2a7..8cbfb1afc00 100644
+--- a/src/loader/loader.h
++++ b/src/loader/loader.h
+@@ -50,6 +50,9 @@ int
+ loader_open_render_node_platform_device(const char * const drivers[],
+                                         unsigned int n_drivers);
+ 
++bool
++loader_is_device_render_capable(int fd);
++
+ char *
+ loader_get_render_node(dev_t device);
+ 
+-- 
+2.42.0
+

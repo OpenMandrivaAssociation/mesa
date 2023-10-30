@@ -1,0 +1,72 @@
+From 9ffe8b9235d9d74c7ecdc2e0f0b931b844cce53a Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Thu, 28 Sep 2023 09:28:21 -0700
+Subject: [PATCH 397/834] anv: add anv_is_format_emulated
+
+anv_is_format_emulated returns true when a format is emulated.  It will
+be used for ASTC LDR emulation, but it always return false at the
+moment.
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/intel/vulkan/anv_device.c  |  3 +++
+ src/intel/vulkan/anv_private.h | 13 +++++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index 6713e778f86..51f9124ed31 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -1351,6 +1351,9 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
+    device->has_protected_contexts = device->info.ver >= 12 &&
+       intel_gem_supports_protected_context(fd, device->info.kmd_type);
+ 
++   /* always false for now */
++   device->emu_astc_ldr = false;
++
+    result = anv_physical_device_init_heaps(device, fd);
+    if (result != VK_SUCCESS)
+       goto fail_base;
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index c14232a9b58..05400787d8c 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -92,6 +92,7 @@
+ #include "vk_shader_module.h"
+ #include "vk_sync.h"
+ #include "vk_sync_timeline.h"
++#include "vk_texcompress_astc.h"
+ #include "vk_util.h"
+ #include "vk_query_pool.h"
+ #include "vk_queue.h"
+@@ -921,6 +922,9 @@ struct anv_physical_device {
+      */
+     bool                                        has_sparse;
+ 
++    /** True if ASTC LDR is supported via emulation */
++    bool                                        emu_astc_ldr;
++
+     /**/
+     bool                                        uses_ex_bso;
+ 
+@@ -4479,6 +4483,15 @@ bool anv_formats_ccs_e_compatible(const struct intel_device_info *devinfo,
+ extern VkFormat
+ vk_format_from_android(unsigned android_format, unsigned android_usage);
+ 
++static inline bool
++anv_is_format_emulated(const struct anv_physical_device *pdevice, VkFormat format)
++{
++   if (pdevice->emu_astc_ldr &&
++       vk_texcompress_astc_emulation_format(format) != VK_FORMAT_UNDEFINED)
++      return true;
++   return false;
++}
++
+ static inline struct isl_swizzle
+ anv_swizzle_for_render(struct isl_swizzle swizzle)
+ {
+-- 
+2.42.0
+

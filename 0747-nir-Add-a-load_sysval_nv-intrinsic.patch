@@ -1,0 +1,57 @@
+From 5984265d4598fc76d879f587a1e5da0f1c8d87b1 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Mon, 18 Sep 2023 21:14:35 -0500
+Subject: [PATCH 747/834] nir: Add a load_sysval_nv intrinsic
+
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir.h                     | 3 ++-
+ src/compiler/nir/nir_divergence_analysis.c | 1 +
+ src/compiler/nir/nir_intrinsics.py         | 4 ++++
+ 3 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 51c9408153f..39f3865885b 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -2084,7 +2084,8 @@ nir_intrinsic_can_reorder(nir_intrinsic_instr *instr)
+    } else if (instr->intrinsic == nir_intrinsic_load_ssbo ||
+               instr->intrinsic == nir_intrinsic_bindless_image_load ||
+               instr->intrinsic == nir_intrinsic_image_deref_load ||
+-              instr->intrinsic == nir_intrinsic_image_load) {
++              instr->intrinsic == nir_intrinsic_image_load ||
++              instr->intrinsic == nir_intrinsic_load_sysval_nv) {
+       return nir_intrinsic_access(instr) & ACCESS_CAN_REORDER;
+    } else {
+       const nir_intrinsic_info *info =
+diff --git a/src/compiler/nir/nir_divergence_analysis.c b/src/compiler/nir/nir_divergence_analysis.c
+index b6504ce6019..14079efb161 100644
+--- a/src/compiler/nir/nir_divergence_analysis.c
++++ b/src/compiler/nir/nir_divergence_analysis.c
+@@ -606,6 +606,7 @@ visit_intrinsic(nir_shader *shader, nir_intrinsic_instr *instr)
+    case nir_intrinsic_load_ray_hit_kind:
+    case nir_intrinsic_load_ray_flags:
+    case nir_intrinsic_load_cull_mask:
++   case nir_intrinsic_load_sysval_nv:
+    case nir_intrinsic_report_ray_intersection:
+    case nir_intrinsic_rq_proceed:
+    case nir_intrinsic_rq_load:
+diff --git a/src/compiler/nir/nir_intrinsics.py b/src/compiler/nir/nir_intrinsics.py
+index 07bcea5da8f..526413f1917 100644
+--- a/src/compiler/nir/nir_intrinsics.py
++++ b/src/compiler/nir/nir_intrinsics.py
+@@ -1954,6 +1954,10 @@ system_value("leaf_procedural_intel", 1, bit_sizes=[1])
+ system_value("btd_shader_type_intel", 1)
+ system_value("ray_query_global_intel", 1, bit_sizes=[64])
+ 
++# NVIDIA-specific intrinsics
++intrinsic("load_sysval_nv", dest_comp=1, src_comp=[], bit_sizes=[32, 64],
++          indices=[ACCESS, BASE], flags=[CAN_ELIMINATE])
++
+ # In order to deal with flipped render targets, gl_PointCoord may be flipped
+ # in the shader requiring a shader key or extra instructions or it may be
+ # flipped in hardware based on a state bit.  This version of gl_PointCoord
+-- 
+2.42.0
+

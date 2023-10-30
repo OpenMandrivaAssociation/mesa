@@ -1,0 +1,140 @@
+From 5ab60581da9287b502452c30ffb7635b43a81c57 Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david.heidelberg@collabora.com>
+Date: Sun, 8 Oct 2023 22:34:32 +0200
+Subject: [PATCH 100/834] ci/traces: keep images for every job except the
+ performance testing
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/8354
+
+Acked-by: Emma Anholt <emma@anholt.net>
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25606>
+---
+ .gitlab-ci/piglit/piglit-traces.sh         | 3 +++
+ .gitlab-ci/test/gitlab-ci.yml              | 2 +-
+ src/amd/ci/gitlab-ci-inc.yml               | 1 -
+ src/amd/ci/gitlab-ci.yml                   | 1 -
+ src/freedreno/ci/gitlab-ci.yml             | 2 +-
+ src/gallium/drivers/virgl/ci/gitlab-ci.yml | 2 +-
+ src/gallium/drivers/zink/ci/gitlab-ci.yml  | 2 +-
+ src/intel/ci/gitlab-ci-inc.yml             | 1 -
+ src/panfrost/ci/gitlab-ci.yml              | 1 -
+ 9 files changed, 7 insertions(+), 8 deletions(-)
+
+diff --git a/.gitlab-ci/piglit/piglit-traces.sh b/.gitlab-ci/piglit/piglit-traces.sh
+index 2fac0d9cca4..3d0ec42d5d0 100755
+--- a/.gitlab-ci/piglit/piglit-traces.sh
++++ b/.gitlab-ci/piglit/piglit-traces.sh
+@@ -16,6 +16,9 @@ mkdir -p "$RESULTS"
+ if [ "$PIGLIT_REPLAY_SUBCOMMAND" = "profile" ]; then
+     yq -iY 'del(.traces[][] | select(.label[]? == "no-perf"))' \
+       "$PIGLIT_REPLAY_DESCRIPTION_FILE"
++else
++    # keep the images for the later upload
++    PIGLIT_REPLAY_EXTRA_ARGS="--keep-image ${PIGLIT_REPLAY_EXTRA_ARGS}"
+ fi
+ 
+ # WINE
+diff --git a/.gitlab-ci/test/gitlab-ci.yml b/.gitlab-ci/test/gitlab-ci.yml
+index 62c376ae5b5..139f4125988 100644
+--- a/.gitlab-ci/test/gitlab-ci.yml
++++ b/.gitlab-ci/test/gitlab-ci.yml
+@@ -143,7 +143,7 @@ clang-format:
+     exclude:
+       - results/*.shader_cache
+   variables:
+-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-public --jwt-file=${CI_JOB_JWT_FILE}
++    PIGLIT_REPLAY_EXTRA_ARGS: --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-public --jwt-file=${CI_JOB_JWT_FILE}
+     # until we overcome Infrastructure issues, give traces extra 5 min before timeout
+     DEVICE_HANGING_TIMEOUT_SEC: 600
+   script:
+diff --git a/src/amd/ci/gitlab-ci-inc.yml b/src/amd/ci/gitlab-ci-inc.yml
+index af3bf6ae305..954ee8b983e 100644
+--- a/src/amd/ci/gitlab-ci-inc.yml
++++ b/src/amd/ci/gitlab-ci-inc.yml
+@@ -179,7 +179,6 @@
+   variables:
+     PIGLIT_PLATFORM: mixed_glx_egl  # TODO, take wine/VK in account
+     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
+-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+ 
+ ############### Valve Infra
+ .test-radv:
+diff --git a/src/amd/ci/gitlab-ci.yml b/src/amd/ci/gitlab-ci.yml
+index 7e3e627c0e4..efdef519637 100644
+--- a/src/amd/ci/gitlab-ci.yml
++++ b/src/amd/ci/gitlab-ci.yml
+@@ -46,7 +46,6 @@ radeonsi-stoney-traces:x86_64:
+   variables:
+     EGL_PLATFORM: surfaceless
+     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-amd.yml"
+-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+ 
+ radv-raven-vkcts:x86_64:
+   extends:
+diff --git a/src/freedreno/ci/gitlab-ci.yml b/src/freedreno/ci/gitlab-ci.yml
+index 30c5964bd42..b99441db38f 100644
+--- a/src/freedreno/ci/gitlab-ci.yml
++++ b/src/freedreno/ci/gitlab-ci.yml
+@@ -279,7 +279,7 @@ a630-traces-restricted:
+     - .google-freedreno-rules-restricted
+   variables:
+     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/restricted-traces-freedreno.yml"
+-    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=http://10.42.0.1:8888/cache/?uri= --keep-image --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}"
++    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=http://10.42.0.1:8888/cache/?uri= --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}"
+   allow_failure: true
+ 
+ a630-traces-performance:
+diff --git a/src/gallium/drivers/virgl/ci/gitlab-ci.yml b/src/gallium/drivers/virgl/ci/gitlab-ci.yml
+index 09eeaa6e4f5..cc1384f136d 100644
+--- a/src/gallium/drivers/virgl/ci/gitlab-ci.yml
++++ b/src/gallium/drivers/virgl/ci/gitlab-ci.yml
+@@ -55,7 +55,7 @@ virgl-traces:
+     - .virgl-iris-test
+     - .virgl-iris-manual-rules
+   variables:
+-    PIGLIT_REPLAY_EXTRA_ARGS: "--keep-image --download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
++    PIGLIT_REPLAY_EXTRA_ARGS: "--download-caching-proxy-url=${FDO_HTTP_CACHE_URI}"
+ 
+ virgl-iris-traces-performance:
+   extends:
+diff --git a/src/gallium/drivers/zink/ci/gitlab-ci.yml b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+index 308f89f89fb..08543c06e4b 100644
+--- a/src/gallium/drivers/zink/ci/gitlab-ci.yml
++++ b/src/gallium/drivers/zink/ci/gitlab-ci.yml
+@@ -60,7 +60,7 @@ zink-anv-tgl-traces-restricted:
+     - .zink-anv-rules-restricted
+   variables:
+     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-zink-restricted.yml"
+-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}
++    PIGLIT_REPLAY_EXTRA_ARGS: --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=mesa-tracie-private --jwt-file=${CI_JOB_JWT_FILE}
+   allow_failure: true
+ 
+ zink-tu-a618:
+diff --git a/src/intel/ci/gitlab-ci-inc.yml b/src/intel/ci/gitlab-ci-inc.yml
+index 05f34595218..0dbde9aebc6 100644
+--- a/src/intel/ci/gitlab-ci-inc.yml
++++ b/src/intel/ci/gitlab-ci-inc.yml
+@@ -270,7 +270,6 @@
+     PIGLIT_REPLAY_DEVICE_NAME: "gl-${GPU_VERSION}"
+     PIGLIT_RESULTS: "${GPU_VERSION}-${PIGLIT_PROFILES}"
+     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-iris.yml"
+-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+ 
+ .iris-whl-traces:
+   variables:
+diff --git a/src/panfrost/ci/gitlab-ci.yml b/src/panfrost/ci/gitlab-ci.yml
+index bc9784e0e11..4e37d9f760c 100644
+--- a/src/panfrost/ci/gitlab-ci.yml
++++ b/src/panfrost/ci/gitlab-ci.yml
+@@ -86,7 +86,6 @@
+     MESA_GLSL_VERSION_OVERRIDE: 330
+     EGL_PLATFORM: surfaceless
+     PIGLIT_REPLAY_DESCRIPTION_FILE: "/install/traces-panfrost.yml"
+-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image
+ 
+ # 2 machines, but shared with KernelCI (2022-10-24)
+ .lava-rk3288-veyron-jaq:
+-- 
+2.42.0
+

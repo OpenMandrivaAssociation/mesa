@@ -1,0 +1,29 @@
+From e994935c1f2e66ba162118e113e48811963bbba2 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Thu, 5 Oct 2023 20:06:31 +0200
+Subject: [PATCH 409/834] rusticl/mesa: mark PipeTransfer as Send
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ src/gallium/frontends/rusticl/mesa/pipe/transfer.rs | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/mesa/pipe/transfer.rs b/src/gallium/frontends/rusticl/mesa/pipe/transfer.rs
+index 819135c4a3d..a4748422edd 100644
+--- a/src/gallium/frontends/rusticl/mesa/pipe/transfer.rs
++++ b/src/gallium/frontends/rusticl/mesa/pipe/transfer.rs
+@@ -13,6 +13,9 @@ pub struct PipeTransfer {
+     is_buffer: bool,
+ }
+ 
++// SAFETY: Transfers are safe to send between threads
++unsafe impl Send for PipeTransfer {}
++
+ pub struct GuardedPipeTransfer<'a> {
+     inner: PipeTransfer,
+     ctx: &'a PipeContext,
+-- 
+2.42.0
+

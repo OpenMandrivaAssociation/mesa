@@ -1,0 +1,39 @@
+From 0e97568aed00f910727bb3972aba27c9983ce2ae Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Thu, 17 Aug 2023 11:11:19 +0800
+Subject: [PATCH 071/834] radeonsi: enable aco compile for part mode ps
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24989>
+---
+ src/gallium/drivers/radeonsi/si_shader.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_shader.c b/src/gallium/drivers/radeonsi/si_shader.c
+index 6eaf0e444ab..65cd51325fa 100644
+--- a/src/gallium/drivers/radeonsi/si_shader.c
++++ b/src/gallium/drivers/radeonsi/si_shader.c
+@@ -2453,8 +2453,6 @@ static void si_determine_use_aco(struct si_shader *shader)
+          shader->is_gs_copy_shader;
+       break;
+    case MESA_SHADER_FRAGMENT:
+-      shader->use_aco = shader->is_monolithic;
+-      break;
+    case MESA_SHADER_COMPUTE:
+       shader->use_aco = true;
+       break;
+@@ -2973,7 +2971,6 @@ si_get_shader_part(struct si_screen *sscreen, struct si_shader_part **list,
+          use_aco = sscreen->info.gfx_level <= GFX8;
+          break;
+       default:
+-         use_aco = false;
+          break;
+       }
+    }
+-- 
+2.42.0
+

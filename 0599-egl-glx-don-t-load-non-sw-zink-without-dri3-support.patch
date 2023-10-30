@@ -1,0 +1,87 @@
+From cedb534a1763b6bd3c733d439e5d145ae6f1270e Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Mon, 9 Oct 2023 15:23:04 -0400
+Subject: [PATCH 599/834] egl/glx: don't load non-sw zink without dri3 support
+
+this is going to be broken, so don't bother trying
+
+also add LIBGL_KOPPER_DRI2 so people can continue to footgun if they
+really really want to
+
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25640>
+---
+ src/egl/drivers/dri2/egl_dri2.c          |  7 +++++++
+ src/egl/drivers/dri2/platform_x11_dri3.c |  5 +++++
+ src/glx/drisw_glx.c                      | 16 +++++++++++-----
+ 3 files changed, 23 insertions(+), 5 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/egl_dri2.c b/src/egl/drivers/dri2/egl_dri2.c
+index a4d9e5e590a..50d7dfe0d1f 100644
+--- a/src/egl/drivers/dri2/egl_dri2.c
++++ b/src/egl/drivers/dri2/egl_dri2.c
+@@ -1062,6 +1062,13 @@ dri2_setup_extensions(_EGLDisplay *disp)
+         dri2_dpy->present_minor_version >= 2)) &&
+       (dri2_dpy->image && dri2_dpy->image->base.version >= 15);
+ #endif
++   if (disp->Options.Zink && !disp->Options.ForceSoftware &&
++#ifdef HAVE_DRI3_MODIFIERS
++       dri2_dpy->dri3_major_version != -1 &&
++       !dri2_dpy->multibuffers_available &&
++#endif
++       !debug_get_bool_option("LIBGL_KOPPER_DRI2", false))
++      return EGL_FALSE;
+ 
+    loader_bind_extensions(dri2_dpy, optional_core_extensions,
+                           ARRAY_SIZE(optional_core_extensions), extensions);
+diff --git a/src/egl/drivers/dri2/platform_x11_dri3.c b/src/egl/drivers/dri2/platform_x11_dri3.c
+index af92a02cfa1..f301ae35d8b 100644
+--- a/src/egl/drivers/dri2/platform_x11_dri3.c
++++ b/src/egl/drivers/dri2/platform_x11_dri3.c
+@@ -550,6 +550,11 @@ dri3_x11_connect(struct dri2_egl_display *dri2_dpy)
+    xcb_generic_error_t *error;
+    const xcb_query_extension_reply_t *extension;
+ 
++   dri2_dpy->dri3_major_version = 0;
++   dri2_dpy->dri3_minor_version = 0;
++   dri2_dpy->present_major_version = 0;
++   dri2_dpy->present_minor_version = 0;
++
+    xcb_prefetch_extension_data(dri2_dpy->conn, &xcb_dri3_id);
+    xcb_prefetch_extension_data(dri2_dpy->conn, &xcb_present_id);
+    xcb_prefetch_extension_data(dri2_dpy->conn, &xcb_xfixes_id);
+diff --git a/src/glx/drisw_glx.c b/src/glx/drisw_glx.c
+index 3263034d558..3d3f75259bc 100644
+--- a/src/glx/drisw_glx.c
++++ b/src/glx/drisw_glx.c
+@@ -995,16 +995,22 @@ driswCreateScreenDriver(int screen, struct glx_display *priv,
+        goto handle_error;
+    }
+ 
+-   glx_config_destroy_list(psc->base.configs);
+-   psc->base.configs = configs;
+-   glx_config_destroy_list(psc->base.visuals);
+-   psc->base.visuals = visuals;
+-
+    if (pdpyp->zink) {
+       bool err;
+       psc->has_multibuffer = dri3_check_multibuffer(priv->dpy, &err);
++      if (!psc->has_multibuffer &&
++          !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false) &&
++          !debug_get_bool_option("LIBGL_KOPPER_DRI2", false)) {
++         CriticalErrorMessageF("DRI3 not available\n");
++         goto handle_error;
++      }
+    }
+ 
++   glx_config_destroy_list(psc->base.configs);
++   psc->base.configs = configs;
++   glx_config_destroy_list(psc->base.visuals);
++   psc->base.visuals = visuals;
++
+    psc->driver_configs = driver_configs;
+ 
+    psc->base.vtable = &drisw_screen_vtable;
+-- 
+2.42.0
+

@@ -1,0 +1,47 @@
+From abf3175161ac3ea50bf9c36cecfb6d334e326caf Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Mon, 10 Apr 2023 17:23:32 -0500
+Subject: [PATCH 746/834] nir/lower_tex: Add a lower_txd_clamp option
+
+Some of us want to lower all TXD with min_lod regardless of whether or
+not it's shadow or cube or whatever.
+
+Reviewed-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir.h           | 5 +++++
+ src/compiler/nir/nir_lower_tex.c | 1 +
+ 2 files changed, 6 insertions(+)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index f958f1e00d2..51c9408153f 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -5677,6 +5677,11 @@ typedef struct nir_lower_tex_options {
+     */
+    bool lower_txd;
+ 
++   /**
++    * If true, lower nir_texop_txd  when it uses min_lod.
++    */
++   bool lower_txd_clamp;
++
+    /**
+     * If true, lower nir_texop_txb that try to use shadow compare and min_lod
+     * at the same time to a nir_texop_lod, some math, and nir_texop_tex.
+diff --git a/src/compiler/nir/nir_lower_tex.c b/src/compiler/nir/nir_lower_tex.c
+index c454018c57f..83f3ebb5c9e 100644
+--- a/src/compiler/nir/nir_lower_tex.c
++++ b/src/compiler/nir/nir_lower_tex.c
+@@ -1612,6 +1612,7 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
+ 
+       if (tex->op == nir_texop_txd &&
+           (options->lower_txd ||
++           (options->lower_txd_clamp && has_min_lod) ||
+            (options->lower_txd_shadow && tex->is_shadow) ||
+            (options->lower_txd_shadow_clamp && tex->is_shadow && has_min_lod) ||
+            (options->lower_txd_offset_clamp && has_offset && has_min_lod) ||
+-- 
+2.42.0
+

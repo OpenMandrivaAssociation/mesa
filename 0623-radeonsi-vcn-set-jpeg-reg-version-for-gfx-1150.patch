@@ -1,0 +1,61 @@
+From 5f19452b8c328cfd7f1a18e66890b17d6dcf108c Mon Sep 17 00:00:00 2001
+From: Saleemkhan Jamadar <saleemkhan.jamadar@amd.com>
+Date: Mon, 18 Sep 2023 21:48:09 +0200
+Subject: [PATCH 623/834] radeonsi/vcn: set jpeg reg version for gfx 1150
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+select appropriate jpeg register version for gfx1150
+
+Signed-off-by: Saleemkhan Jamadar <saleemkhan.jamadar@amd.com>
+Reviewed-by: Leo Liu <Leo.Liu@amd.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25278>
+---
+ src/amd/common/ac_gpu_info.c                  | 3 +++
+ src/amd/common/amd_family.h                   | 1 +
+ src/gallium/drivers/radeonsi/radeon_vcn_dec.c | 1 +
+ 3 files changed, 5 insertions(+)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 57f232c8f79..f2cb8a83f77 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -972,6 +972,9 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+       case VCN_IP_VERSION(4, 0, 4):
+          info->vcn_ip_version = VCN_4_0_4;
+          break;
++      case VCN_IP_VERSION(4, 0, 5):
++         info->vcn_ip_version = VCN_4_0_5;
++         break;
+       default:
+          info->vcn_ip_version = VCN_UNKNOWN;
+       }
+diff --git a/src/amd/common/amd_family.h b/src/amd/common/amd_family.h
+index 09d90895adc..719cf6092ea 100644
+--- a/src/amd/common/amd_family.h
++++ b/src/amd/common/amd_family.h
+@@ -199,6 +199,7 @@ enum vcn_version{
+    VCN_4_0_2,
+    VCN_4_0_3,
+    VCN_4_0_4,
++   VCN_4_0_5,
+ };
+ 
+ const char *ac_get_family_name(enum radeon_family family);
+diff --git a/src/gallium/drivers/radeonsi/radeon_vcn_dec.c b/src/gallium/drivers/radeonsi/radeon_vcn_dec.c
+index 112471a4486..f2bce110aff 100644
+--- a/src/gallium/drivers/radeonsi/radeon_vcn_dec.c
++++ b/src/gallium/drivers/radeonsi/radeon_vcn_dec.c
+@@ -3252,6 +3252,7 @@ struct pipe_video_codec *radeon_create_decoder(struct pipe_context *context,
+    case VCN_4_0_0:
+    case VCN_4_0_2:
+    case VCN_4_0_4:
++   case VCN_4_0_5:
+       dec->jpg_reg.version = RDECODE_JPEG_REG_VER_V2;
+       dec->addr_gfx_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX11;
+       dec->av1_version = RDECODE_AV1_VER_1;
+-- 
+2.42.0
+

@@ -1,0 +1,38 @@
+From e41bc4057178b6a25af3e941cb4b625b7ea275cf Mon Sep 17 00:00:00 2001
+From: Eric Engestrom <eric@igalia.com>
+Date: Thu, 12 Oct 2023 20:02:36 +0100
+Subject: [PATCH 222/834] include/dri_interface.h: restore define mistakenly
+ removed in !25587
+
+This file is a public API used by Xserver; removing something from it
+means Xserver can't build anymore, and even if we fix Xserver, old
+versions are still around and we want to keep them working to allow for
+bisecting issues.
+
+Fixes: 7301914755f5843f1095 ("dri: Remove __driDriverExtensions leftovers")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9976
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25692>
+---
+ include/GL/internal/dri_interface.h | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/include/GL/internal/dri_interface.h b/include/GL/internal/dri_interface.h
+index 1424e24fe27..45f9e77e973 100644
+--- a/include/GL/internal/dri_interface.h
++++ b/include/GL/internal/dri_interface.h
+@@ -678,6 +678,12 @@ struct __DRIuseInvalidateExtensionRec {
+    __DRIextension base;
+ };
+ 
++/**
++ * Dead, do not use; kept only to allow old Xserver to compile since
++ * this file is a public API.
++ */
++#define __DRI_DRIVER_EXTENSIONS "__driDriverExtensions"
++
+ /**
+  * This symbol replaces the __DRI_DRIVER_EXTENSIONS symbol, and will be
+  * suffixed by "_drivername", allowing multiple drivers to be built into one
+-- 
+2.42.0
+

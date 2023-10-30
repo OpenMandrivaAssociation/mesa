@@ -1,0 +1,35 @@
+From 90cd5f37991d3703cbf97322e9ec345bb4be1baf Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Mon, 23 Oct 2023 09:53:39 +0200
+Subject: [PATCH 661/834] etnaviv: Skip 'empty' cmd streams
+
+Make use of etna_cmd_stream_mark_end_of_context_init(..) to mark the
+end of context init states. If the cmd stream is untouched until
+etna_cmd_stream_flush(..) gets called the drm layer will downgrade this
+specific cmd stream to a noop.
+
+This safes us from calling into the kernel with an 'empty' cmd stream.
+
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Reviewed-by: Lucas Stach <l.stach@pengutronix.de>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25849>
+---
+ src/gallium/drivers/etnaviv/etnaviv_context.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_context.c b/src/gallium/drivers/etnaviv/etnaviv_context.c
+index fdb361d054a..ec7cc282538 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_context.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_context.c
+@@ -508,6 +508,8 @@ etna_reset_gpu_state(struct etna_context *ctx)
+                            screen->specs.halti >= 0 ? 16 : 12, dummy_attribs);
+    }
+ 
++   etna_cmd_stream_mark_end_of_context_init(stream);
++
+    ctx->dirty = ~0L;
+    ctx->dirty_sampler_views = ~0L;
+    ctx->prev_active_samplers = ~0L;
+-- 
+2.42.0
+

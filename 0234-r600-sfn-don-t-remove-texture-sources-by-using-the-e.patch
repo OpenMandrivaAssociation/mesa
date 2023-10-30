@@ -1,0 +1,32 @@
+From 76993af858427d27595bf74cfb567b5e1f8bfc96 Mon Sep 17 00:00:00 2001
+From: Gert Wollny <gert.wollny@collabora.com>
+Date: Fri, 29 Sep 2023 21:09:58 +0200
+Subject: [PATCH 234/834] r600/sfn: don't remove texture sources by using the
+ enum value
+
+We have to query the index first, otherwise we remove the wrong value.
+
+Fixes: 02bb506c54f998cfbc907758282a5748755c67ea
+    r600/sfn: Lower tex,txl,txb and txf to backend
+
+Signed-off-by: Gert Wollny <gert.wollny@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25475>
+---
+ src/gallium/drivers/r600/sfn/sfn_instr_tex.cpp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/gallium/drivers/r600/sfn/sfn_instr_tex.cpp b/src/gallium/drivers/r600/sfn/sfn_instr_tex.cpp
+index 5bbb390af3c..8b59f8713f6 100644
+--- a/src/gallium/drivers/r600/sfn/sfn_instr_tex.cpp
++++ b/src/gallium/drivers/r600/sfn/sfn_instr_tex.cpp
+@@ -1166,7 +1166,6 @@ LowerTexToBackend::finalize(nir_tex_instr *tex,
+ {
+    nir_tex_instr_add_src(tex, nir_tex_src_backend1, backend1);
+    nir_tex_instr_add_src(tex, nir_tex_src_backend2, backend2);
+-   nir_tex_instr_remove_src(tex, nir_tex_src_coord);
+ 
+    static const nir_tex_src_type cleanup[] = {nir_tex_src_coord,
+                                               nir_tex_src_lod,
+-- 
+2.42.0
+

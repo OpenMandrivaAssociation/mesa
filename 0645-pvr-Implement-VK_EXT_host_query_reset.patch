@@ -1,0 +1,83 @@
+From c70687afe7a6e972b9d799c2a994195be62d8fcc Mon Sep 17 00:00:00 2001
+From: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Date: Mon, 4 Sep 2023 12:24:05 +0100
+Subject: [PATCH 645/834] pvr: Implement VK_EXT_host_query_reset
+
+Signed-off-by: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Reviewed-by: Matt Coster <matt.coster@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25783>
+---
+ docs/features.txt                   |  2 +-
+ src/imagination/vulkan/pvr_device.c |  4 ++++
+ src/imagination/vulkan/pvr_query.c  | 13 +++++++++++++
+ 3 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index 7f0e6757297..a03af715a0c 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -467,7 +467,7 @@ Vulkan 1.2 -- all DONE: anv, tu, vn
+   VK_KHR_uniform_buffer_standard_layout                 DONE (anv, dzn, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_vulkan_memory_model                            DONE (anv, hasvk, lvp, radv, tu, v3dv, vn)
+   VK_EXT_descriptor_indexing                            DONE (anv/gen9+, dzn, lvp, nvk, radv, tu, vn)
+-  VK_EXT_host_query_reset                               DONE (anv, hasvk, lvp, nvk, radv, tu, v3dv, vn)
++  VK_EXT_host_query_reset                               DONE (anv, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_EXT_sampler_filter_minmax                          DONE (anv/gen9+, lvp, nvk, radv, tu, vn)
+   VK_EXT_scalar_block_layout                            DONE (anv, dzn, hasvk, lvp, pvr, radv/gfx7+, tu, vn)
+   VK_EXT_separate_stencil_usage                         DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+diff --git a/src/imagination/vulkan/pvr_device.c b/src/imagination/vulkan/pvr_device.c
+index 9070be17182..e533b7ca549 100644
+--- a/src/imagination/vulkan/pvr_device.c
++++ b/src/imagination/vulkan/pvr_device.c
+@@ -184,6 +184,7 @@ static void pvr_physical_device_get_supported_extensions(
+       .KHR_timeline_semaphore = true,
+       .KHR_uniform_buffer_standard_layout = true,
+       .EXT_external_memory_dma_buf = true,
++      .EXT_host_query_reset = true,
+       .EXT_private_data = true,
+       .EXT_scalar_block_layout = true,
+       .EXT_texel_buffer_alignment = true,
+@@ -259,6 +260,9 @@ static void pvr_physical_device_get_supported_features(
+       /* Vulkan 1.2 / VK_KHR_uniform_buffer_standard_layout */
+       .uniformBufferStandardLayout = true,
+ 
++      /* Vulkan 1.2 / VK_EXT_host_query_reset */
++      .hostQueryReset = true,
++
+       /* Vulkan 1.3 / VK_EXT_private_data */
+       .privateData = true,
+ 
+diff --git a/src/imagination/vulkan/pvr_query.c b/src/imagination/vulkan/pvr_query.c
+index 06e563b6d32..ba4acda6cac 100644
+--- a/src/imagination/vulkan/pvr_query.c
++++ b/src/imagination/vulkan/pvr_query.c
+@@ -27,6 +27,7 @@
+ #include <assert.h>
+ #include <stddef.h>
+ #include <stdint.h>
++#include <string.h>
+ #include <vulkan/vulkan.h>
+ 
+ #include "pvr_bo.h"
+@@ -278,6 +279,18 @@ void pvr_CmdResetQueryPool(VkCommandBuffer commandBuffer,
+    pvr_add_query_program(cmd_buffer, &query_info);
+ }
+ 
++void pvr_ResetQueryPool(VkDevice _device,
++                        VkQueryPool queryPool,
++                        uint32_t firstQuery,
++                        uint32_t queryCount)
++{
++   PVR_FROM_HANDLE(pvr_query_pool, pool, queryPool);
++   uint32_t *availability =
++      pvr_bo_suballoc_get_map_addr(pool->availability_buffer);
++
++   memset(availability + firstQuery, 0, sizeof(uint32_t) * queryCount);
++}
++
+ void pvr_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer,
+                                  VkQueryPool queryPool,
+                                  uint32_t firstQuery,
+-- 
+2.42.0
+

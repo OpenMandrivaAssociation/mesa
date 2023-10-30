@@ -1,0 +1,57 @@
+From 354f0b5b022cf9e9ffd3b38bfc7b3bda71ab5191 Mon Sep 17 00:00:00 2001
+From: Maaz Mombasawala <mombasawalam@vmware.com>
+Date: Thu, 17 Aug 2023 16:17:56 -0700
+Subject: [PATCH 652/834] svga: Make surfaces shareable at creation.
+
+There is no need to have a separate shareable pool of surfaces, we can make
+all surfaces shareable.
+This change makes all surfaces shareable when creating them.
+
+Signed-off-by: Maaz Mombasawala <mombasawalam@vmware.com>
+Reviewed-by: Charmaine Lee <charmainel@vmware.com>
+Reviewed-by: Martin Krastev <krastevm@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25832>
+---
+ src/gallium/winsys/svga/drm/vmw_screen_ioctl.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c b/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c
+index 563e2eb72b7..dc5ba16e366 100644
+--- a/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c
++++ b/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c
+@@ -159,7 +159,7 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
+    req->flags = (uint32_t) flags;
+    req->scanout = !!(usage & SVGA_SURFACE_USAGE_SCANOUT);
+    req->format = (uint32_t) format;
+-   req->shareable = !!(usage & SVGA_SURFACE_USAGE_SHARED);
++   req->shareable = TRUE;
+ 
+    assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
+ 	  DRM_VMW_MAX_MIP_LEVELS);
+@@ -244,12 +244,10 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
+       if (usage & SVGA_SURFACE_USAGE_SCANOUT)
+          req->base.drm_surface_flags |= drm_vmw_surface_flag_scanout;
+ 
+-      if (usage & SVGA_SURFACE_USAGE_SHARED)
+-         req->base.drm_surface_flags |= drm_vmw_surface_flag_shareable;
+-
+       if ((usage & SVGA_SURFACE_USAGE_COHERENT) || vws->force_coherent)
+          req->base.drm_surface_flags |= drm_vmw_surface_flag_coherent;
+ 
++      req->base.drm_surface_flags |= drm_vmw_surface_flag_shareable;
+       req->base.drm_surface_flags |= drm_vmw_surface_flag_create_buffer;
+       req->base.base_size.width = size.width;
+       req->base.base_size.height = size.height;
+@@ -286,8 +284,7 @@ vmw_ioctl_gb_surface_create(struct vmw_winsys_screen *vws,
+       if (usage & SVGA_SURFACE_USAGE_SCANOUT)
+          req->drm_surface_flags |= drm_vmw_surface_flag_scanout;
+ 
+-      if (usage & SVGA_SURFACE_USAGE_SHARED)
+-         req->drm_surface_flags |= drm_vmw_surface_flag_shareable;
++      req->drm_surface_flags |= drm_vmw_surface_flag_shareable;
+ 
+       req->drm_surface_flags |= drm_vmw_surface_flag_create_buffer;
+       req->base_size.width = size.width;
+-- 
+2.42.0
+

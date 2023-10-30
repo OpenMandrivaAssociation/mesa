@@ -1,0 +1,38 @@
+From 9a79c5f1e5c814f71756c1b9a22a70933be8707e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Fri, 20 Oct 2023 22:16:16 +0200
+Subject: [PATCH 755/834] radv: Support SDMA in si_cs_emit_write_event_eop.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Tatsuyuki Ishi <ishitatsuyuki@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25833>
+---
+ src/amd/vulkan/si_cmd_buffer.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/amd/vulkan/si_cmd_buffer.c b/src/amd/vulkan/si_cmd_buffer.c
+index 058f97abbc0..8fe25db82ae 100644
+--- a/src/amd/vulkan/si_cmd_buffer.c
++++ b/src/amd/vulkan/si_cmd_buffer.c
+@@ -951,6 +951,14 @@ si_cs_emit_write_event_eop(struct radeon_cmdbuf *cs, enum amd_gfx_level gfx_leve
+                            unsigned event, unsigned event_flags, unsigned dst_sel, unsigned data_sel, uint64_t va,
+                            uint32_t new_fence, uint64_t gfx9_eop_bug_va)
+ {
++   if (qf == RADV_QUEUE_TRANSFER) {
++      radeon_emit(cs, CIK_SDMA_PACKET(CIK_SDMA_OPCODE_FENCE, 0, SDMA_FENCE_MTYPE_UC));
++      radeon_emit(cs, va);
++      radeon_emit(cs, va >> 32);
++      radeon_emit(cs, new_fence);
++      return;
++   }
++
+    const bool is_mec = qf == RADV_QUEUE_COMPUTE && gfx_level >= GFX7;
+    unsigned op =
+       EVENT_TYPE(event) | EVENT_INDEX(event == V_028A90_CS_DONE || event == V_028A90_PS_DONE ? 6 : 5) | event_flags;
+-- 
+2.42.0
+

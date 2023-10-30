@@ -1,0 +1,162 @@
+From 8da85d2475da5e883c88f6cc744594a3031c25c3 Mon Sep 17 00:00:00 2001
+From: Yogesh Mohan Marimuthu <yogesh.mohanmarimuthu@amd.com>
+Date: Sun, 17 Sep 2023 23:30:30 +0530
+Subject: [PATCH 176/834] util: move ASTCLutHolder from mesa/main to util
+
+v2: remove extra u_formats.h header addition (Chia-I Wu)
+    use stddef.h and not unistd.h (Chia-I Wu)
+
+Reviewed-by: Chia-I Wu <olvaffe@gmail.com>
+Acked-by: Bas Nieuwenhuizen <bas@basnieuwenhuizen.nl>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24672>
+---
+ src/mesa/meson.build                                   | 4 ----
+ src/mesa/state_tracker/st_texcompress_compute.c        | 7 +++++--
+ src/util/meson.build                                   | 4 ++++
+ src/{mesa/main => util}/texcompress_astc_luts.cpp      | 0
+ src/{mesa/main => util}/texcompress_astc_luts.h        | 0
+ src/{mesa/main => util}/texcompress_astc_luts_wrap.cpp | 9 ++++-----
+ src/{mesa/main => util}/texcompress_astc_luts_wrap.h   | 8 ++++----
+ 7 files changed, 17 insertions(+), 15 deletions(-)
+ rename src/{mesa/main => util}/texcompress_astc_luts.cpp (100%)
+ rename src/{mesa/main => util}/texcompress_astc_luts.h (100%)
+ rename src/{mesa/main => util}/texcompress_astc_luts_wrap.cpp (93%)
+ rename src/{mesa/main => util}/texcompress_astc_luts_wrap.h (91%)
+
+diff --git a/src/mesa/meson.build b/src/mesa/meson.build
+index 12a0e746005..d07b8fb33a7 100644
+--- a/src/mesa/meson.build
++++ b/src/mesa/meson.build
+@@ -206,10 +206,6 @@ files_libmesa = files(
+   'main/texcompress.h',
+   'main/texcompress_astc.cpp',
+   'main/texcompress_astc.h',
+-  'main/texcompress_astc_luts.cpp',
+-  'main/texcompress_astc_luts.h',
+-  'main/texcompress_astc_luts_wrap.cpp',
+-  'main/texcompress_astc_luts_wrap.h',
+   'main/texcompress_bptc.c',
+   'main/texcompress_bptc.h',
+   'main/texcompress_cpal.c',
+diff --git a/src/mesa/state_tracker/st_texcompress_compute.c b/src/mesa/state_tracker/st_texcompress_compute.c
+index 4611f519b8f..118efc55d7c 100644
+--- a/src/mesa/state_tracker/st_texcompress_compute.c
++++ b/src/mesa/state_tracker/st_texcompress_compute.c
+@@ -33,7 +33,7 @@
+ #include "main/shaderapi.h"
+ #include "main/shaderobj.h"
+ #include "main/texcompress_astc.h"
+-#include "main/texcompress_astc_luts_wrap.h"
++#include "util/texcompress_astc_luts_wrap.h"
+ #include "main/uniforms.h"
+ 
+ #include "state_tracker/st_atom_constbuf.h"
+@@ -554,9 +554,12 @@ get_astc_partition_table_view(struct st_context *st,
+                               unsigned block_w,
+                               unsigned block_h)
+ {
++   unsigned lut_width;
++   unsigned lut_height;
+    struct pipe_box ptable_box;
+    void *ptable_data =
+-      _mesa_get_astc_decoder_partition_table(block_w, block_h, &ptable_box);
++      _mesa_get_astc_decoder_partition_table(block_w, block_h, &lut_width, &lut_height);
++   u_box_origin_2d(lut_width, lut_height, &ptable_box);
+ 
+    struct pipe_sampler_view *view =
+       util_hash_table_get(st->texcompress_compute.astc_partition_tables,
+diff --git a/src/util/meson.build b/src/util/meson.build
+index c1513887dd6..2dec0261caa 100644
+--- a/src/util/meson.build
++++ b/src/util/meson.build
+@@ -127,6 +127,10 @@ files_mesa_util = files(
+   'strndup.h',
+   'strtod.c',
+   'strtod.h',
++  'texcompress_astc_luts.cpp',
++  'texcompress_astc_luts.h',
++  'texcompress_astc_luts_wrap.cpp',
++  'texcompress_astc_luts_wrap.h',
+   'timespec.h',
+   'u_atomic.c',
+   'u_atomic.h',
+diff --git a/src/mesa/main/texcompress_astc_luts.cpp b/src/util/texcompress_astc_luts.cpp
+similarity index 100%
+rename from src/mesa/main/texcompress_astc_luts.cpp
+rename to src/util/texcompress_astc_luts.cpp
+diff --git a/src/mesa/main/texcompress_astc_luts.h b/src/util/texcompress_astc_luts.h
+similarity index 100%
+rename from src/mesa/main/texcompress_astc_luts.h
+rename to src/util/texcompress_astc_luts.h
+diff --git a/src/mesa/main/texcompress_astc_luts_wrap.cpp b/src/util/texcompress_astc_luts_wrap.cpp
+similarity index 93%
+rename from src/mesa/main/texcompress_astc_luts_wrap.cpp
+rename to src/util/texcompress_astc_luts_wrap.cpp
+index a02dad7bc47..6020a34e2c9 100644
+--- a/src/mesa/main/texcompress_astc_luts_wrap.cpp
++++ b/src/util/texcompress_astc_luts_wrap.cpp
+@@ -23,8 +23,6 @@
+ #include "texcompress_astc_luts_wrap.h"
+ #include "texcompress_astc_luts.h"
+ 
+-#include "util/u_box.h"
+-
+ extern "C" void
+ _mesa_init_astc_decoder_luts(astc_decoder_lut_holder *holder)
+ {
+@@ -54,12 +52,13 @@ _mesa_init_astc_decoder_luts(astc_decoder_lut_holder *holder)
+ extern "C" void *
+ _mesa_get_astc_decoder_partition_table(uint32_t block_width,
+                                        uint32_t block_height,
+-                                       struct pipe_box *ptable_box)
++                                       unsigned *lut_width,
++                                       unsigned *lut_height)
+ {
+    auto &luts = Granite::get_astc_luts();
+    auto &table = luts.get_partition_table(block_width, block_height);
+ 
+-   u_box_origin_2d(table.lut_width, table.lut_height, ptable_box);
+-
++   *lut_width = table.lut_width;
++   *lut_height = table.lut_height;
+    return table.lut_buffer.data();
+ }
+diff --git a/src/mesa/main/texcompress_astc_luts_wrap.h b/src/util/texcompress_astc_luts_wrap.h
+similarity index 91%
+rename from src/mesa/main/texcompress_astc_luts_wrap.h
+rename to src/util/texcompress_astc_luts_wrap.h
+index e78f81054ad..e77ffba753c 100644
+--- a/src/mesa/main/texcompress_astc_luts_wrap.h
++++ b/src/util/texcompress_astc_luts_wrap.h
+@@ -24,7 +24,8 @@
+ #define TEXCOMPRESS_ASTC_LUTS_WRAP_H
+ 
+ #include <stdint.h>
+-#include "pipe/p_state.h"
++#include <stddef.h>
++#include "format/u_formats.h"
+ 
+ /* C wrapper for Granite::ASTCLutHolder. */
+ 
+@@ -32,8 +33,6 @@
+ extern "C" {
+ #endif
+ 
+-struct pipe_box;
+-
+ typedef struct
+ {
+    void *data;
+@@ -53,7 +52,8 @@ typedef struct
+ void _mesa_init_astc_decoder_luts(astc_decoder_lut_holder *holder);
+ void *_mesa_get_astc_decoder_partition_table(uint32_t block_width,
+                                              uint32_t block_height,
+-                                             struct pipe_box *ptable_box);
++                                             unsigned *lut_width,
++                                             unsigned *lut_height);
+ 
+ #ifdef __cplusplus
+ }
+-- 
+2.42.0
+

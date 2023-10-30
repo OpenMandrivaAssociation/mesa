@@ -1,0 +1,56 @@
+From e0301659f1f09ec5fed72b274b502ca1a25c70aa Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 22 Oct 2023 16:11:36 +0200
+Subject: [PATCH 662/834] zink: fix zink_destroy_screen for early screen
+ creation fails
+
+Fixes crashes on at least my system with multiple GPUs.
+
+Fixes: 0c2045553fe ("zink: use screen destructor for creation fails")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Acked-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25844>
+---
+ src/gallium/drivers/zink/zink_screen.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index d03998f7a02..2ac8cd378a9 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -1478,7 +1478,8 @@ zink_destroy_screen(struct pipe_screen *pscreen)
+ 
+    util_vertex_state_cache_deinit(&screen->vertex_state_cache);
+ 
+-   VKSCR(DestroyPipelineLayout)(screen->dev, screen->gfx_push_constant_layout, NULL);
++   if (screen->gfx_push_constant_layout)
++      VKSCR(DestroyPipelineLayout)(screen->dev, screen->gfx_push_constant_layout, NULL);
+ 
+    u_transfer_helper_destroy(pscreen->transfer_helper);
+    if (util_queue_is_initialized(&screen->cache_get_thread)) {
+@@ -1494,8 +1495,10 @@ zink_destroy_screen(struct pipe_screen *pscreen)
+ #endif
+    disk_cache_destroy(screen->disk_cache);
+ 
++   /* we don't have an API to check if a set is already initialized */
+    for (unsigned i = 0; i < ARRAY_SIZE(screen->pipeline_libs); i++)
+-      _mesa_set_clear(&screen->pipeline_libs[i], NULL);
++      if (screen->pipeline_libs[i].table)
++         _mesa_set_clear(&screen->pipeline_libs[i], NULL);
+ 
+    zink_bo_deinit(screen);
+    util_live_shader_cache_deinit(&screen->shaders);
+@@ -1518,7 +1521,9 @@ zink_destroy_screen(struct pipe_screen *pscreen)
+    if (screen->bindless_layout)
+       VKSCR(DestroyDescriptorSetLayout)(screen->dev, screen->bindless_layout, NULL);
+ 
+-   VKSCR(DestroyDevice)(screen->dev, NULL);
++   if (screen->dev)
++      VKSCR(DestroyDevice)(screen->dev, NULL);
++
+    VKSCR(DestroyInstance)(screen->instance, NULL);
+    util_idalloc_mt_fini(&screen->buffer_ids);
+ 
+-- 
+2.42.0
+

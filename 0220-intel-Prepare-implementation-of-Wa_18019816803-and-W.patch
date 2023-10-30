@@ -1,0 +1,88 @@
+From 07eede0970488fc48ec1026f7f00390d3291181f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jos=C3=A9=20Roberto=20de=20Souza?= <jose.souza@intel.com>
+Date: Thu, 12 Oct 2023 07:20:18 -0700
+Subject: [PATCH 220/834] intel: Prepare implementation of Wa_18019816803 and
+ Wa_16013994831 for future platforms
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Those workarounds are temporary for newer platforms so we can't use
+INTEL_NEEDS_WA_*, luckly those already had runtime checks.
+INTEL_NEEDS_WA_* was only used because it was accessing instructions
+or fields of the instructions that only exists in gfx12 or gfx125.
+
+Reviewed-by: Tapani Pälli <tapani.palli@intel.com>
+Signed-off-by: José Roberto de Souza <jose.souza@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25685>
+---
+ src/gallium/drivers/iris/iris_state.c | 2 +-
+ src/intel/blorp/blorp_genX_exec.h     | 2 +-
+ src/intel/vulkan/genX_blorp_exec.c    | 2 +-
+ src/intel/vulkan/genX_gfx_state.c     | 4 ++--
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/iris/iris_state.c b/src/gallium/drivers/iris/iris_state.c
+index 891cc806814..b7c194ab96e 100644
+--- a/src/gallium/drivers/iris/iris_state.c
++++ b/src/gallium/drivers/iris/iris_state.c
+@@ -6339,7 +6339,7 @@ iris_preemption_streamout_wa(struct iris_context *ice,
+                              struct iris_batch *batch,
+                              bool enable)
+ {
+-#if INTEL_NEEDS_WA_16013994831
++#if GFX_VERx10 >= 120
+    if (!intel_needs_workaround(batch->screen->devinfo, 16013994831))
+       return;
+ 
+diff --git a/src/intel/blorp/blorp_genX_exec.h b/src/intel/blorp/blorp_genX_exec.h
+index a80d49a828d..77ffaaa5d20 100644
+--- a/src/intel/blorp/blorp_genX_exec.h
++++ b/src/intel/blorp/blorp_genX_exec.h
+@@ -1258,7 +1258,7 @@ blorp_emit_depth_stencil_state(struct blorp_batch *batch,
+ 
+    GENX(3DSTATE_WM_DEPTH_STENCIL_pack)(NULL, dw, &ds);
+ 
+-#if INTEL_NEEDS_WA_18019816803
++#if GFX_VERx10 >= 125
+    /* Check if need PSS Stall sync. */
+    if (intel_needs_workaround(batch->blorp->compiler->devinfo, 18019816803) &&
+        batch->flags & BLORP_BATCH_NEED_PSS_STALL_SYNC) {
+diff --git a/src/intel/vulkan/genX_blorp_exec.c b/src/intel/vulkan/genX_blorp_exec.c
+index db5e7530654..a98319736ea 100644
+--- a/src/intel/vulkan/genX_blorp_exec.c
++++ b/src/intel/vulkan/genX_blorp_exec.c
+@@ -297,7 +297,7 @@ blorp_exec_on_render(struct blorp_batch *batch,
+    }
+ #endif
+ 
+-#if INTEL_NEEDS_WA_18019816803
++#if GFX_VERx10 >= 125
+    /* Check if blorp ds state matches ours. */
+    if (intel_needs_workaround(cmd_buffer->device->info, 18019816803)) {
+       bool blorp_ds_state = params->depth.enabled || params->stencil.enabled;
+diff --git a/src/intel/vulkan/genX_gfx_state.c b/src/intel/vulkan/genX_gfx_state.c
+index ebbe26ff886..1a2f4550765 100644
+--- a/src/intel/vulkan/genX_gfx_state.c
++++ b/src/intel/vulkan/genX_gfx_state.c
+@@ -653,7 +653,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
+       SET(PMA_FIX, pma_fix, pma);
+ #endif
+ 
+-#if INTEL_NEEDS_WA_18019816803
++#if GFX_VERx10 >= 125
+       if (intel_needs_workaround(cmd_buffer->device->info, 18019816803)) {
+          bool ds_write_state = opt_ds.depth.write_enable || opt_ds.stencil.write_enable;
+          if (cmd_buffer->state.gfx.ds_write_state != ds_write_state) {
+@@ -1689,7 +1689,7 @@ genX(cmd_buffer_flush_gfx_hw_state)(struct anv_cmd_buffer *cmd_buffer)
+       }
+    }
+ 
+-#if INTEL_NEEDS_WA_18019816803
++#if GFX_VERx10 >= 125
+    if (BITSET_TEST(hw_state->dirty, ANV_GFX_STATE_WA_18019816803)) {
+       genx_batch_emit_pipe_control(&cmd_buffer->batch, cmd_buffer->device->info,
+                                    ANV_PIPE_PSS_STALL_SYNC_BIT);
+-- 
+2.42.0
+

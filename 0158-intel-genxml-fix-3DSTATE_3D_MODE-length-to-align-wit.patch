@@ -1,0 +1,33 @@
+From 300c98dbb2542fa5ae78f905088cc095cd4c696d Mon Sep 17 00:00:00 2001
+From: Rohan Garg <rohan.garg@intel.com>
+Date: Tue, 10 Oct 2023 13:15:50 +0200
+Subject: [PATCH 158/834] intel/genxml: fix 3DSTATE_3D_MODE length to align
+ with BSpec
+
+Closes: #8632
+Fixes: 569afd37f15 ('intel/genxml: Copy gen12.xml to gen125.xml')
+Signed-off-by: Rohan Garg <rohan.garg@intel.com>
+Reviewed-by: Nanley Chery <nanley.g.chery@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25589>
+---
+ src/intel/genxml/gen125.xml | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/intel/genxml/gen125.xml b/src/intel/genxml/gen125.xml
+index 6daab129498..72b3eeacc55 100644
+--- a/src/intel/genxml/gen125.xml
++++ b/src/intel/genxml/gen125.xml
+@@ -403,8 +403,8 @@
+     <field name="Extended Parameter 1" start="256" end="287" type="uint" />
+     <field name="Extended Parameter 2" start="288" end="319" type="uint" />
+   </instruction>
+-  <instruction name="3DSTATE_3D_MODE" bias="2" length="2" engine="render">
+-    <field name="DWord Length" start="0" end="7" type="uint" default="0" />
++  <instruction name="3DSTATE_3D_MODE" bias="2" length="5" engine="render">
++    <field name="DWord Length" start="0" end="7" type="uint" default="3" />
+     <field name="3D Command Sub Opcode" start="16" end="23" type="uint" default="30" />
+     <field name="3D Command Opcode" start="24" end="26" type="uint" default="1" />
+     <field name="Command SubType" start="27" end="28" type="uint" default="3" />
+-- 
+2.42.0
+

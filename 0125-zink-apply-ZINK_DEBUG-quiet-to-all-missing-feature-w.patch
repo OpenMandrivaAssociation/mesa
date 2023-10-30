@@ -1,0 +1,32 @@
+From eb94d235fb7cc0e0a22dd606d9895838261ccb03 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 10 Oct 2023 11:43:18 -0400
+Subject: [PATCH 125/834] zink: apply ZINK_DEBUG=quiet to all missing feature
+ warnings
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25645>
+---
+ src/gallium/drivers/zink/zink_screen.h | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.h b/src/gallium/drivers/zink/zink_screen.h
+index 69baa8e3fd0..09a003317fa 100644
+--- a/src/gallium/drivers/zink/zink_screen.h
++++ b/src/gallium/drivers/zink/zink_screen.h
+@@ -162,9 +162,10 @@ zink_screen_debug_marker_end(struct zink_screen *screen, bool emitted);
+ #define warn_missing_feature(warned, feat) \
+    do { \
+       if (!warned) { \
+-         mesa_logw("WARNING: Incorrect rendering will happen " \
+-                         "because the Vulkan device doesn't support " \
+-                         "the '%s' feature\n", feat); \
++         if (!(zink_debug & ZINK_DEBUG_QUIET)) \
++            mesa_logw("WARNING: Incorrect rendering will happen " \
++                           "because the Vulkan device doesn't support " \
++                           "the '%s' feature\n", feat); \
+          warned = true; \
+       } \
+    } while (0)
+-- 
+2.42.0
+

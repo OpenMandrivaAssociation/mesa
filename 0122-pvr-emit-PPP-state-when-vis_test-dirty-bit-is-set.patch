@@ -1,0 +1,35 @@
+From a157ab7b3338e4a12eb76188f28ab21ca6d7d12d Mon Sep 17 00:00:00 2001
+From: Frank Binns <frank.binns@imgtec.com>
+Date: Sat, 30 Sep 2023 14:34:58 +0100
+Subject: [PATCH 122/834] pvr: emit PPP state when vis_test dirty bit is set
+
+Unlike other dirty bits, the vis_test dirty bit wasn't being taken into
+consideration when determining whether PPP state needed to be emitted as part
+of a draw call.
+
+Fixes a large number of tests in dEQP-VK.query_pool.occlusion_query.*.
+
+Fixes: 2b1992a0005 ("pvr: Implement vkCmdBeginQuery API.")
+Signed-off-by: Frank Binns <frank.binns@imgtec.com>
+Reviewed-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25491>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index dfe6489958f..42af3c17a3b 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -5925,7 +5925,7 @@ pvr_ppp_state_update_required(const struct pvr_cmd_buffer *cmd_buffer)
+           header->pres_wclamp || header->pres_outselects ||
+           header->pres_varying_word0 || header->pres_varying_word1 ||
+           header->pres_varying_word2 || header->pres_stream_out_program ||
+-          state->dirty.fragment_descriptors ||
++          state->dirty.fragment_descriptors || state->dirty.vis_test ||
+           state->dirty.gfx_pipeline_binding || state->dirty.isp_userpass ||
+           state->push_constants.dirty_stages & VK_SHADER_STAGE_FRAGMENT_BIT ||
+           BITSET_TEST(dynamic_dirty, MESA_VK_DYNAMIC_DS_STENCIL_COMPARE_MASK) ||
+-- 
+2.42.0
+

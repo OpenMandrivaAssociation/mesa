@@ -1,0 +1,31 @@
+From 82cfed975869a283d73fce5a771af890485486ae Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david.heidelberg@collabora.com>
+Date: Sun, 8 Oct 2023 22:01:50 +0200
+Subject: [PATCH 099/834] ci/traces: upload only missing trace images
+
+Right now, S3 always returns something, so we need to check
+the content-type .
+
+Acked-by: Emma Anholt <emma@anholt.net>
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25606>
+---
+ .gitlab-ci/piglit/piglit-traces.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/.gitlab-ci/piglit/piglit-traces.sh b/.gitlab-ci/piglit/piglit-traces.sh
+index 8f4ec1a1fa7..2fac0d9cca4 100755
+--- a/.gitlab-ci/piglit/piglit-traces.sh
++++ b/.gitlab-ci/piglit/piglit-traces.sh
+@@ -133,7 +133,7 @@ replay_minio_upload_images() {
+             fi
+             __S3_PATH="$PIGLIT_REPLAY_REFERENCE_IMAGES_BASE"
+             __DESTINATION_FILE_PATH="${line##*-}"
+-            if curl -L -s -X HEAD "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}" 2>/dev/null; then
++            if curl -L -s -I "https://${__S3_PATH}/${__DESTINATION_FILE_PATH}" | grep -q "content-type: application/octet-stream" 2>/dev/null; then
+                 continue
+             fi
+         else
+-- 
+2.42.0
+

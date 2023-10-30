@@ -1,0 +1,31 @@
+From 6224630e43be8a13ef0e799f0bc142ca62018445 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Fri, 29 Sep 2023 18:09:11 -0400
+Subject: [PATCH 484/834] radeonsi: disable register shadowing without SR-IOV
+ to fix bad performance
+
+Fixes: f71607c8d3c - radeonsi/gfx11: enable register shadowing by default
+
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25484>
+---
+ src/gallium/drivers/radeonsi/si_pipe.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_pipe.c b/src/gallium/drivers/radeonsi/si_pipe.c
+index 5c67a9ae005..6417e6a31e2 100644
+--- a/src/gallium/drivers/radeonsi/si_pipe.c
++++ b/src/gallium/drivers/radeonsi/si_pipe.c
+@@ -1175,8 +1175,7 @@ static struct pipe_screen *radeonsi_screen_create_impl(struct radeon_winsys *ws,
+       sscreen->info.use_display_dcc_with_retile_blit = false;
+    }
+ 
+-   if (sscreen->debug_flags & DBG(SHADOW_REGS) ||
+-       sscreen->info.gfx_level >= GFX11) {
++   if (sscreen->debug_flags & DBG(SHADOW_REGS)) {
+       sscreen->info.register_shadowing_required = true;
+       /* Recompute has_set_pairs_packets. */
+       sscreen->info.has_set_pairs_packets = sscreen->info.gfx_level >= GFX11 &&
+-- 
+2.42.0
+

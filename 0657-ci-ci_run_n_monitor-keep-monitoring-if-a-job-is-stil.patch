@@ -1,0 +1,39 @@
+From 9f4f52f4f3466ba4570f163c869fc1c04b21e5c9 Mon Sep 17 00:00:00 2001
+From: Helen Koike <helen.koike@collabora.com>
+Date: Fri, 20 Oct 2023 08:52:12 -0300
+Subject: [PATCH 657/834] ci/ci_run_n_monitor: keep monitoring if a job is
+ still running
+
+When running multiple targets, the script was returning if any of the
+targets failed.
+But sometimes some of the targets are still running and we want to
+monitor it until it finishes, even if some of the targets failed.
+
+So check if any targeted jobs are in pending or running before deciding
+to finish.
+
+Signed-off-by: Helen Koike <helen.koike@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25826>
+---
+ bin/ci/ci_run_n_monitor.py | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/bin/ci/ci_run_n_monitor.py b/bin/ci/ci_run_n_monitor.py
+index 253d141c535..b635d174f4d 100755
+--- a/bin/ci/ci_run_n_monitor.py
++++ b/bin/ci/ci_run_n_monitor.py
+@@ -146,7 +146,10 @@ def monitor_pipeline(
+         ):
+             return target_id, None
+ 
+-        if {"failed"}.intersection(target_statuses.values()):
++        if (
++            {"failed"}.intersection(target_statuses.values())
++            and not set(["running", "pending"]).intersection(target_statuses.values())
++        ):
+             return None, 1
+ 
+         if {"success", "manual"}.issuperset(target_statuses.values()):
+-- 
+2.42.0
+

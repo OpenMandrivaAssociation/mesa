@@ -1,0 +1,62 @@
+From dad77ef235a7232855e8580fd3a19f039b203a2a Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Fri, 22 Sep 2023 08:37:34 -0400
+Subject: [PATCH 615/834] frontend/va: Add support for
+ VAConfigAttribEncMaxTileRows/Cols
+
+Reviewed-by: Ruijing Dong <ruijing.dong@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ src/gallium/frontends/va/config.c        | 22 ++++++++++++++++++++++
+ src/gallium/include/pipe/p_video_enums.h |  2 ++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/src/gallium/frontends/va/config.c b/src/gallium/frontends/va/config.c
+index dbdf9bb8446..f94dc6bc241 100644
+--- a/src/gallium/frontends/va/config.c
++++ b/src/gallium/frontends/va/config.c
+@@ -493,6 +493,28 @@ vlVaGetConfigAttributes(VADriverContextP ctx, VAProfile profile, VAEntrypoint en
+             else
+                value = encode_tile_support;
+          } break;
++#endif
++#if VA_CHECK_VERSION(1, 21, 0)
++         case VAConfigAttribEncMaxTileRows:
++         {
++            int max_tile_rows = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
++                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
++                                             PIPE_VIDEO_CAP_ENC_MAX_TILE_ROWS);
++            if (max_tile_rows <= 0)
++               value = VA_ATTRIB_NOT_SUPPORTED;
++            else
++               value = max_tile_rows;
++         } break;
++         case VAConfigAttribEncMaxTileCols:
++         {
++            int max_tile_cols = pscreen->get_video_param(pscreen, ProfileToPipe(profile),
++                                             PIPE_VIDEO_ENTRYPOINT_ENCODE,
++                                             PIPE_VIDEO_CAP_ENC_MAX_TILE_COLS);
++            if (max_tile_cols <= 0)
++               value = VA_ATTRIB_NOT_SUPPORTED;
++            else
++               value = max_tile_cols;
++         } break;
+ #endif
+          default:
+             value = VA_ATTRIB_NOT_SUPPORTED;
+diff --git a/src/gallium/include/pipe/p_video_enums.h b/src/gallium/include/pipe/p_video_enums.h
+index d4cbfa63b7d..657fce68381 100644
+--- a/src/gallium/include/pipe/p_video_enums.h
++++ b/src/gallium/include/pipe/p_video_enums.h
+@@ -139,6 +139,8 @@ enum pipe_video_cap
+    PIPE_VIDEO_CAP_ENC_AV1_FEATURE_EXT1 = 38,
+    PIPE_VIDEO_CAP_ENC_AV1_FEATURE_EXT2 = 39,
+    PIPE_VIDEO_CAP_ENC_SUPPORTS_TILE = 40,
++   PIPE_VIDEO_CAP_ENC_MAX_TILE_ROWS = 41,
++   PIPE_VIDEO_CAP_ENC_MAX_TILE_COLS = 42,
+ };
+ 
+ enum pipe_video_av1_enc_filter_mode
+-- 
+2.42.0
+

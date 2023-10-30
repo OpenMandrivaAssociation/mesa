@@ -1,0 +1,21 @@
+From eb34a86b3b6a3668c210cc0f31f95ded81f8b990 Mon Sep 17 00:00:00 2001
+From: Erico Nunes <nunes.erico@gmail.com>
+Date: Fri, 13 Oct 2023 11:51:34 +0200
+Subject: [PATCH 227/834] Revert "ci/lima: farm is down, disable for now"
+
+This reverts commit c7806daf43b47c463e0fc4b9d3896ee321cd17ae.
+
+Signed-off-by: Erico Nunes <nunes.erico@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25702>
+---
+ {.ci-farms-disabled => .ci-farms}/lima | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ rename {.ci-farms-disabled => .ci-farms}/lima (100%)
+
+diff --git a/.ci-farms-disabled/lima b/.ci-farms/lima
+similarity index 100%
+rename from .ci-farms-disabled/lima
+rename to .ci-farms/lima
+-- 
+2.42.0
+

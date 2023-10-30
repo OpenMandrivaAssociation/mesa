@@ -1,0 +1,134 @@
+From d0f775e54de81a8febb0ee67a343b3827514d895 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 25 Oct 2023 08:40:58 -0400
+Subject: [PATCH 831/834] ci: skip implicit modifier piglits for zink
+
+these may work coincidentally but not uniformly
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25299>
+---
+ .../drivers/zink/ci/zink-anv-tgl-skips.txt    | 18 +++++++++++++
+ .../zink/ci/zink-radv-navi10-skips.txt        | 27 +++++++++++++++++++
+ .../zink/ci/zink-radv-polaris10-skips.txt     | 12 +++++++++
+ .../zink/ci/zink-radv-vangogh-skips.txt       | 27 +++++++++++++++++++
+ 4 files changed, 84 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt b/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
+index f7a8ff6d322..138b07731f7 100644
+--- a/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
++++ b/src/gallium/drivers/zink/ci/zink-anv-tgl-skips.txt
+@@ -27,3 +27,21 @@ glx@glx-visuals-stencil$
+ .*conversion-implicit.*dmat.*
+ 
+ spec@egl_nok_texture_from_pixmap@basic
++
++# implicit modifier selection is not currently supported
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-ownership_transfer
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv21
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_vyuy
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
+diff --git a/src/gallium/drivers/zink/ci/zink-radv-navi10-skips.txt b/src/gallium/drivers/zink/ci/zink-radv-navi10-skips.txt
+index 717140784a1..875eff037c8 100644
+--- a/src/gallium/drivers/zink/ci/zink-radv-navi10-skips.txt
++++ b/src/gallium/drivers/zink/ci/zink-radv-navi10-skips.txt
+@@ -29,3 +29,30 @@ spec@arb_shader_clock@execution@clock.*
+ 
+ # These run OOM and migth hang?
+ spec@arb_texture_buffer_object@texture-buffer-size-clamp.*
++
++# implicit modifier selection not currently supported
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-ownership_transfer
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv21
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_vyuy
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvyu
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88
+diff --git a/src/gallium/drivers/zink/ci/zink-radv-polaris10-skips.txt b/src/gallium/drivers/zink/ci/zink-radv-polaris10-skips.txt
+index 717140784a1..de5ae0412c5 100644
+--- a/src/gallium/drivers/zink/ci/zink-radv-polaris10-skips.txt
++++ b/src/gallium/drivers/zink/ci/zink-radv-polaris10-skips.txt
+@@ -29,3 +29,15 @@ spec@arb_shader_clock@execution@clock.*
+ 
+ # These run OOM and migth hang?
+ spec@arb_texture_buffer_object@texture-buffer-size-clamp.*
++
++# implicit modifier selection not currently supported
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-ownership_transfer
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88
+diff --git a/src/gallium/drivers/zink/ci/zink-radv-vangogh-skips.txt b/src/gallium/drivers/zink/ci/zink-radv-vangogh-skips.txt
+index 2238cb8d07e..081b7816c57 100644
+--- a/src/gallium/drivers/zink/ci/zink-radv-vangogh-skips.txt
++++ b/src/gallium/drivers/zink/ci/zink-radv-vangogh-skips.txt
+@@ -30,3 +30,30 @@ spec@arb_shader_clock@execution@clock.*
+ 
+ # These run OOM and migth hang?
+ spec@arb_texture_buffer_object@texture-buffer-size-clamp.*
++
++# implicit modifier selection not currently supported
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuyv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p010
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p016
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_vyuy
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y410
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y412
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y416
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yuv420
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-export
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xrgb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y210
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-ownership_transfer
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv21
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_p012
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_uyvy
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_xyuv
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y212
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_y216
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvyu
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88
+-- 
+2.42.0
+

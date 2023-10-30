@@ -1,0 +1,39 @@
+From bc91af8021a7fb44c7c4e67f25ef670d55ea109d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Louis-Francis=20Ratt=C3=A9-Boulianne?= <lfrb@collabora.com>
+Date: Fri, 1 Sep 2023 11:26:02 -0400
+Subject: [PATCH 812/834] panfrost: Don't force constant modifier after
+ converting
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After converting a texture from one modifier to another, there is
+no reason to force the modifier to stay constant afterwards. Set
+back `modifier_constant` to false because it is changed by
+`resource_setup` as it is causing issues when implementing AFBC
+packing.
+
+Signed-off-by: Louis-Francis Ratté-Boulianne <lfrb@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25012>
+---
+ src/gallium/drivers/panfrost/pan_resource.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/gallium/drivers/panfrost/pan_resource.c b/src/gallium/drivers/panfrost/pan_resource.c
+index 7b8407590f3..57420b9b4fd 100644
+--- a/src/gallium/drivers/panfrost/pan_resource.c
++++ b/src/gallium/drivers/panfrost/pan_resource.c
+@@ -1216,6 +1216,10 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
+ 
+    panfrost_resource_setup(pan_device(ctx->base.screen), rsrc, modifier,
+                            blit.dst.format);
++   /* panfrost_resource_setup will force the modifier to stay constant when
++    * called with a specific modifier. We don't want that here, we want to
++    * be able to convert back to another modifier if needed */
++   rsrc->modifier_constant = false;
+    pipe_resource_reference(&tmp_prsrc, NULL);
+ }
+ 
+-- 
+2.42.0
+

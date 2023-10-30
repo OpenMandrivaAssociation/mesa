@@ -1,0 +1,80 @@
+From 922e6e5423d1562f12c913e24d2ab2e5c6e381e1 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Sat, 14 Oct 2023 08:41:02 -0500
+Subject: [PATCH 465/834] nvk: Handle unbinding images and buffers
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25747>
+---
+ src/nouveau/vulkan/nvk_buffer.c | 21 ++++++++++++++-------
+ src/nouveau/vulkan/nvk_image.c  | 20 +++++++++++++-------
+ 2 files changed, 27 insertions(+), 14 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_buffer.c b/src/nouveau/vulkan/nvk_buffer.c
+index bfe599ecc4e..15c130de1ed 100644
+--- a/src/nouveau/vulkan/nvk_buffer.c
++++ b/src/nouveau/vulkan/nvk_buffer.c
+@@ -184,14 +184,21 @@ nvk_BindBufferMemory2(VkDevice device,
+       buffer->is_local = !(mem->bo->flags & NOUVEAU_WS_BO_GART);
+       if (buffer->vma_size_B) {
+          VK_FROM_HANDLE(nvk_device, dev, device);
+-         nouveau_ws_bo_bind_vma(dev->ws_dev,
+-                                mem->bo,
+-                                buffer->addr,
+-                                buffer->vma_size_B,
+-                                pBindInfos[i].memoryOffset,
+-                                0 /* pte_kind */);
++         if (mem != NULL) {
++            nouveau_ws_bo_bind_vma(dev->ws_dev,
++                                   mem->bo,
++                                   buffer->addr,
++                                   buffer->vma_size_B,
++                                   pBindInfos[i].memoryOffset,
++                                   0 /* pte_kind */);
++         } else {
++            nouveau_ws_bo_unbind_vma(dev->ws_dev,
++                                     buffer->addr,
++                                     buffer->vma_size_B);
++         }
+       } else {
+-         buffer->addr = mem->bo->offset + pBindInfos[i].memoryOffset;
++         buffer->addr =
++            mem != NULL ? mem->bo->offset + pBindInfos[i].memoryOffset : 0;
+       }
+    }
+    return VK_SUCCESS;
+diff --git a/src/nouveau/vulkan/nvk_image.c b/src/nouveau/vulkan/nvk_image.c
+index 075c570b6d7..8557bef27f3 100644
+--- a/src/nouveau/vulkan/nvk_image.c
++++ b/src/nouveau/vulkan/nvk_image.c
+@@ -819,15 +819,21 @@ nvk_image_plane_bind(struct nvk_device *dev,
+    *offset_B = align64(*offset_B, (uint64_t)plane->nil.align_B);
+ 
+    if (plane->vma_size_B) {
+-      nouveau_ws_bo_bind_vma(dev->ws_dev,
+-                             mem->bo,
+-                             plane->addr,
+-                             plane->vma_size_B,
+-                             *offset_B,
+-                             plane->nil.pte_kind);
++      if (mem != NULL) {
++         nouveau_ws_bo_bind_vma(dev->ws_dev,
++                                mem->bo,
++                                plane->addr,
++                                plane->vma_size_B,
++                                *offset_B,
++                                plane->nil.pte_kind);
++      } else {
++         nouveau_ws_bo_unbind_vma(dev->ws_dev,
++                                  plane->addr,
++                                  plane->vma_size_B);
++      }
+    } else {
+       assert(plane->nil.pte_kind == 0);
+-      plane->addr = mem->bo->offset + *offset_B;
++      plane->addr = mem != NULL ? mem->bo->offset + *offset_B : 0;
+    }
+ 
+    *offset_B += plane->nil.size_B;
+-- 
+2.42.0
+

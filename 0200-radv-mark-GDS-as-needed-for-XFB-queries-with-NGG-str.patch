@@ -1,0 +1,33 @@
+From 2cc3288089707fe4f8615c45051d122ddc8c5fad Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Tue, 19 Sep 2023 14:27:01 +0200
+Subject: [PATCH 200/834] radv: mark GDS as needed for XFB queries with NGG
+ streamout on GFX11
+
+This doesn't fix anything because gds_needed should already be TRUE
+because it's initialized at pipeline bind time, but this will be needed
+for skipping GDS allocation on GFX11.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25284>
+---
+ src/amd/vulkan/radv_query.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/amd/vulkan/radv_query.c b/src/amd/vulkan/radv_query.c
+index 25184a27fe5..0e78b5a030e 100644
+--- a/src/amd/vulkan/radv_query.c
++++ b/src/amd/vulkan/radv_query.c
+@@ -1782,6 +1782,9 @@ emit_begin_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *poo
+          gfx10_copy_gds_query(cmd_buffer, RADV_SHADER_QUERY_PRIM_XFB_OFFSET(index), va + 8);
+          radv_emit_write_data_imm(cs, V_370_ME, va + 12, 0x80000000);
+ 
++         /* Record that the command buffer needs GDS. */
++         cmd_buffer->gds_needed = true;
++
+          if (!cmd_buffer->state.active_prims_xfb_gds_queries)
+             cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
+ 
+-- 
+2.42.0
+

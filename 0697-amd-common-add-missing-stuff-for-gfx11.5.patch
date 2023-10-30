@@ -1,0 +1,75 @@
+From f9629fa72961bc4a1232502bce75e8501ad47664 Mon Sep 17 00:00:00 2001
+From: Lang Yu <Lang.Yu@amd.com>
+Date: Sat, 21 Oct 2023 09:57:13 +0800
+Subject: [PATCH 697/834] amd/common: add missing stuff for gfx11.5
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Lang Yu <Lang.Yu@amd.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25836>
+---
+ src/amd/common/ac_debug.c   | 4 ++++
+ src/amd/common/ac_spm.c     | 1 +
+ src/amd/common/ac_surface.c | 3 +++
+ 3 files changed, 8 insertions(+)
+
+diff --git a/src/amd/common/ac_debug.c b/src/amd/common/ac_debug.c
+index 029b80280dc..ea3eba568b2 100644
+--- a/src/amd/common/ac_debug.c
++++ b/src/amd/common/ac_debug.c
+@@ -117,6 +117,10 @@ static const struct si_reg *find_register(enum amd_gfx_level gfx_level, enum rad
+    unsigned table_size;
+ 
+    switch (gfx_level) {
++   case GFX11_5:
++      table = gfx115_reg_table;
++      table_size = ARRAY_SIZE(gfx115_reg_table);
++      break;
+    case GFX11:
+       table = gfx11_reg_table;
+       table_size = ARRAY_SIZE(gfx11_reg_table);
+diff --git a/src/amd/common/ac_spm.c b/src/amd/common/ac_spm.c
+index ee937e3ef70..dfc4d30be99 100644
+--- a/src/amd/common/ac_spm.c
++++ b/src/amd/common/ac_spm.c
+@@ -487,6 +487,7 @@ bool ac_init_spm(const struct radeon_info *info,
+       create_info = gfx103_spm_counters;
+       break;
+    case GFX11:
++   case GFX11_5:
+       create_info_count = ARRAY_SIZE(gfx11_spm_counters);
+       create_info = gfx11_spm_counters;
+       break;
+diff --git a/src/amd/common/ac_surface.c b/src/amd/common/ac_surface.c
+index 1b200e75362..6285e76ad9f 100644
+--- a/src/amd/common/ac_surface.c
++++ b/src/amd/common/ac_surface.c
+@@ -240,6 +240,7 @@ bool ac_is_modifier_supported(const struct radeon_info *info,
+       allowed_swizzles = ac_modifier_has_dcc(modifier) ? 0x08000000 : 0x0E660660;
+       break;
+    case GFX11:
++   case GFX11_5:
+       allowed_swizzles = ac_modifier_has_dcc(modifier) ? 0x88000000 : 0xCC440440;
+       break;
+    default:
+@@ -2877,6 +2878,7 @@ bool ac_surface_apply_umd_metadata(const struct radeon_info *info, struct radeon
+       case GFX10:
+       case GFX10_3:
+       case GFX11:
++      case GFX11_5:
+          surf->meta_offset =
+             ((uint64_t)G_00A018_META_DATA_ADDRESS_LO(desc[6]) << 8) | ((uint64_t)desc[7] << 16);
+          surf->u.gfx9.color.dcc.pipe_aligned = G_00A018_META_PIPE_ALIGNED(desc[6]);
+@@ -2920,6 +2922,7 @@ void ac_surface_compute_umd_metadata(const struct radeon_info *info, struct rade
+    case GFX10:
+    case GFX10_3:
+    case GFX11:
++   case GFX11_5:
+       desc[6] &= C_00A018_META_DATA_ADDRESS_LO;
+       desc[6] |= S_00A018_META_DATA_ADDRESS_LO(surf->meta_offset >> 8);
+       desc[7] = surf->meta_offset >> 16;
+-- 
+2.42.0
+

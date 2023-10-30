@@ -1,0 +1,42 @@
+From a4845e9c43339a2c3c2c09d7175baec20eb359f9 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 13 Oct 2023 15:41:59 +0200
+Subject: [PATCH 460/834] bin/gen_release_notes: escape at-symbols
+
+If we don't do this, we end up with email-alike strings to be turned
+into mailto links. This is not what we want.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25712>
+---
+ bin/gen_release_notes.py      | 1 +
+ bin/gen_release_notes_test.py | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/bin/gen_release_notes.py b/bin/gen_release_notes.py
+index ababfa2b2c6..5520e55f17c 100755
+--- a/bin/gen_release_notes.py
++++ b/bin/gen_release_notes.py
+@@ -168,6 +168,7 @@ class Inliner(states.Inliner):
+                 break
+         # Quote all original backslashes
+         checked = re.sub('\x00', "\\\x00", checked)
++        checked = re.sub('@', '\\@', checked)
+         return docutils.utils.unescape(checked, 1)
+ 
+ inliner = Inliner();
+diff --git a/bin/gen_release_notes_test.py b/bin/gen_release_notes_test.py
+index 8d8e34c7e2d..07e668f5d66 100644
+--- a/bin/gen_release_notes_test.py
++++ b/bin/gen_release_notes_test.py
+@@ -198,3 +198,8 @@ async def test_parse_issues(content: str, bugs: typing.List[str]) -> None:
+             mock.patch('bin.gen_release_notes.gather_commits', mock.AsyncMock(return_value='sha\n')):
+         ids = await parse_issues('1234 not used')
+         assert set(ids) == set(bugs)
++
++@pytest.mark.asyncio
++async def test_rst_escape():
++    out = inliner.quoteInline('foo@bar')
++    assert out == 'foo\@bar'
+-- 
+2.42.0
+

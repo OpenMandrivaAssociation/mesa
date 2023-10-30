@@ -1,0 +1,25 @@
+From cf8f60fc64824853a5a6338b9584545a9709ca52 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 15:04:57 +0200
+Subject: [PATCH 568/834] ci/zink: Only test half of piglit pre-merge on anv.
+
+Unfortunately we're at 16 minutes of runtime for this job, which is much
+too far past our guidelines.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25790>
+---
+ src/gallium/drivers/zink/ci/deqp-zink-anv-tgl.toml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/zink/ci/deqp-zink-anv-tgl.toml b/src/gallium/drivers/zink/ci/deqp-zink-anv-tgl.toml
+index cf07a9bb708..3b31c339dd4 100644
+--- a/src/gallium/drivers/zink/ci/deqp-zink-anv-tgl.toml
++++ b/src/gallium/drivers/zink/ci/deqp-zink-anv-tgl.toml
+@@ -100,3 +100,4 @@ profile = "quick_gl"
+ process_isolation = true
+ skips = ["/install/zink-anv-tgl-premerge-skips.txt"]
+ timeout = 180.0
++fraction = 2
+-- 
+2.42.0
+

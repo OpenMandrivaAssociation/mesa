@@ -1,0 +1,41 @@
+From c63790139234a4be551aa7b262cded59e93ae775 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Wed, 20 Sep 2023 16:50:30 +0200
+Subject: [PATCH 665/834] aux/tc: Use MESA_TRACE_SCOPE instead of _BEGIN/_END
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The MESA_TRACE_SCOPE macro is an exact replacement for this.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/gallium/auxiliary/util/u_threaded_context.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/gallium/auxiliary/util/u_threaded_context.c b/src/gallium/auxiliary/util/u_threaded_context.c
+index dba12e03856..8a56df81768 100644
+--- a/src/gallium/auxiliary/util/u_threaded_context.c
++++ b/src/gallium/auxiliary/util/u_threaded_context.c
+@@ -642,7 +642,7 @@ _tc_sync(struct threaded_context *tc, UNUSED const char *info, UNUSED const char
+    struct tc_batch *next = &tc->batch_slots[tc->next];
+    bool synced = false;
+ 
+-   MESA_TRACE_BEGIN(func);
++   MESA_TRACE_SCOPE(func);
+ 
+    tc_debug_check(tc);
+ 
+@@ -708,8 +708,6 @@ _tc_sync(struct threaded_context *tc, UNUSED const char *info, UNUSED const char
+       tc->seen_fb_state = false;
+       tc->query_ended = false;
+    }
+-
+-   MESA_TRACE_END();
+ }
+ 
+ #define tc_sync(tc) _tc_sync(tc, "", __func__)
+-- 
+2.42.0
+

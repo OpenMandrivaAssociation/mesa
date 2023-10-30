@@ -1,0 +1,73 @@
+From d78110d3562fa6d715920e61c19db16b9c81b7ad Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 28 Sep 2023 12:17:45 -0700
+Subject: [PATCH 765/834] compiler/types: Flip wrapping of cmat related
+ functions
+
+Also add a missing `struct` related to cmat.
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp | 16 +++++++++++++++-
+ src/compiler/nir_types.cpp  | 13 -------------
+ 2 files changed, 15 insertions(+), 14 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index fde4a82d33a..2dcfcb14e5c 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -3021,7 +3021,7 @@ union packed_type {
+       unsigned length:13;
+       unsigned explicit_stride:14;
+    } array;
+-   glsl_cmat_description cmat_desc;
++   struct glsl_cmat_description cmat_desc;
+    struct {
+       unsigned base_type:5;
+       unsigned interface_packing_or_packed:2;
+@@ -3472,6 +3472,20 @@ glsl_type_wrap_in_arrays(const struct glsl_type *t,
+                                         glsl_get_explicit_stride(arrays));
+ }
+ 
++const struct glsl_type *
++glsl_get_cmat_element(const struct glsl_type *t)
++{
++   assert(t->base_type == GLSL_TYPE_COOPERATIVE_MATRIX);
++   return glsl_type::get_instance(t->cmat_desc.element_type, 1, 1);
++}
++
++const struct glsl_cmat_description *
++glsl_get_cmat_description(const struct glsl_type *t)
++{
++   assert(t->base_type == GLSL_TYPE_COOPERATIVE_MATRIX);
++   return &t->cmat_desc;
++}
++
+ unsigned
+ glsl_get_length(const struct glsl_type *t)
+ {
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index 9fd8191f77a..102588df491 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -669,16 +669,3 @@ glsl_type_replace_vec3_with_vec4(const struct glsl_type *type)
+    return type->replace_vec3_with_vec4();
+ }
+ 
+-const struct glsl_type *
+-glsl_get_cmat_element(const struct glsl_type *type)
+-{
+-   assert(type->base_type == GLSL_TYPE_COOPERATIVE_MATRIX);
+-   return glsl_type::get_instance(type->cmat_desc.element_type, 1, 1);
+-}
+-
+-const struct glsl_cmat_description *
+-glsl_get_cmat_description(const struct glsl_type *type)
+-{
+-   assert(type->base_type == GLSL_TYPE_COOPERATIVE_MATRIX);
+-   return &type->cmat_desc;
+-}
+-- 
+2.42.0
+

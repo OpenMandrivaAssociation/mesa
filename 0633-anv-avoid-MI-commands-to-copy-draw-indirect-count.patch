@@ -1,0 +1,233 @@
+From 2e0ff4c551e3bd3c71246bb0f228b00a022334a0 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Thu, 14 Sep 2023 19:10:10 +0300
+Subject: [PATCH 633/834] anv: avoid MI commands to copy draw indirect count
+
+We can just make the address of the count available to the generation
+shader.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/anv_internal_kernels.c       | 10 +++--
+ src/intel/vulkan/anv_internal_kernels.h       | 14 +++----
+ .../vulkan/genX_cmd_draw_generated_indirect.h | 38 ++++++-------------
+ .../shaders/common_generated_draws.glsl       | 16 +++++++-
+ .../vulkan/shaders/gfx11_generated_draws.glsl |  1 +
+ .../vulkan/shaders/gfx9_generated_draws.glsl  |  1 +
+ 6 files changed, 42 insertions(+), 38 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_internal_kernels.c b/src/intel/vulkan/anv_internal_kernels.c
+index dcbb21cf7a9..af3622809d6 100644
+--- a/src/intel/vulkan/anv_internal_kernels.c
++++ b/src/intel/vulkan/anv_internal_kernels.c
+@@ -355,10 +355,10 @@ anv_device_init_internal_kernels(struct anv_device *device)
+                        ARRAY_SIZE(gfx11_generated_draws_spv_source) :
+                        ARRAY_SIZE(gfx9_generated_draws_spv_source),
+          .send_count = device->info->ver >= 11 ?
+-                       11 /* 2 * (2 loads + 3 stores) + 1 store */ :
+-                       17 /* 2 * (2 loads + 6 stores) + 1 store */,
++                       12 /* 2 * (2 loads + 3 stores) + 1 load + 1 store */ :
++                       18 /* 2 * (2 loads + 6 stores) + 1 load + 1 store */,
+          .bind_map   = {
+-            .num_bindings = 4,
++            .num_bindings = 5,
+             .bindings     = {
+                {
+                   .address_offset = offsetof(struct anv_generated_indirect_params,
+@@ -372,6 +372,10 @@ anv_device_init_internal_kernels(struct anv_device *device)
+                   .address_offset = offsetof(struct anv_generated_indirect_params,
+                                              draw_ids_addr),
+                },
++               {
++                  .address_offset = offsetof(struct anv_generated_indirect_params,
++                                             draw_count_addr),
++               },
+                {
+                   .push_constant = true,
+                },
+diff --git a/src/intel/vulkan/anv_internal_kernels.h b/src/intel/vulkan/anv_internal_kernels.h
+index f93c827cf65..c85b2999187 100644
+--- a/src/intel/vulkan/anv_internal_kernels.h
++++ b/src/intel/vulkan/anv_internal_kernels.h
+@@ -33,7 +33,7 @@
+ 
+ /* This needs to match common_generated_draws.glsl :
+  *
+- *    layout(set = 0, binding = 3) uniform block
++ *    layout(set = 0, binding = 4) uniform block
+  */
+ struct anv_generated_indirect_draw_params {
+    /* Draw ID buffer address (only used on Gfx9) */
+@@ -47,18 +47,12 @@ struct anv_generated_indirect_draw_params {
+     * gl_FragCoord
+     */
+    uint32_t draw_base;
+-
+-   /* Number of draws to generate */
+-   uint32_t draw_count;
+-
+    /* Maximum number of draws (equals to draw_count for indirect draws without
+     * an indirect count)
+     */
+    uint32_t max_draw_count;
+-
+    /* Instance multiplier for multi view */
+    uint32_t instance_multiplier;
+-
+    /* Address where to jump at after the generated draw (only used with
+     * indirect draw count variants)
+     */
+@@ -68,6 +62,9 @@ struct anv_generated_indirect_draw_params {
+ struct anv_generated_indirect_params {
+    struct anv_generated_indirect_draw_params draw;
+ 
++   /* Draw count value for non count variants of draw indirect commands */
++   uint32_t draw_count;
++
+    /* Global address of binding 0 */
+    uint64_t indirect_data_addr;
+ 
+@@ -77,6 +74,9 @@ struct anv_generated_indirect_params {
+    /* Global address of binding 2 */
+    uint64_t draw_ids_addr;
+ 
++   /* Global address of binding 3 (points to the draw_count field above) */
++   uint64_t draw_count_addr;
++
+    /* CPU side pointer to the previous item when number of draws has to be
+     * split into smaller chunks, see while loop in
+     * genX(cmd_buffer_emit_indirect_generated_draws)
+diff --git a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+index 51b59acecc2..bdb70fa3f3e 100644
+--- a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
++++ b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+@@ -53,7 +53,6 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+                                      bool indexed)
+ {
+    struct anv_device *device = cmd_buffer->device;
+-   struct anv_batch *batch = &cmd_buffer->generation_batch;
+ 
+    struct anv_state push_data_state =
+       genX(simple_shader_alloc_push)(&cmd_buffer->generation_shader_state,
+@@ -62,6 +61,16 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+    struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+    const struct brw_vs_prog_data *vs_prog_data = get_vs_prog_data(pipeline);
+ 
++   struct anv_address draw_count_addr;
++   if (anv_address_is_null(count_addr)) {
++      draw_count_addr = anv_address_add(
++         genX(simple_shader_push_state_address)(
++            &cmd_buffer->generation_shader_state, push_data_state),
++         offsetof(struct anv_generated_indirect_params, draw_count));
++   } else {
++      draw_count_addr = count_addr;
++   }
++
+    struct anv_generated_indirect_params *push_data = push_data_state.map;
+    *push_data = (struct anv_generated_indirect_params) {
+       .draw                      = {
+@@ -79,39 +88,16 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+                                              ISL_SURF_USAGE_VERTEX_BUFFER_BIT) << 8) |
+                                    ((generated_cmd_stride / 4) << 16),
+          .draw_base              = item_base,
+-         /* If count_addr is not NULL, we'll edit it through a the command
+-          * streamer.
+-          */
+-         .draw_count             = anv_address_is_null(count_addr) ? max_count : 0,
+          .max_draw_count         = max_count,
+          .instance_multiplier    = pipeline->instance_multiplier,
+       },
++      .draw_count                = anv_address_is_null(count_addr) ? max_count : 0,
+       .indirect_data_addr        = anv_address_physical(indirect_data_addr),
+       .generated_cmds_addr       = anv_address_physical(generated_cmds_addr),
+       .draw_ids_addr             = anv_address_physical(draw_id_addr),
++      .draw_count_addr           = anv_address_physical(draw_count_addr),
+    };
+ 
+-   if (!anv_address_is_null(count_addr)) {
+-      /* Copy the draw count into the push constants so that the generation
+-       * gets the value straight away and doesn't even need to access memory.
+-       */
+-      struct mi_builder b;
+-      mi_builder_init(&b, device->info, batch);
+-      mi_memcpy(&b,
+-                anv_address_add(
+-                   genX(simple_shader_push_state_address)(
+-                      &cmd_buffer->generation_shader_state,
+-                      push_data_state),
+-                   offsetof(struct anv_generated_indirect_params, draw.draw_count)),
+-                count_addr, 4);
+-
+-      /* Make sure the memcpy landed for the generating draw call to pick up
+-       * the value.
+-       */
+-      genx_batch_emit_pipe_control(batch, cmd_buffer->device->info,
+-                                   ANV_PIPE_CS_STALL_BIT);
+-   }
+-
+    genX(emit_simple_shader_dispatch)(&cmd_buffer->generation_shader_state,
+                                      item_count, push_data_state);
+ 
+diff --git a/src/intel/vulkan/shaders/common_generated_draws.glsl b/src/intel/vulkan/shaders/common_generated_draws.glsl
+index 09a84984065..9cdd7c2dd44 100644
+--- a/src/intel/vulkan/shaders/common_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/common_generated_draws.glsl
+@@ -41,14 +41,26 @@ layout(set = 0, binding = 2, std430) buffer Storage2 {
+    uint draw_ids[];
+ };
+ 
++/* We're not using a uniform block for this because our compiler
++ * infrastructure relies on UBOs to be 32-bytes aligned so that we can push
++ * them into registers. This value can come directly from the indirect buffer
++ * given to indirect draw commands and the requirement there is 4-bytes
++ * alignment.
++ *
++ * Also use a prefix to the variable to remember to make a copy of it, avoid
++ * unnecessary accesses.
++ */
++layout(set = 0, binding = 3) buffer Storage3 {
++   uint _draw_count;
++};
++
+ /* This data will be provided through push constants. */
+-layout(set = 0, binding = 3) uniform block {
++layout(set = 0, binding = 4) uniform block {
+    uint64_t draw_id_addr;
+    uint64_t indirect_data_addr;
+    uint indirect_data_stride;
+    uint flags;
+    uint draw_base;
+-   uint draw_count;
+    uint max_draw_count;
+    uint instance_multiplier;
+    uint64_t end_addr;
+diff --git a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+index 355d383d21b..4b8f2e531d0 100644
+--- a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+@@ -80,6 +80,7 @@ void main()
+    uint item_idx = uint(gl_FragCoord.y) * 8192 + uint(gl_FragCoord.x);
+    uint cmd_idx = item_idx * _3dprim_dw_size;
+    uint draw_id = draw_base + item_idx;
++   uint draw_count = _draw_count;
+ 
+    if (draw_id < draw_count)
+       write_draw(item_idx, cmd_idx, draw_id);
+diff --git a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+index a24f2c3de30..d7fbd7ebf03 100644
+--- a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+@@ -138,6 +138,7 @@ void main()
+    uint item_idx = uint(gl_FragCoord.y) * 8192 + uint(gl_FragCoord.x);
+    uint cmd_idx = item_idx * _3dprim_dw_size;
+    uint draw_id = draw_base + item_idx;
++   uint draw_count = _draw_count;
+ 
+    if (draw_id < draw_count)
+       write_draw(item_idx, cmd_idx, draw_id);
+-- 
+2.42.0
+

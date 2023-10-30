@@ -1,0 +1,37 @@
+From 731e682cc01a5654ee936ea90c2e2e3f4860835c Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Tue, 10 Oct 2023 06:54:53 -0400
+Subject: [PATCH 111/834] freedreno/ci: Minetest
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24011>
+---
+ src/freedreno/ci/traces-freedreno.yml | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/freedreno/ci/traces-freedreno.yml b/src/freedreno/ci/traces-freedreno.yml
+index ad3d5ff1fc3..562b2925537 100644
+--- a/src/freedreno/ci/traces-freedreno.yml
++++ b/src/freedreno/ci/traces-freedreno.yml
+@@ -255,14 +255,14 @@ traces:
+     freedreno-a530:
+       checksum: 824672b1eef72c0223ac754dfc46e2d5
+     freedreno-a618:
+-      checksum: 5c0c5da476775dfac94b79e7edb556ce
++      checksum: e9b5d984b49f888ff1a4787fe2baea71
+     freedreno-a630:
+-      checksum: 5c0c5da476775dfac94b79e7edb556ce
++      checksum: 1db3e8a057748109bd06734860396abf
+     zink-a618:
+-      checksum: a8dea3dcb341c0f6c786a264dee51766
++      checksum: f534d68a62934453325f11ff19e2241a
+     zink-a630:
+       label: [skip, flakes]
+-      checksum: a8dea3dcb341c0f6c786a264dee51766
++      checksum: f534d68a62934453325f11ff19e2241a
+       text: occasional Different pixels 1 (no tolerance), 0 (1% tol.)
+ 
+   filament/filament-default.trace:
+-- 
+2.42.0
+

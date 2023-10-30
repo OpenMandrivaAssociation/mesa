@@ -1,0 +1,34 @@
+From 66c118495ed7d487f91a4ce69fc02b586b6f711f Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Tue, 26 Sep 2023 13:11:53 +1000
+Subject: [PATCH 077/834] llvmpipe: don't support planar formats for buffers.
+
+This stops lavapipe exposing incorrect support.
+
+Cc: mesa-stable
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/drivers/llvmpipe/lp_screen.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/llvmpipe/lp_screen.c b/src/gallium/drivers/llvmpipe/lp_screen.c
+index a3da1cb8fdf..80e5050f1e7 100644
+--- a/src/gallium/drivers/llvmpipe/lp_screen.c
++++ b/src/gallium/drivers/llvmpipe/lp_screen.c
+@@ -832,7 +832,10 @@ llvmpipe_is_format_supported(struct pipe_screen *_screen,
+        format != PIPE_FORMAT_ETC1_RGB8)
+       return false;
+ 
+-   if (format_desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED && target == PIPE_BUFFER)
++   if ((format_desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED ||
++        format_desc->layout == UTIL_FORMAT_LAYOUT_PLANAR2 ||
++        format_desc->layout == UTIL_FORMAT_LAYOUT_PLANAR3) &&
++       target == PIPE_BUFFER)
+       return false;
+ 
+    /*
+-- 
+2.42.0
+

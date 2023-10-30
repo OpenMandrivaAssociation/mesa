@@ -1,0 +1,38 @@
+From bbf135db3d9faeb3dbf0f7986e5ab7def02e22e6 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Mon, 9 Oct 2023 16:38:42 +0200
+Subject: [PATCH 113/834] radv: allocate only 1 GDS OA counter for gfx10 NGG
+ streamout
+
+It works with just one counter.
+
+This mitigates https://gitlab.freedesktop.org/drm/amd/-/issues/2902
+quite a lot when you run dEQP-VK.transform_feedback.* in parallel on
+more than 16 threads with RDNA3.
+
+For example, on my GPU the kernel reports 16 GDS OA counters which means
+that if you run VKCTS with 16 threads (ie. 16 Vulkan devices are
+created) it's fine. Otherwise, the kernel might report ENOMEM.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25619>
+---
+ src/amd/vulkan/radv_queue.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/amd/vulkan/radv_queue.c b/src/amd/vulkan/radv_queue.c
+index d93fdaf8920..816a96cc30f 100644
+--- a/src/amd/vulkan/radv_queue.c
++++ b/src/amd/vulkan/radv_queue.c
+@@ -953,7 +953,7 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
+    if (!queue->ring_info.gds_oa && needs->gds_oa) {
+       assert(device->physical_device->rad_info.gfx_level >= GFX10);
+ 
+-      result = ws->buffer_create(ws, 4, 1, RADEON_DOMAIN_OA, ring_bo_flags, RADV_BO_PRIORITY_SCRATCH, 0, &gds_oa_bo);
++      result = ws->buffer_create(ws, 1, 1, RADEON_DOMAIN_OA, ring_bo_flags, RADV_BO_PRIORITY_SCRATCH, 0, &gds_oa_bo);
+       if (result != VK_SUCCESS)
+          goto fail;
+ 
+-- 
+2.42.0
+

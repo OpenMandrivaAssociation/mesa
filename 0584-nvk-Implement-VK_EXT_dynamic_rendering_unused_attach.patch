@@ -1,0 +1,119 @@
+From baa8487c28850e3912450ff502258a143f05ea62 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Thu, 19 Oct 2023 07:16:38 -0500
+Subject: [PATCH 584/834] nvk: Implement
+ VK_EXT_dynamic_rendering_unused_attachments
+
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9632
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25813>
+---
+ docs/features.txt                          |  2 +-
+ src/nouveau/vulkan/nvk_graphics_pipeline.c | 38 ++++++++++++++++++----
+ src/nouveau/vulkan/nvk_physical_device.c   |  4 +++
+ 3 files changed, 37 insertions(+), 7 deletions(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index 283a9a90357..b1e334f55b0 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -562,7 +562,7 @@ Khronos extensions that are not part of any Vulkan version:
+   VK_EXT_discard_rectangles                             DONE (radv)
+   VK_EXT_display_control                                DONE (anv, hasvk, radv, tu)
+   VK_EXT_display_surface_counter                        DONE (anv, lvp, radv, tu)
+-  VK_EXT_dynamic_rendering_unused_attachments           DONE (anv, radv, vn)
++  VK_EXT_dynamic_rendering_unused_attachments           DONE (anv, nvk, radv, vn)
+   VK_EXT_extended_dynamic_state3                        DONE (anv, lvp, nvk, radv, tu)
+   VK_EXT_external_memory_acquire_unmodified             DONE (radv)
+   VK_EXT_external_memory_dma_buf                        DONE (anv, hasvk, nvk, pvr, radv, tu, v3dv, vn)
+diff --git a/src/nouveau/vulkan/nvk_graphics_pipeline.c b/src/nouveau/vulkan/nvk_graphics_pipeline.c
+index ea3d6843380..fd6a966c6ba 100644
+--- a/src/nouveau/vulkan/nvk_graphics_pipeline.c
++++ b/src/nouveau/vulkan/nvk_graphics_pipeline.c
+@@ -141,7 +141,6 @@ static void
+ emit_pipeline_cb_state(struct nv_push *p,
+                        const struct vk_color_blend_state *cb)
+ {
+-   bool indep_color_masks = true;
+    P_IMMD(p, NV9097, SET_BLEND_STATE_PER_TARGET, ENABLE_TRUE);
+ 
+    for (uint32_t a = 0; a < cb->attachment_count; a++) {
+@@ -162,15 +161,41 @@ emit_pipeline_cb_state(struct nv_push *p,
+          vk_to_nv9097_blend_factor(att->src_alpha_blend_factor));
+       P_NV9097_SET_BLEND_PER_TARGET_ALPHA_DEST_COEFF(p, a,
+          vk_to_nv9097_blend_factor(att->dst_alpha_blend_factor));
++   }
++}
+ 
++static void
++emit_pipeline_ct_write_state(struct nv_push *p,
++                             const struct vk_color_blend_state *cb,
++                             const struct vk_render_pass_state *rp)
++{
++   uint32_t att_write_masks[8] = {};
++   uint32_t att_count = 0;
++
++   if (rp != NULL) {
++      att_count = rp->color_attachment_count;
++      for (uint32_t a = 0; a < rp->color_attachment_count; a++) {
++         VkFormat att_format = rp->color_attachment_formats[a];
++         att_write_masks[a] = att_format == VK_FORMAT_UNDEFINED ? 0 : 0xf;
++      }
++   }
++
++   if (cb != NULL) {
++      assert(cb->attachment_count == att_count);
++      for (uint32_t a = 0; a < cb->attachment_count; a++)
++         att_write_masks[a] &= cb->attachments[a].write_mask;
++   }
++
++   bool indep_color_masks = true;
++   for (uint32_t a = 0; a < att_count; a++) {
+       P_IMMD(p, NV9097, SET_CT_WRITE(a), {
+-         .r_enable = (att->write_mask & BITFIELD_BIT(0)) != 0,
+-         .g_enable = (att->write_mask & BITFIELD_BIT(1)) != 0,
+-         .b_enable = (att->write_mask & BITFIELD_BIT(2)) != 0,
+-         .a_enable = (att->write_mask & BITFIELD_BIT(3)) != 0,
++         .r_enable = (att_write_masks[a] & BITFIELD_BIT(0)) != 0,
++         .g_enable = (att_write_masks[a] & BITFIELD_BIT(1)) != 0,
++         .b_enable = (att_write_masks[a] & BITFIELD_BIT(2)) != 0,
++         .a_enable = (att_write_masks[a] & BITFIELD_BIT(3)) != 0,
+       });
+ 
+-      if (att->write_mask != cb->attachments[0].write_mask)
++      if (att_write_masks[a] != att_write_masks[0])
+          indep_color_masks = false;
+    }
+ 
+@@ -471,6 +496,7 @@ nvk_graphics_pipeline_create(struct nvk_device *dev,
+    if (state.rs) emit_pipeline_rs_state(&push, state.rs);
+    if (state.ms) emit_pipeline_ms_state(&push, state.ms, force_max_samples);
+    if (state.cb) emit_pipeline_cb_state(&push, state.cb);
++   emit_pipeline_ct_write_state(&push, state.cb, state.rp);
+ 
+    pipeline->push_dw_count = nv_push_dw_count(&push);
+ 
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index d02d948a5da..004421ed1e3 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -107,6 +107,7 @@ nvk_get_device_extensions(const struct nv_device_info *info,
+       .EXT_depth_clip_control = true,
+       .EXT_depth_clip_enable = true,
+       .EXT_descriptor_indexing = true,
++      .EXT_dynamic_rendering_unused_attachments = true,
+       .EXT_extended_dynamic_state = true,
+       .EXT_extended_dynamic_state2 = true,
+       .EXT_extended_dynamic_state3 = true,
+@@ -297,6 +298,9 @@ nvk_get_device_features(const struct nv_device_info *info,
+       /* VK_EXT_depth_clip_enable */
+       .depthClipEnable = true,
+ 
++      /* VK_EXT_dynamic_rendering_unused_attachments */
++      .dynamicRenderingUnusedAttachments = true,
++
+       /* VK_EXT_extended_dynamic_state */
+       .extendedDynamicState = true,
+ 
+-- 
+2.42.0
+

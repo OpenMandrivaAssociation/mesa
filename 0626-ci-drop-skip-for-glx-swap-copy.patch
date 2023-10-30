@@ -1,0 +1,26 @@
+From 06fd469110424f06cb226d61bd87b510afa0cfb9 Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 10 Oct 2023 12:09:01 -0700
+Subject: [PATCH 626/834] ci: drop skip for glx-swap-copy.
+
+This will always be a skip now that we dropped GLX_OML_swap_method.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25650>
+---
+ .gitlab-ci/all-skips.txt | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/.gitlab-ci/all-skips.txt b/.gitlab-ci/all-skips.txt
+index fcce7b3e581..1bfc82f07cb 100644
+--- a/.gitlab-ci/all-skips.txt
++++ b/.gitlab-ci/all-skips.txt
+@@ -36,6 +36,3 @@ spec@!opengl 1.1@windowoverlap
+ # Note that "glx-" tests don't appear in x11-skips.txt because they can be
+ # run even if PIGLIT_PLATFORM=gbm (for example)
+ glx@glx-copy-sub-buffer.*
+-# Reads the front buffer but it doesn't have to.
+-# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/755
+-glx-swap-copy
+-- 
+2.42.0
+

@@ -1,0 +1,48 @@
+From 8f63419733c9d887cbc4f4c70529bc764b7ed411 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Thu, 12 Oct 2023 13:27:29 +0200
+Subject: [PATCH 536/834] ci: bump the number of tests per group from 500 to
+ 5000 for Vulkan drivers
+
+Except for lvp which already forces 1.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25476>
+---
+ .gitlab-ci/deqp-runner.sh                       | 5 +++++
+ src/gallium/frontends/lavapipe/ci/gitlab-ci.yml | 3 ++-
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/.gitlab-ci/deqp-runner.sh b/.gitlab-ci/deqp-runner.sh
+index cf7b22d96e3..e8ae6573dbc 100755
+--- a/.gitlab-ci/deqp-runner.sh
++++ b/.gitlab-ci/deqp-runner.sh
+@@ -126,6 +126,11 @@ if [ "$PIGLIT_PLATFORM" = "gbm" ]; then
+     DEQP_SKIPS="$DEQP_SKIPS $INSTALL/gbm-skips.txt"
+ fi
+ 
++if [ -n "$VK_DRIVER" ] && [ -z "$DEQP_SUITE" ]; then
++    # Bump the number of tests per group to reduce the startup time of VKCTS.
++    DEQP_RUNNER_OPTIONS="$DEQP_RUNNER_OPTIONS --tests-per-group ${DEQP_RUNNER_TESTS_PER_GROUP:-5000}"
++fi
++
+ # Set the path to VK validation layer settings (in case it ends up getting loaded)
+ export VK_LAYER_SETTINGS_PATH=$INSTALL/$GPU_VERSION-validation-settings.txt
+ 
+diff --git a/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml b/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml
+index 41ee5d0802f..b2eee763e01 100644
+--- a/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml
++++ b/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml
+@@ -20,7 +20,8 @@ lavapipe-vk-asan:
+     DEQP_FRACTION: 1000
+     # Skip dlclose so that we get good backtraces of the leaks.
+     # Don't batch the tests into caselists while we're leaky.
+-    DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.8:libdlclose-skip.so --tests-per-group 1"
++    DEQP_RUNNER_OPTIONS: "--env LD_PRELOAD=libasan.so.8:libdlclose-skip.so"
++    DEQP_RUNNER_TESTS_PER_GROUP: 1
+   needs:
+     - debian/x86_64_test-vk
+     - debian-testing-asan
+-- 
+2.42.0
+

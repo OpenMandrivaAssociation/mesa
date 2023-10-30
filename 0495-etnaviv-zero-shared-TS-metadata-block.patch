@@ -1,0 +1,31 @@
+From 336799481d1744f1ac20d74b55fc27b1764cf50e Mon Sep 17 00:00:00 2001
+From: Lucas Stach <l.stach@pengutronix.de>
+Date: Wed, 20 Sep 2023 21:49:53 +0200
+Subject: [PATCH 495/834] etnaviv: zero shared TS metadata block
+
+Make sure to zero the shared TS metadata memory. Without this invalid
+TS data may be mistaken as being valid, causing GPU hangs.
+
+CC: mesa-stable
+Signed-off-by: Lucas Stach <l.stach@pengutronix.de>
+Reviewed-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25751>
+---
+ src/gallium/drivers/etnaviv/etnaviv_resource.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_resource.c b/src/gallium/drivers/etnaviv/etnaviv_resource.c
+index 00780138c5e..aab21d95d95 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_resource.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_resource.c
+@@ -190,6 +190,7 @@ etna_screen_resource_alloc_ts(struct pipe_screen *pscreen,
+    /* fill software meta */
+    if (modifier & VIVANTE_MOD_TS_MASK) {
+       lvl->ts_meta = etna_bo_map(rsc->ts_bo);
++      memset(lvl->ts_meta, 0, sizeof(struct etna_ts_sw_meta));
+       lvl->ts_meta->version = 0;
+       lvl->ts_meta->v0.data_size = ts_size;
+       lvl->ts_meta->v0.data_offset = ts_data_offset;
+-- 
+2.42.0
+

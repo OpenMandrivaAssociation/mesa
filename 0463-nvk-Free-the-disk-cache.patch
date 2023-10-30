@@ -1,0 +1,46 @@
+From 112be1901ba67222bf149bca5b0c85a9635421d5 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Sat, 14 Oct 2023 00:12:58 -0500
+Subject: [PATCH 463/834] nvk: Free the disk cache
+
+Fixes: a4f8fd9dd53d ("nvk: Hook up the disk cache")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25747>
+---
+ src/nouveau/vulkan/nvk_physical_device.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index e7f3909f64c..a6e2ba07a81 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -665,6 +665,19 @@ nvk_physical_device_init_pipeline_cache(struct nvk_physical_device *pdev)
+ #endif
+ }
+ 
++static void
++nvk_physical_device_free_disk_cache(struct nvk_physical_device *pdev)
++{
++#ifdef ENABLE_SHADER_CACHE
++   if (pdev->vk.disk_cache) {
++      disk_cache_destroy(pdev->vk.disk_cache);
++      pdev->vk.disk_cache = NULL;
++   }
++#else
++   assert(pdev->vk.disk_cache == NULL);
++#endif
++}
++
+ VkResult
+ nvk_create_drm_physical_device(struct vk_instance *_instance,
+                                drmDevicePtr drm_device,
+@@ -851,6 +864,7 @@ nvk_physical_device_destroy(struct vk_physical_device *vk_pdev)
+       container_of(vk_pdev, struct nvk_physical_device, vk);
+ 
+    nvk_finish_wsi(pdev);
++   nvk_physical_device_free_disk_cache(pdev);
+    vk_physical_device_finish(&pdev->vk);
+    vk_free(&pdev->vk.instance->alloc, pdev);
+ }
+-- 
+2.42.0
+

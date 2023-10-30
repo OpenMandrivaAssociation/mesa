@@ -1,0 +1,114 @@
+From 9dcc74e5579a5182959ab36454c6ae97ff814784 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 28 Sep 2023 02:02:55 -0700
+Subject: [PATCH 690/834] spirv: Let spirv2nir find out the shader to use
+
+Previous behavior was to default to "main"/fs, this wasn't nice
+when the SPIR-V module had a single shader that didn't match that spec.
+
+New behavior is to look at the available shaders:
+
+- if there's only one, use just use it
+- if multiple, narrow down using --stage and --entry as criteria
+- if still multiple after narrowing down, print the list and fail
+
+Note you can use just one --stage or --entry if that already narrows
+down to a single match.  Note that in SPIR-V it is valid to have a
+shader module with two shaders sharing the same entry-point name but
+different stages.  Because of that in rare cases both --stage and
+--entry will be needed.
+
+This patch should remove the need of using --stage and --entry for most
+of the uses of spirv2nir.
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25461>
+---
+ src/compiler/spirv/spirv2nir.c | 32 +++++++++++++++++++++-----------
+ 1 file changed, 21 insertions(+), 11 deletions(-)
+
+diff --git a/src/compiler/spirv/spirv2nir.c b/src/compiler/spirv/spirv2nir.c
+index cde5c16c66c..63635969b84 100644
+--- a/src/compiler/spirv/spirv2nir.c
++++ b/src/compiler/spirv/spirv2nir.c
+@@ -114,8 +114,8 @@ struct entry_point {
+    gl_shader_stage stage;
+ };
+ 
+-static bool
+-check_entry_point(void *mem_ctx, const uint32_t *words, size_t word_count,
++static struct entry_point
++select_entry_point(void *mem_ctx, const uint32_t *words, size_t word_count,
+                   struct entry_point args)
+ {
+    /* Create a dummy vtn_builder to use with vtn_string_literal. */
+@@ -151,39 +151,48 @@ check_entry_point(void *mem_ctx, const uint32_t *words, size_t word_count,
+       w += count;
+    }
+ 
++   struct entry_point r = {0};
+    if (util_dynarray_num_elements(&candidates, struct entry_point) == 0) {
+       fprintf(stderr, "ERROR: No entry-points available.\n");
+-      return false;
++      return r;
+    }
+ 
+    int matches = 0;
+    util_dynarray_foreach(&candidates, struct entry_point, e) {
+       if ((!args.name || !strcmp(args.name, e->name)) &&
+           (args.stage == MESA_SHADER_NONE || args.stage == e->stage)) {
++         if (matches == 0) {
++            /* Save the first match we found. */
++            r = *e;
++         }
+          matches++;
+-      } 
++      }
+    }
+ 
+    if (matches != 1) {
+-      if (matches == 0)
++      if (matches == 0) {
+          fprintf(stderr, "No matching entry-point for arguments passed.\n");
+-      else
++      } else {
+          fprintf(stderr, "Multiple entry-points available, select with --stage and/or --entry.\n");
+ 
++         /* Discard whatever we found before. */
++         r.name = NULL;
++         r.stage = MESA_SHADER_NONE;
++      }
++
+       fprintf(stderr, "Entry-points available:\n");
+       util_dynarray_foreach(&candidates, struct entry_point, e)
+          fprintf(stderr, "  --entry e \"%s\" --stage %s\n", e->name, stage_to_abbrev(e->stage));
+-      return false;
+    }
+ 
+-   return true;
++   return r;
+ }
+ 
+ int main(int argc, char **argv)
+ {
+    struct entry_point entry_point = {
+-      .name = "main",
+-      .stage = MESA_SHADER_FRAGMENT,
++      .name = NULL,
++      .stage = MESA_SHADER_NONE,
+    };
+    int ch;
+    bool optimize = false;
+@@ -264,7 +273,8 @@ int main(int argc, char **argv)
+ 
+    void *mem_ctx = ralloc_context(NULL);
+ 
+-   if (!check_entry_point(mem_ctx, map, word_count, entry_point))
++   entry_point = select_entry_point(mem_ctx, map, word_count, entry_point);
++   if (!entry_point.name)
+       return 1;
+ 
+    glsl_type_singleton_init_or_ref();
+-- 
+2.42.0
+

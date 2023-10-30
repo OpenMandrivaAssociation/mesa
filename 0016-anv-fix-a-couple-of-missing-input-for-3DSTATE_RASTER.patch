@@ -1,0 +1,40 @@
+From d924b568efb54509353eb81a27c21c9799807f70 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Mon, 9 Oct 2023 17:05:39 +0300
+Subject: [PATCH 016/834] anv: fix a couple of missing input for 3DSTATE_RASTER
+ programming
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Fixes: 50f6903bd9 ("anv: add new low level emission & dirty state tracking")
+Reviewed-by: Tapani Pälli <tapani.palli@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25618>
+---
+ src/intel/vulkan/genX_gfx_state.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/intel/vulkan/genX_gfx_state.c b/src/intel/vulkan/genX_gfx_state.c
+index 9367be0671a..ebbe26ff886 100644
+--- a/src/intel/vulkan/genX_gfx_state.c
++++ b/src/intel/vulkan/genX_gfx_state.c
+@@ -501,6 +501,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
+       SET(CLIP, clip.APIMode, dyn->vp.depth_clip_negative_one_to_one ? APIMODE_OGL : APIMODE_D3D);
+ 
+    if ((cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_PIPELINE) ||
++       (cmd_buffer->state.gfx.dirty & ANV_CMD_DIRTY_RENDER_TARGETS) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_CULL_MODE) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_FRONT_FACE) ||
+@@ -508,6 +509,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_BIAS_FACTORS) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_POLYGON_MODE) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_MODE) ||
++       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_WIDTH) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_CLIP_ENABLE) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_CONSERVATIVE_MODE)) {
+-- 
+2.42.0
+

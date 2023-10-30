@@ -1,0 +1,133 @@
+From a4cfeea85011e7234c026ea674122bfce489068a Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Sat, 2 Sep 2023 12:19:39 -0700
+Subject: [PATCH 769/834] compiler/types: Flip wrapping of interface related
+ functions
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 19 +++++++++++++++++++
+ src/compiler/glsl_types.h      |  7 ++++++-
+ src/compiler/glsl_types_impl.h | 27 +++------------------------
+ src/compiler/nir_types.cpp     | 13 -------------
+ 4 files changed, 28 insertions(+), 38 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index d1451e621cf..88f8dece278 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -3532,4 +3532,23 @@ glsl_get_struct_field_data(const struct glsl_type *t, unsigned index)
+    return &t->fields.structure[index];
+ }
+ 
++enum glsl_interface_packing
++glsl_get_internal_ifc_packing(const struct glsl_type *t,
++                              bool std430_supported)
++{
++   enum glsl_interface_packing packing = t->get_interface_packing();
++   if (packing == GLSL_INTERFACE_PACKING_STD140 ||
++       (!std430_supported &&
++        (packing == GLSL_INTERFACE_PACKING_SHARED ||
++         packing == GLSL_INTERFACE_PACKING_PACKED))) {
++      return GLSL_INTERFACE_PACKING_STD140;
++   } else {
++      assert(packing == GLSL_INTERFACE_PACKING_STD430 ||
++             (std430_supported &&
++              (packing == GLSL_INTERFACE_PACKING_SHARED ||
++               packing == GLSL_INTERFACE_PACKING_PACKED)));
++      return GLSL_INTERFACE_PACKING_STD430;
++   }
++}
++
+ }
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 95b6e71e272..92b7c43ec4f 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1489,7 +1489,12 @@ void glsl_get_cl_type_size_align(const struct glsl_type *t,
+                                  unsigned *size, unsigned *align);
+ 
+ enum glsl_interface_packing glsl_get_internal_ifc_packing(const struct glsl_type *t, bool std430_supported);
+-enum glsl_interface_packing glsl_get_ifc_packing(const struct glsl_type *t);
++
++static inline enum glsl_interface_packing
++glsl_get_ifc_packing(const struct glsl_type *t)
++{
++   return (enum glsl_interface_packing)t->interface_packing;
++}
+ 
+ unsigned glsl_get_std140_base_alignment(const struct glsl_type *t, bool row_major);
+ unsigned glsl_get_std140_size(const struct glsl_type *t, bool row_major);
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index 54e74c05def..882674c2915 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -51,6 +51,9 @@ inline const glsl_type *glsl_type::without_array() const { return glsl_without_a
+ inline unsigned glsl_type::struct_location_offset(unsigned len) const { return glsl_get_struct_location_offset(this, len); }
+ inline int glsl_type::field_index(const char *n) const { return glsl_get_field_index(this, n); }
+ 
++inline enum glsl_interface_packing glsl_type::get_interface_packing() const { return glsl_get_ifc_packing(this); }
++inline enum glsl_interface_packing glsl_type::get_internal_ifc_packing(bool std430_supported) const { return glsl_get_internal_ifc_packing(this, std430_supported); }
++
+ inline unsigned glsl_type::components() const { return glsl_get_components(this); }
+ inline unsigned glsl_type::component_slots() const { return glsl_get_component_slots(this); }
+ inline unsigned glsl_type::component_slots_aligned(unsigned int offset) const { return glsl_get_component_slots_aligned(this, offset); }
+@@ -229,30 +232,6 @@ glsl_type::column_type() const
+ 
+ inline bool glsl_type::is_unsized_array() const { return glsl_type_is_unsized_array(this); }
+ 
+-inline enum glsl_interface_packing
+-glsl_type::get_interface_packing() const
+-{
+-   return (enum glsl_interface_packing)interface_packing;
+-}
+-
+-inline enum glsl_interface_packing
+-glsl_type::get_internal_ifc_packing(bool std430_supported) const
+-{
+-   enum glsl_interface_packing packing = this->get_interface_packing();
+-   if (packing == GLSL_INTERFACE_PACKING_STD140 ||
+-       (!std430_supported &&
+-        (packing == GLSL_INTERFACE_PACKING_SHARED ||
+-         packing == GLSL_INTERFACE_PACKING_PACKED))) {
+-      return GLSL_INTERFACE_PACKING_STD140;
+-   } else {
+-      assert(packing == GLSL_INTERFACE_PACKING_STD430 ||
+-             (std430_supported &&
+-              (packing == GLSL_INTERFACE_PACKING_SHARED ||
+-               packing == GLSL_INTERFACE_PACKING_PACKED)));
+-      return GLSL_INTERFACE_PACKING_STD430;
+-   }
+-}
+-
+ inline bool
+ glsl_type::get_interface_row_major() const
+ {
+diff --git a/src/compiler/nir_types.cpp b/src/compiler/nir_types.cpp
+index b9d8f73bb59..dc8985560a5 100644
+--- a/src/compiler/nir_types.cpp
++++ b/src/compiler/nir_types.cpp
+@@ -482,19 +482,6 @@ glsl_type_get_image_count(const struct glsl_type *type)
+    return glsl_type_count(type, GLSL_TYPE_IMAGE);
+ }
+ 
+-enum glsl_interface_packing
+-glsl_get_internal_ifc_packing(const struct glsl_type *type,
+-                              bool std430_supported)
+-{
+-   return type->get_internal_ifc_packing(std430_supported);
+-}
+-
+-enum glsl_interface_packing
+-glsl_get_ifc_packing(const struct glsl_type *type)
+-{
+-   return type->get_interface_packing();
+-}
+-
+ unsigned
+ glsl_get_std140_base_alignment(const struct glsl_type *type, bool row_major)
+ {
+-- 
+2.42.0
+

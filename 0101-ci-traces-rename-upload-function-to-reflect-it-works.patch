@@ -1,0 +1,40 @@
+From 9786ab7ecddc18c1e59d5ce8beaa3378c031dd77 Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david.heidelberg@collabora.com>
+Date: Sun, 8 Oct 2023 23:09:33 +0200
+Subject: [PATCH 101/834] ci/traces: rename upload function to reflect it works
+ with S3
+
+Cosmetic change.
+
+Acked-by: Emma Anholt <emma@anholt.net>
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25606>
+---
+ .gitlab-ci/piglit/piglit-traces.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/.gitlab-ci/piglit/piglit-traces.sh b/.gitlab-ci/piglit/piglit-traces.sh
+index 3d0ec42d5d0..326df1e1d75 100755
+--- a/.gitlab-ci/piglit/piglit-traces.sh
++++ b/.gitlab-ci/piglit/piglit-traces.sh
+@@ -125,7 +125,7 @@ if [ -n "$CI_NODE_INDEX" ]; then
+ fi
+ 
+ # shellcheck disable=SC2317
+-replay_minio_upload_images() {
++replay_s3_upload_images() {
+     find "$RESULTS/$__PREFIX" -type f -name "*.png" -printf "%P\n" \
+         | while read -r line; do
+ 
+@@ -206,7 +206,7 @@ __S3_PATH="$PIGLIT_REPLAY_ARTIFACTS_BASE_URL"
+ __S3_TRACES_PREFIX="traces"
+ 
+ if [ "$PIGLIT_REPLAY_SUBCOMMAND" != "profile" ]; then
+-    quiet replay_minio_upload_images
++    quiet replay_s3_upload_images
+ fi
+ 
+ 
+-- 
+2.42.0
+

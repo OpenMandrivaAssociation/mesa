@@ -1,0 +1,32 @@
+From 832efd097c6a31bb52554882764f2310e6ce62ad Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Sun, 15 Oct 2023 16:11:57 +0200
+Subject: [PATCH 449/834] nir/lower_mem_access_bit_sizes: fix invalid shift
+ bit_size
+
+Shifts always need 32 bit for their second source.
+
+Fixes: c70d94a8897 ("nir_lower_mem_access_bit_sizes: Support unaligned stores via a pair of atomics")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25740>
+---
+ src/compiler/nir/nir_lower_mem_access_bit_sizes.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/compiler/nir/nir_lower_mem_access_bit_sizes.c b/src/compiler/nir/nir_lower_mem_access_bit_sizes.c
+index f327b2765dc..6d6d38f329b 100644
+--- a/src/compiler/nir/nir_lower_mem_access_bit_sizes.c
++++ b/src/compiler/nir/nir_lower_mem_access_bit_sizes.c
+@@ -332,7 +332,7 @@ lower_mem_store(nir_builder *b, nir_intrinsic_instr *intrin,
+          nir_def *iand_mask = nir_imm_int(b, (1 << chunk_bits) - 1);
+ 
+          if (chunk_align < requested.align) {
+-            nir_def *shift = nir_imul_imm(b, pad, 8);
++            nir_def *shift = nir_u2u32(b, nir_imul_imm(b, pad, 8));
+             data = nir_ishl(b, data, shift);
+             iand_mask = nir_inot(b, nir_ishl(b, iand_mask, shift));
+          }
+-- 
+2.42.0
+

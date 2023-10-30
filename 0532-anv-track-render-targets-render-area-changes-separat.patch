@@ -1,0 +1,105 @@
+From 53a4738eb146d7584fec884fc0d7c6ba4cb6246d Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Wed, 18 Oct 2023 10:54:01 +0300
+Subject: [PATCH 532/834] anv: track render targets & render area changes
+ separately
+
+The following instructions :
+   - 3DSTATE_VIEWPORT_STATE_POINTERS_SF_CLIP
+   - 3DSTATE_VIEWPORT_STATE_POINTERS_CC
+   - 3DSTATE_SCISSOR_STATE_POINTERS
+
+do not care about the content/format/count of the render targets, only
+the size of the render area and count of viewport/scissor.
+
+By tracking render targets & render area we can reduce the emission of
+those instructions.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25778>
+---
+ src/intel/vulkan/anv_private.h     |  9 +++++----
+ src/intel/vulkan/genX_cmd_buffer.c | 12 ++++++++++--
+ src/intel/vulkan/genX_gfx_state.c  |  4 ++--
+ 3 files changed, 17 insertions(+), 8 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index e780295fc0c..c13c8a73bbe 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -2702,10 +2702,11 @@ anv_buffer_is_sparse(struct anv_buffer *buffer)
+ enum anv_cmd_dirty_bits {
+    ANV_CMD_DIRTY_PIPELINE                            = 1 << 0,
+    ANV_CMD_DIRTY_INDEX_BUFFER                        = 1 << 1,
+-   ANV_CMD_DIRTY_RENDER_TARGETS                      = 1 << 2,
+-   ANV_CMD_DIRTY_XFB_ENABLE                          = 1 << 3,
+-   ANV_CMD_DIRTY_RESTART_INDEX                       = 1 << 4,
+-   ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE              = 1 << 5,
++   ANV_CMD_DIRTY_RENDER_AREA                         = 1 << 2,
++   ANV_CMD_DIRTY_RENDER_TARGETS                      = 1 << 3,
++   ANV_CMD_DIRTY_XFB_ENABLE                          = 1 << 4,
++   ANV_CMD_DIRTY_RESTART_INDEX                       = 1 << 5,
++   ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE              = 1 << 6,
+ };
+ typedef enum anv_cmd_dirty_bits anv_cmd_dirty_mask_t;
+ 
+diff --git a/src/intel/vulkan/genX_cmd_buffer.c b/src/intel/vulkan/genX_cmd_buffer.c
+index ff319796104..ff040e4a7a9 100644
+--- a/src/intel/vulkan/genX_cmd_buffer.c
++++ b/src/intel/vulkan/genX_cmd_buffer.c
+@@ -3510,7 +3510,8 @@ genX(BeginCommandBuffer)(
+ 
+          anv_cmd_graphic_state_update_has_uint_rt(gfx);
+ 
+-         cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_RENDER_TARGETS;
++         cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_RENDER_AREA |
++                                        ANV_CMD_DIRTY_RENDER_TARGETS;
+       }
+    }
+ 
+@@ -7198,11 +7199,18 @@ void genX(CmdBeginRendering)(
+    trace_intel_begin_render_pass(&cmd_buffer->trace);
+ 
+    gfx->rendering_flags = pRenderingInfo->flags;
+-   gfx->render_area = pRenderingInfo->renderArea;
+    gfx->view_mask = pRenderingInfo->viewMask;
+    gfx->layer_count = pRenderingInfo->layerCount;
+    gfx->samples = 0;
+ 
++   if (gfx->render_area.offset.x != pRenderingInfo->renderArea.offset.x ||
++       gfx->render_area.offset.y != pRenderingInfo->renderArea.offset.y ||
++       gfx->render_area.extent.width != pRenderingInfo->renderArea.extent.width ||
++       gfx->render_area.extent.height != pRenderingInfo->renderArea.extent.height) {
++      gfx->render_area = pRenderingInfo->renderArea;
++      gfx->dirty |= ANV_CMD_DIRTY_RENDER_AREA;
++   }
++
+    const bool is_multiview = gfx->view_mask != 0;
+    const VkRect2D render_area = gfx->render_area;
+    const uint32_t layers =
+diff --git a/src/intel/vulkan/genX_gfx_state.c b/src/intel/vulkan/genX_gfx_state.c
+index cb66968377d..7d3c63705e9 100644
+--- a/src/intel/vulkan/genX_gfx_state.c
++++ b/src/intel/vulkan/genX_gfx_state.c
+@@ -907,7 +907,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
+                     gfx->alpha_blend_zero ? 0.0f : dyn->cb.blend_constants[3]);
+    }
+ 
+-   if ((gfx->dirty & ANV_CMD_DIRTY_RENDER_TARGETS) ||
++   if ((gfx->dirty & ANV_CMD_DIRTY_RENDER_AREA) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_VIEWPORTS) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_SCISSORS) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_DEPTH_CLAMP_ENABLE) ||
+@@ -1054,7 +1054,7 @@ genX(cmd_buffer_flush_gfx_runtime_state)(struct anv_cmd_buffer *cmd_buffer)
+       }
+    }
+ 
+-   if ((gfx->dirty & ANV_CMD_DIRTY_RENDER_TARGETS) ||
++   if ((gfx->dirty & ANV_CMD_DIRTY_RENDER_AREA) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_SCISSORS) ||
+        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_VP_VIEWPORTS)) {
+       const VkRect2D *scissors = dyn->vp.scissors;
+-- 
+2.42.0
+

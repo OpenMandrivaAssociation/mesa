@@ -1,0 +1,69 @@
+From 10a2fbd42b03dc32932f048fa9eb6928a5b24a2f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Tue, 17 Oct 2023 22:13:34 -0400
+Subject: [PATCH 542/834] radeonsi/ci: update failures and flakes
+
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25774>
+---
+ .../drivers/radeonsi/ci/gfx11-gfx1100-fail.csv       | 12 ++++++++++--
+ src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv  |  4 ++++
+ 2 files changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv b/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv
+index 5b3ed185685..caadc27ff53 100644
+--- a/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv
++++ b/src/gallium/drivers/radeonsi/ci/gfx11-gfx1100-fail.csv
+@@ -1,4 +1,4 @@
+-# LLVM 16.0.0
++# LLVM 18.0.0git
+ 
+ # piglit failures
+ glx@glx-make-current,Fail
+@@ -122,8 +122,12 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode ful
+ spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
+ 
+ # glcts failures
++GTF-GL46.gtf21.GL3Tests.texture_lod_bias.texture_lod_bias_all,Fail
++GTF-GL46.gtf21.GLCoverage.CoverageGL21,Crash
++GTF-GL46.gtf30.GL3Tests.fragment_coord_conventions.fragment_coord_conventions_multisample,Fail
++GTF-GL46.gtf32.GL3Tests.fragment_coord_conventions.fragment_coord_conventions_32_multisample,Fail
++GTF-GL46.gtf40.GL3Tests.transform_feedback2.transform_feedback2_two_buffers,Fail
+ ## Test issue - https://github.com/KhronosGroup/VK-GL-CTS/issues/251
+-KHR-GL46.shader_ballot_tests.ShaderBallotFunctionRead,Fail
+ ## Fail because GFX10+ removed MS texture support (see si_get_sparse_texture_virtual_page_size)
+ KHR-GL46.sparse_texture2_tests.SparseTexture2Allocation,Fail
+ KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment,Fail
+@@ -134,6 +138,10 @@ KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupColor,Fail
+ KHR-GL46.sparse_texture_clamp_tests.SparseTextureClampLookupResidency,Fail
+ KHR-Single-GL46.enhanced_layouts.xfb_capture_inactive_output_component,Fail
+ 
++# escts failures
++KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreCS,Fail
++KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS,Fail
++
+ # gfx11-only failures
+ 
+ spec@!opengl 1.1@line-smooth-stipple,Fail
+diff --git a/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv b/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv
+index 99c37438e13..363616631f3 100644
+--- a/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv
++++ b/src/gallium/drivers/radeonsi/ci/radeonsi-flakes.csv
+@@ -15,6 +15,7 @@ spec@egl 1.4@egl-ext_egl_image_storage
+ spec@egl_mesa_configless_context@basic
+ spec@egl_chromium_sync_control@conformance
+ spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test
++spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
+ 
+ # glcts
+ 
+@@ -23,3 +24,6 @@ KHR-GL46.sparse_texture2_tests.SparseTexture2Lookup
+ # NGG culling (gfx10-gfx10.3) breaks this statistic. Only reproducible with AMD_DEBUG=mono
+ # or when asynchronous compilation finishes before the test is finished.
+ KHR-GL46.pipeline_statistics_query_tests_ARB.functional_primitives_vertices_submitted_and_clipping_input_output_primitives
++
++# escts
++KHR-GLES31.core.shader_image_load_store.basic-allFormats-store-fs
+-- 
+2.42.0
+

@@ -1,0 +1,66 @@
+From 852274d00ab027fc6ce3ffbe71de0b3966c6d584 Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Tue, 26 Oct 2021 08:37:54 +0200
+Subject: [PATCH 292/834] broadcom/qpu: add packing for fmov on ADD alu
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/qpu/qpu_pack.c | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/src/broadcom/qpu/qpu_pack.c b/src/broadcom/qpu/qpu_pack.c
+index 01462bd11bc..702caa4667f 100644
+--- a/src/broadcom/qpu/qpu_pack.c
++++ b/src/broadcom/qpu/qpu_pack.c
+@@ -1335,6 +1335,20 @@ v3d71_qpu_add_unpack(const struct v3d_device_info *devinfo, uint64_t packed_inst
+                 }
+                 break;
+ 
++        case V3D_QPU_A_FMOV:
++                instr->alu.add.output_pack = raddr_b & 0x3;
++
++                /* Mul alu FMOV has one additional variant */
++                int32_t unpack = (raddr_b >> 2) & 0x7;
++                if (unpack == 7)
++                        return false;
++
++                if (!v3d_qpu_float32_unpack_unpack(unpack,
++                                                   &instr->alu.add.a.unpack)) {
++                        return false;
++                }
++                break;
++
+         default:
+                 instr->alu.add.output_pack = V3D_QPU_PACK_NONE;
+                 instr->alu.add.a.unpack = V3D_QPU_UNPACK_NONE;
+@@ -1995,6 +2009,23 @@ v3d71_qpu_add_pack(const struct v3d_device_info *devinfo,
+                 break;
+         }
+ 
++        case V3D_QPU_A_FMOV: {
++                uint32_t packed;
++
++                if (!v3d_qpu_float32_pack_pack(instr->alu.add.output_pack,
++                                               &packed)) {
++                        return false;
++                }
++                raddr_b = packed;
++
++                if (!v3d_qpu_float32_unpack_pack(instr->alu.add.a.unpack,
++                                                 &packed)) {
++                        return false;
++                }
++                raddr_b |= packed << 2;
++                break;
++        }
++
+         default:
+                 if (instr->alu.add.op != V3D_QPU_A_NOP &&
+                     (instr->alu.add.output_pack != V3D_QPU_PACK_NONE ||
+-- 
+2.42.0
+

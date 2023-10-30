@@ -1,0 +1,75 @@
+From 6189b3fe439321944770441ff0a21ba015f30ba3 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Wed, 4 Oct 2023 19:27:07 +0200
+Subject: [PATCH 406/834] rusticl/mesa/nir: mark more methods as mut
+
+Those actually change the nir and are not thread-safe anyway.
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ src/gallium/frontends/rusticl/mesa/compiler/nir.rs | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/mesa/compiler/nir.rs b/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
+index a3e00e50759..1e051356183 100644
+--- a/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
++++ b/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
+@@ -184,7 +184,7 @@ impl NirShader {
+         unsafe { nir_shader_clone(ptr::null_mut(), self.nir.as_ptr()) }
+     }
+ 
+-    pub fn sweep_mem(&self) {
++    pub fn sweep_mem(&mut self) {
+         unsafe { nir_sweep(self.nir.as_ptr()) }
+     }
+ 
+@@ -239,7 +239,7 @@ impl NirShader {
+         unsafe { should_print_nir(self.nir.as_ptr()) }
+     }
+ 
+-    pub fn validate_serialize_deserialize(&self) {
++    pub fn validate_serialize_deserialize(&mut self) {
+         unsafe { nir_shader_serialize_deserialize(self.nir.as_ptr()) }
+     }
+ 
+@@ -298,7 +298,7 @@ impl NirShader {
+         unsafe { (*self.nir.as_ptr()).info.num_textures }
+     }
+ 
+-    pub fn reset_scratch_size(&self) {
++    pub fn reset_scratch_size(&mut self) {
+         unsafe {
+             (*self.nir.as_ptr()).scratch_size = 0;
+         }
+@@ -337,7 +337,7 @@ impl NirShader {
+         unsafe { (*self.nir.as_ptr()).info.num_subgroups }
+     }
+ 
+-    pub fn set_workgroup_size_variable_if_zero(&self) {
++    pub fn set_workgroup_size_variable_if_zero(&mut self) {
+         let nir = self.nir.as_ptr();
+         unsafe {
+             (*nir)
+@@ -365,7 +365,7 @@ impl NirShader {
+             .filter(move |v| v.data.mode() & mode.0 != 0)
+     }
+ 
+-    pub fn extract_constant_initializers(&self) {
++    pub fn extract_constant_initializers(&mut self) {
+         let nir = self.nir.as_ptr();
+         unsafe {
+             if (*nir).constant_data_size > 0 {
+@@ -442,7 +442,7 @@ impl NirShader {
+     }
+ 
+     pub fn add_var(
+-        &self,
++        &mut self,
+         mode: nir_variable_mode,
+         glsl_type: *const glsl_type,
+         loc: usize,
+-- 
+2.42.0
+

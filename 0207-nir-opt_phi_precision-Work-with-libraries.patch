@@ -1,0 +1,37 @@
+From b1b7616418ad1f032e6c7acb158ae247ae90c7f7 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Tue, 5 Sep 2023 17:19:50 -0400
+Subject: [PATCH 207/834] nir/opt_phi_precision: Work with libraries
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25625>
+---
+ src/compiler/nir/nir_opt_phi_precision.c | 11 ++++-------
+ 1 file changed, 4 insertions(+), 7 deletions(-)
+
+diff --git a/src/compiler/nir/nir_opt_phi_precision.c b/src/compiler/nir/nir_opt_phi_precision.c
+index 9d418606793..d1c74e09d9d 100644
+--- a/src/compiler/nir/nir_opt_phi_precision.c
++++ b/src/compiler/nir/nir_opt_phi_precision.c
+@@ -444,13 +444,10 @@ nir_opt_phi_precision(nir_shader *shader)
+    unsigned bit_sizes_used = shader->info.bit_sizes_float |
+                              shader->info.bit_sizes_int;
+ 
+-   if (!bit_sizes_used) {
+-      nir_shader_gather_info(shader, nir_shader_get_entrypoint(shader));
+-      bit_sizes_used = shader->info.bit_sizes_float |
+-                       shader->info.bit_sizes_int;
+-   }
+-
+-   if (!(bit_sizes_used & (8 | 16)))
++   /* Note: if the info is zeroed, we conservatively run to avoid gathering
++    * info, which doesn't work for libraries.
++    */
++   if (bit_sizes_used && !(bit_sizes_used & (8 | 16)))
+       return false;
+ 
+    nir_foreach_function_impl(impl, shader) {
+-- 
+2.42.0
+

@@ -1,0 +1,80 @@
+From 1a2e8290ab5c8cfd8e58e689af3b0ecd2371d9a0 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Mon, 10 Apr 2023 17:23:32 -0500
+Subject: [PATCH 748/834] nir: Add NV-specific texture opcodes
+
+These are for implementing various texture queries.
+
+Acked-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25000>
+---
+ src/compiler/nir/nir.c            | 4 ++++
+ src/compiler/nir/nir.h            | 2 ++
+ src/compiler/nir/nir_print.c      | 6 ++++++
+ src/compiler/spirv/spirv_to_nir.c | 4 ++++
+ 4 files changed, 16 insertions(+)
+
+diff --git a/src/compiler/nir/nir.c b/src/compiler/nir/nir.c
+index 745c16298af..9ceed7456ce 100644
+--- a/src/compiler/nir/nir.c
++++ b/src/compiler/nir/nir.c
+@@ -3087,6 +3087,10 @@ nir_tex_instr_result_size(const nir_tex_instr *instr)
+    case nir_texop_sampler_descriptor_amd:
+       return 4;
+ 
++   case nir_texop_hdr_dim_nv:
++   case nir_texop_tex_type_nv:
++      return 4;
++
+    default:
+       if (instr->is_shadow && instr->is_new_style_shadow)
+          return 1;
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 39f3865885b..436f0bd9061 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -2283,6 +2283,8 @@ typedef enum {
+    nir_texop_descriptor_amd,          /**< Returns a buffer or image descriptor. */
+    nir_texop_sampler_descriptor_amd,  /**< Returns a sampler descriptor. */
+    nir_texop_lod_bias_agx,            /**< Returns the sampler's LOD bias */
++   nir_texop_hdr_dim_nv,              /**< Maps to TXQ.DIMENSION */
++   nir_texop_tex_type_nv,             /**< Maps to TXQ.TEXTURE_TYPE */
+ } nir_texop;
+ 
+ /** Represents a texture instruction */
+diff --git a/src/compiler/nir/nir_print.c b/src/compiler/nir/nir_print.c
+index 6ca711b1dc8..989cdd7236a 100644
+--- a/src/compiler/nir/nir_print.c
++++ b/src/compiler/nir/nir_print.c
+@@ -1709,6 +1709,12 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
+    case nir_texop_lod_bias_agx:
+       fprintf(fp, "lod_bias_agx ");
+       break;
++   case nir_texop_hdr_dim_nv:
++      fprintf(fp, "hdr_dim_nv ");
++      break;
++   case nir_texop_tex_type_nv:
++      fprintf(fp, "tex_type_nv ");
++      break;
+    default:
+       unreachable("Invalid texture operation");
+       break;
+diff --git a/src/compiler/spirv/spirv_to_nir.c b/src/compiler/spirv/spirv_to_nir.c
+index 068daeabbce..2587c866723 100644
+--- a/src/compiler/spirv/spirv_to_nir.c
++++ b/src/compiler/spirv/spirv_to_nir.c
+@@ -3045,6 +3045,10 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
+    case nir_texop_lod_bias_agx:
+       vtn_fail("unexpected nir_texop_lod_bias_agx");
+       break;
++   case nir_texop_hdr_dim_nv:
++   case nir_texop_tex_type_nv:
++      vtn_fail("unexpected nir_texop_*_nv");
++      break;
+    }
+ 
+    unsigned idx = 4;
+-- 
+2.42.0
+

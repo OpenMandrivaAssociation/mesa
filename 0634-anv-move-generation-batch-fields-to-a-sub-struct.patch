@@ -1,0 +1,318 @@
+From c700d47c567d2b8ae9f0c188b90561290785fe25 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sun, 17 Sep 2023 11:46:18 +0300
+Subject: [PATCH 634/834] anv: move generation batch fields to a sub-struct
+
+Just tyding things a bit since we're about to add more.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/anv_batch_chain.c            | 32 ++++++-------
+ src/intel/vulkan/anv_cmd_buffer.c             | 18 +++----
+ src/intel/vulkan/anv_private.h                | 47 ++++++++++---------
+ .../vulkan/genX_cmd_draw_generated_indirect.h | 26 +++++-----
+ 4 files changed, 63 insertions(+), 60 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_batch_chain.c b/src/intel/vulkan/anv_batch_chain.c
+index f2a46314c17..57c24265f47 100644
+--- a/src/intel/vulkan/anv_batch_chain.c
++++ b/src/intel/vulkan/anv_batch_chain.c
+@@ -417,7 +417,7 @@ anv_cmd_buffer_current_batch_bo(struct anv_cmd_buffer *cmd_buffer)
+ static struct anv_batch_bo *
+ anv_cmd_buffer_current_generation_batch_bo(struct anv_cmd_buffer *cmd_buffer)
+ {
+-   return list_entry(cmd_buffer->generation_batch_bos.prev, struct anv_batch_bo, link);
++   return list_entry(cmd_buffer->generation.batch_bos.prev, struct anv_batch_bo, link);
+ }
+ 
+ struct anv_address
+@@ -473,7 +473,7 @@ cmd_buffer_chain_to_batch_bo(struct anv_cmd_buffer *cmd_buffer,
+ {
+    struct anv_batch *batch =
+       batch_type == ANV_CMD_BUFFER_BATCH_GENERATION ?
+-      &cmd_buffer->generation_batch : &cmd_buffer->batch;
++      &cmd_buffer->generation.batch : &cmd_buffer->batch;
+    struct anv_batch_bo *current_bbo =
+       batch_type == ANV_CMD_BUFFER_BATCH_GENERATION ?
+       anv_cmd_buffer_current_generation_batch_bo(cmd_buffer) :
+@@ -606,12 +606,12 @@ anv_cmd_buffer_chain_generation_batch(struct anv_batch *batch, uint32_t size, vo
+    }
+    *seen_bbo = new_bbo;
+ 
+-   if (!list_is_empty(&cmd_buffer->generation_batch_bos)) {
++   if (!list_is_empty(&cmd_buffer->generation.batch_bos)) {
+       cmd_buffer_chain_to_batch_bo(cmd_buffer, new_bbo,
+                                    ANV_CMD_BUFFER_BATCH_GENERATION);
+    }
+ 
+-   list_addtail(&new_bbo->link, &cmd_buffer->generation_batch_bos);
++   list_addtail(&new_bbo->link, &cmd_buffer->generation.batch_bos);
+ 
+    anv_batch_bo_start(new_bbo, batch, GFX9_MI_BATCH_BUFFER_START_length * 4);
+ 
+@@ -845,13 +845,13 @@ anv_cmd_buffer_init_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
+    /* Generation batch is initialized empty since it's possible it won't be
+     * used.
+     */
+-   list_inithead(&cmd_buffer->generation_batch_bos);
++   list_inithead(&cmd_buffer->generation.batch_bos);
+ 
+-   cmd_buffer->generation_batch.alloc = &cmd_buffer->vk.pool->alloc;
+-   cmd_buffer->generation_batch.user_data = cmd_buffer;
+-   cmd_buffer->generation_batch.allocated_batch_size = 0;
+-   cmd_buffer->generation_batch.extend_cb = anv_cmd_buffer_chain_generation_batch;
+-   cmd_buffer->generation_batch.engine_class =
++   cmd_buffer->generation.batch.alloc = &cmd_buffer->vk.pool->alloc;
++   cmd_buffer->generation.batch.user_data = cmd_buffer;
++   cmd_buffer->generation.batch.allocated_batch_size = 0;
++   cmd_buffer->generation.batch.extend_cb = anv_cmd_buffer_chain_generation_batch;
++   cmd_buffer->generation.batch.engine_class =
+       cmd_buffer->queue_family->engine_class;
+ 
+    int success = u_vector_init_pow2(&cmd_buffer->seen_bbos, 8,
+@@ -904,7 +904,7 @@ anv_cmd_buffer_fini_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
+    }
+    /* Also destroy all generation batch buffers */
+    list_for_each_entry_safe(struct anv_batch_bo, bbo,
+-                            &cmd_buffer->generation_batch_bos, link) {
++                            &cmd_buffer->generation.batch_bos, link) {
+       list_del(&bbo->link);
+       anv_batch_bo_destroy(bbo, cmd_buffer);
+    }
+@@ -947,16 +947,16 @@ anv_cmd_buffer_reset_batch_bo_chain(struct anv_cmd_buffer *cmd_buffer)
+ 
+    /* Delete all generation batch bos */
+    list_for_each_entry_safe(struct anv_batch_bo, bbo,
+-                            &cmd_buffer->generation_batch_bos, link) {
++                            &cmd_buffer->generation.batch_bos, link) {
+       list_del(&bbo->link);
+       anv_batch_bo_destroy(bbo, cmd_buffer);
+    }
+ 
+    /* And reset generation batch */
+-   cmd_buffer->generation_batch.allocated_batch_size = 0;
+-   cmd_buffer->generation_batch.start = NULL;
+-   cmd_buffer->generation_batch.end   = NULL;
+-   cmd_buffer->generation_batch.next  = NULL;
++   cmd_buffer->generation.batch.allocated_batch_size = 0;
++   cmd_buffer->generation.batch.start = NULL;
++   cmd_buffer->generation.batch.end   = NULL;
++   cmd_buffer->generation.batch.next  = NULL;
+ 
+    cmd_buffer->total_batch_size = 0;
+ }
+diff --git a/src/intel/vulkan/anv_cmd_buffer.c b/src/intel/vulkan/anv_cmd_buffer.c
+index d7fa1b54ac1..144f6209558 100644
+--- a/src/intel/vulkan/anv_cmd_buffer.c
++++ b/src/intel/vulkan/anv_cmd_buffer.c
+@@ -135,7 +135,7 @@ anv_create_cmd_buffer(struct vk_command_pool *pool,
+       &cmd_buffer->state.gfx.vertex_input;
+ 
+    cmd_buffer->batch.status = VK_SUCCESS;
+-   cmd_buffer->generation_batch.status = VK_SUCCESS;
++   cmd_buffer->generation.batch.status = VK_SUCCESS;
+ 
+    cmd_buffer->device = device;
+ 
+@@ -165,13 +165,13 @@ anv_create_cmd_buffer(struct vk_command_pool *pool,
+    cmd_buffer->companion_rcs_cmd_buffer = NULL;
+    cmd_buffer->is_companion_rcs_cmd_buffer = false;
+ 
+-   cmd_buffer->generation_jump_addr = ANV_NULL_ADDRESS;
+-   cmd_buffer->generation_return_addr = ANV_NULL_ADDRESS;
++   cmd_buffer->generation.jump_addr = ANV_NULL_ADDRESS;
++   cmd_buffer->generation.return_addr = ANV_NULL_ADDRESS;
+ 
+    cmd_buffer->last_compute_walker = NULL;
+ 
+-   memset(&cmd_buffer->generation_shader_state, 0,
+-          sizeof(cmd_buffer->generation_shader_state));
++   memset(&cmd_buffer->generation.shader_state, 0,
++          sizeof(cmd_buffer->generation.shader_state));
+ 
+    anv_cmd_state_init(cmd_buffer);
+ 
+@@ -252,11 +252,11 @@ reset_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
+    anv_cmd_buffer_reset_batch_bo_chain(cmd_buffer);
+    anv_cmd_state_reset(cmd_buffer);
+ 
+-   memset(&cmd_buffer->generation_shader_state, 0,
+-          sizeof(cmd_buffer->generation_shader_state));
++   memset(&cmd_buffer->generation.shader_state, 0,
++          sizeof(cmd_buffer->generation.shader_state));
+ 
+-   cmd_buffer->generation_jump_addr = ANV_NULL_ADDRESS;
+-   cmd_buffer->generation_return_addr = ANV_NULL_ADDRESS;
++   cmd_buffer->generation.jump_addr = ANV_NULL_ADDRESS;
++   cmd_buffer->generation.return_addr = ANV_NULL_ADDRESS;
+ 
+    anv_state_stream_finish(&cmd_buffer->surface_state_stream);
+    anv_state_stream_init(&cmd_buffer->surface_state_stream,
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index c13c8a73bbe..03d96cc458b 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -3586,32 +3586,35 @@ struct anv_cmd_buffer {
+     */
+    uint32_t                                     total_batch_size;
+ 
+-   /** Batch generating part of the anv_cmd_buffer::batch */
+-   struct anv_batch                             generation_batch;
++   struct {
++      /** Batch generating part of the anv_cmd_buffer::batch */
++      struct anv_batch                          batch;
+ 
+-   /**
+-    * Location in anv_cmd_buffer::batch at which we left some space to insert
+-    * a MI_BATCH_BUFFER_START into the generation_batch if needed.
+-    */
+-   struct anv_address                           generation_jump_addr;
++      /**
++       * Location in anv_cmd_buffer::batch at which we left some space to
++       * insert a MI_BATCH_BUFFER_START into the
++       * anv_cmd_buffer::generation::batch if needed.
++       */
++      struct anv_address                        jump_addr;
+ 
+-   /**
+-    * Location in anv_cmd_buffer::batch at which the generation batch should
+-    * jump back to.
+-    */
+-   struct anv_address                           generation_return_addr;
++      /**
++       * Location in anv_cmd_buffer::batch at which the generation batch
++       * should jump back to.
++       */
++      struct anv_address                        return_addr;
+ 
+-   /** List of anv_batch_bo used for generation
+-    *
+-    * We have to keep this separated of the anv_cmd_buffer::batch_bos that is
+-    * used for a chaining optimization.
+-    */
+-   struct list_head                             generation_batch_bos;
++      /** List of anv_batch_bo used for generation
++       *
++       * We have to keep this separated of the anv_cmd_buffer::batch_bos that
++       * is used for a chaining optimization.
++       */
++      struct list_head                          batch_bos;
+ 
+-   /**
+-    * State tracking of the generation shader.
+-    */
+-   struct anv_simple_shader                     generation_shader_state;
++      /**
++       * State tracking of the generation shader.
++       */
++      struct anv_simple_shader                  shader_state;
++   } generation;
+ 
+    /**
+     * A vector of anv_bo pointers for chunks of memory used by the command
+diff --git a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+index bdb70fa3f3e..9b696acab1b 100644
+--- a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
++++ b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+@@ -55,7 +55,7 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+    struct anv_device *device = cmd_buffer->device;
+ 
+    struct anv_state push_data_state =
+-      genX(simple_shader_alloc_push)(&cmd_buffer->generation_shader_state,
++      genX(simple_shader_alloc_push)(&cmd_buffer->generation.shader_state,
+                                      sizeof(struct anv_generated_indirect_params));
+ 
+    struct anv_graphics_pipeline *pipeline = cmd_buffer->state.gfx.pipeline;
+@@ -65,7 +65,7 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+    if (anv_address_is_null(count_addr)) {
+       draw_count_addr = anv_address_add(
+          genX(simple_shader_push_state_address)(
+-            &cmd_buffer->generation_shader_state, push_data_state),
++            &cmd_buffer->generation.shader_state, push_data_state),
+          offsetof(struct anv_generated_indirect_params, draw_count));
+    } else {
+       draw_count_addr = count_addr;
+@@ -98,7 +98,7 @@ genX(cmd_buffer_emit_generate_draws)(struct anv_cmd_buffer *cmd_buffer,
+       .draw_count_addr           = anv_address_physical(draw_count_addr),
+    };
+ 
+-   genX(emit_simple_shader_dispatch)(&cmd_buffer->generation_shader_state,
++   genX(emit_simple_shader_dispatch)(&cmd_buffer->generation.shader_state,
+                                      item_count, push_data_state);
+ 
+    return push_data;
+@@ -114,28 +114,28 @@ genX(cmd_buffer_emit_indirect_generated_draws_init)(struct anv_cmd_buffer *cmd_b
+    }
+ #endif
+ 
+-   anv_batch_emit_ensure_space(&cmd_buffer->generation_batch, 4);
++   anv_batch_emit_ensure_space(&cmd_buffer->generation.batch, 4);
+ 
+    trace_intel_begin_generate_draws(&cmd_buffer->trace);
+ 
+    anv_batch_emit(&cmd_buffer->batch, GENX(MI_BATCH_BUFFER_START), bbs) {
+       bbs.AddressSpaceIndicator = ASI_PPGTT;
+       bbs.BatchBufferStartAddress =
+-         anv_batch_current_address(&cmd_buffer->generation_batch);
++         anv_batch_current_address(&cmd_buffer->generation.batch);
+    }
+ 
+-   cmd_buffer->generation_return_addr = anv_batch_current_address(&cmd_buffer->batch);
++   cmd_buffer->generation.return_addr = anv_batch_current_address(&cmd_buffer->batch);
+ 
+    trace_intel_end_generate_draws(&cmd_buffer->trace);
+ 
+    struct anv_device *device = cmd_buffer->device;
+-   struct anv_simple_shader *state = &cmd_buffer->generation_shader_state;
++   struct anv_simple_shader *state = &cmd_buffer->generation.shader_state;
+    *state = (struct anv_simple_shader) {
+       .device               = device,
+       .cmd_buffer           = cmd_buffer,
+       .dynamic_state_stream = &cmd_buffer->dynamic_state_stream,
+       .general_state_stream = &cmd_buffer->general_state_stream,
+-      .batch                = &cmd_buffer->generation_batch,
++      .batch                = &cmd_buffer->generation.batch,
+       .kernel               = device->internal_kernels[
+          ANV_INTERNAL_KERNEL_GENERATED_DRAWS],
+       .l3_config            = device->internal_kernels_l3_config,
+@@ -219,7 +219,7 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
+                                                bool indexed)
+ {
+    const bool start_generation_batch =
+-      anv_address_is_null(cmd_buffer->generation_return_addr);
++      anv_address_is_null(cmd_buffer->generation.return_addr);
+ 
+    genX(flush_pipeline_select_3d)(cmd_buffer);
+ 
+@@ -344,10 +344,10 @@ static void
+ genX(cmd_buffer_flush_generated_draws)(struct anv_cmd_buffer *cmd_buffer)
+ {
+    /* No return address setup means we don't have to do anything */
+-   if (anv_address_is_null(cmd_buffer->generation_return_addr))
++   if (anv_address_is_null(cmd_buffer->generation.return_addr))
+       return;
+ 
+-   struct anv_batch *batch = &cmd_buffer->generation_batch;
++   struct anv_batch *batch = &cmd_buffer->generation.batch;
+ 
+    /* Wait for all the generation vertex shader to generate the commands. */
+    genX(emit_apply_pipe_flushes)(batch,
+@@ -374,10 +374,10 @@ genX(cmd_buffer_flush_generated_draws)(struct anv_cmd_buffer *cmd_buffer)
+    /* Return to the main batch. */
+    anv_batch_emit(batch, GENX(MI_BATCH_BUFFER_START), bbs) {
+       bbs.AddressSpaceIndicator = ASI_PPGTT;
+-      bbs.BatchBufferStartAddress = cmd_buffer->generation_return_addr;
++      bbs.BatchBufferStartAddress = cmd_buffer->generation.return_addr;
+    }
+ 
+-   cmd_buffer->generation_return_addr = ANV_NULL_ADDRESS;
++   cmd_buffer->generation.return_addr = ANV_NULL_ADDRESS;
+ }
+ 
+ #endif /* GENX_CMD_GENERATED_INDIRECT_DRAW_H */
+-- 
+2.42.0
+

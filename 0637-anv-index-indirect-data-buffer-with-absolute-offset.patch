@@ -1,0 +1,62 @@
+From 718e77eee57b5b9a1b0bf64bb32ffc4afd2cf7c1 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Tue, 19 Sep 2023 00:28:39 +0300
+Subject: [PATCH 637/834] anv: index indirect data buffer with absolute offset
+
+This will help for a follow up change where we will respawn the shader
+multiple times in a loop and the base offset will be edited by the
+shader itself.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/genX_cmd_draw_generated_indirect.h | 3 +--
+ src/intel/vulkan/shaders/gfx11_generated_draws.glsl | 2 +-
+ src/intel/vulkan/shaders/gfx9_generated_draws.glsl  | 2 +-
+ 3 files changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+index 9b696acab1b..b7c78e935c4 100644
+--- a/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
++++ b/src/intel/vulkan/genX_cmd_draw_generated_indirect.h
+@@ -315,8 +315,7 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
+             cmd_buffer,
+             anv_batch_current_address(&cmd_buffer->batch),
+             draw_cmd_stride,
+-            anv_address_add(indirect_data_addr,
+-                            item_base * indirect_data_stride),
++            indirect_data_addr,
+             indirect_data_stride,
+             anv_address_add(draw_id_addr, 4 * item_base),
+             item_base,
+diff --git a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+index 099d4a2685f..0a3ccf1d6ec 100644
+--- a/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx11_generated_draws.glsl
+@@ -31,7 +31,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+ {
+    bool is_indexed = (params.flags & ANV_GENERATED_FLAG_INDEXED) != 0;
+    bool is_predicated = (params.flags & ANV_GENERATED_FLAG_PREDICATED) != 0;
+-   uint indirect_data_offset = item_idx * params.indirect_data_stride / 4;
++   uint indirect_data_offset = draw_id * params.indirect_data_stride / 4;
+ 
+    if (is_indexed) {
+       /* Loading a VkDrawIndexedIndirectCommand */
+diff --git a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+index 4fa72eca2fe..fd50f8eff86 100644
+--- a/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
++++ b/src/intel/vulkan/shaders/gfx9_generated_draws.glsl
+@@ -34,7 +34,7 @@ void write_draw(uint item_idx, uint cmd_idx, uint draw_id)
+    bool uses_base = (params.flags & ANV_GENERATED_FLAG_BASE) != 0;
+    bool uses_drawid = (params.flags & ANV_GENERATED_FLAG_DRAWID) != 0;
+    uint mocs = (params.flags >> 8) & 0xff;
+-   uint indirect_data_offset = item_idx * params.indirect_data_stride / 4;
++   uint indirect_data_offset = draw_id * params.indirect_data_stride / 4;
+ 
+    if (is_indexed) {
+       /* Loading a VkDrawIndexedIndirectCommand */
+-- 
+2.42.0
+

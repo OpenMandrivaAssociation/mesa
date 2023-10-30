@@ -1,0 +1,125 @@
+From 795bf4244c72fcd3be289487a969077d3fb7babc Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 7 Sep 2023 19:35:54 -0700
+Subject: [PATCH 781/834] compiler/types: Add more glsl_contains_*() functions
+ and use them in C++
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 44 +++++++++++++++++-----------------
+ src/compiler/glsl_types.h      |  3 +++
+ src/compiler/glsl_types_impl.h |  3 +++
+ 3 files changed, 28 insertions(+), 22 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 6b576c6e2c3..5c8a8fce35e 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -177,33 +177,33 @@ make_subroutine_type(linear_ctx *lin_ctx, const char *subroutine_name)
+    return t;
+ }
+ 
+-bool
+-glsl_type::contains_sampler() const
++extern "C" bool
++glsl_contains_sampler(const struct glsl_type *t)
+ {
+-   if (this->is_array()) {
+-      return this->fields.array->contains_sampler();
+-   } else if (this->is_struct() || this->is_interface()) {
+-      for (unsigned int i = 0; i < this->length; i++) {
+-         if (this->fields.structure[i].type->contains_sampler())
++   if (t->is_array()) {
++      return t->fields.array->contains_sampler();
++   } else if (t->is_struct() || t->is_interface()) {
++      for (unsigned int i = 0; i < t->length; i++) {
++         if (t->fields.structure[i].type->contains_sampler())
+             return true;
+       }
+       return false;
+    } else {
+-      return this->is_sampler();
++      return t->is_sampler();
+    }
+ }
+ 
+-bool
+-glsl_type::contains_array() const
++extern "C" bool
++glsl_contains_array(const struct glsl_type *t)
+ {
+-   if (this->is_struct() || this->is_interface()) {
+-      for (unsigned int i = 0; i < this->length; i++) {
+-         if (this->fields.structure[i].type->contains_array())
++   if (t->is_struct() || t->is_interface()) {
++      for (unsigned int i = 0; i < t->length; i++) {
++         if (t->fields.structure[i].type->contains_array())
+             return true;
+       }
+       return false;
+    } else {
+-      return this->is_array();
++      return t->is_array();
+    }
+ }
+ 
+@@ -277,19 +277,19 @@ glsl_contains_opaque(const struct glsl_type *t)
+    }
+ }
+ 
+-bool
+-glsl_type::contains_subroutine() const
++extern "C" bool
++glsl_contains_subroutine(const struct glsl_type *t)
+ {
+-   if (this->is_array()) {
+-      return this->fields.array->contains_subroutine();
+-   } else if (this->is_struct() || this->is_interface()) {
+-      for (unsigned int i = 0; i < this->length; i++) {
+-         if (this->fields.structure[i].type->contains_subroutine())
++   if (t->is_array()) {
++      return t->fields.array->contains_subroutine();
++   } else if (t->is_struct() || t->is_interface()) {
++      for (unsigned int i = 0; i < t->length; i++) {
++         if (t->fields.structure[i].type->contains_subroutine())
+             return true;
+       }
+       return false;
+    } else {
+-      return this->is_subroutine();
++      return t->is_subroutine();
+    }
+ }
+ 
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 99c0ea5bf80..3aaf0c13e58 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1322,6 +1322,9 @@ bool glsl_contains_atomic(const struct glsl_type *t);
+ bool glsl_contains_double(const struct glsl_type *t);
+ bool glsl_contains_integer(const struct glsl_type *t);
+ bool glsl_contains_opaque(const struct glsl_type *t);
++bool glsl_contains_sampler(const struct glsl_type *t);
++bool glsl_contains_array(const struct glsl_type *t);
++bool glsl_contains_subroutine(const struct glsl_type *t);
+ 
+ static inline enum glsl_sampler_dim
+ glsl_get_sampler_dim(const struct glsl_type *t)
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index 5df77e495e5..4f5dd00a019 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -44,6 +44,9 @@ inline bool glsl_type::contains_atomic() const { return glsl_contains_atomic(thi
+ inline bool glsl_type::contains_opaque() const { return glsl_contains_opaque(this); }
+ inline bool glsl_type::contains_double() const { return glsl_contains_double(this); }
+ inline bool glsl_type::contains_integer() const { return glsl_contains_integer(this); }
++inline bool glsl_type::contains_sampler() const { return glsl_contains_sampler(this); }
++inline bool glsl_type::contains_array() const { return glsl_contains_array(this); }
++inline bool glsl_type::contains_subroutine() const { return glsl_contains_subroutine(this); }
+ 
+ inline int glsl_type::array_size() const { return glsl_array_size(this); }
+ inline const glsl_type *glsl_type::without_array() const { return glsl_without_array(this); }
+-- 
+2.42.0
+

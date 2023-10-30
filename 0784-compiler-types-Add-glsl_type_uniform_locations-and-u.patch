@@ -1,0 +1,76 @@
+From 7b42fe62a1f432a86a9794a6b8cb6918fcee1d77 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 7 Sep 2023 20:08:37 -0700
+Subject: [PATCH 784/834] compiler/types: Add glsl_type_uniform_locations() and
+ use it in C++
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 12 ++++++------
+ src/compiler/glsl_types.h      |  1 +
+ src/compiler/glsl_types_impl.h |  1 +
+ 3 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 9e6fead59ea..302e1a5bf2e 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -1895,12 +1895,12 @@ glsl_get_struct_location_offset(const struct glsl_type *t, unsigned length)
+    return offset;
+ }
+ 
+-unsigned
+-glsl_type::uniform_locations() const
++extern "C" unsigned
++glsl_type_uniform_locations(const struct glsl_type *t)
+ {
+    unsigned size = 0;
+ 
+-   switch (this->base_type) {
++   switch (t->base_type) {
+    case GLSL_TYPE_UINT:
+    case GLSL_TYPE_INT:
+    case GLSL_TYPE_FLOAT:
+@@ -1921,11 +1921,11 @@ glsl_type::uniform_locations() const
+ 
+    case GLSL_TYPE_STRUCT:
+    case GLSL_TYPE_INTERFACE:
+-      for (unsigned i = 0; i < this->length; i++)
+-         size += this->fields.structure[i].type->uniform_locations();
++      for (unsigned i = 0; i < t->length; i++)
++         size += glsl_type_uniform_locations(t->fields.structure[i].type);
+       return size;
+    case GLSL_TYPE_ARRAY:
+-      return this->length * this->fields.array->uniform_locations();
++      return t->length * glsl_type_uniform_locations(t->fields.array);
+    default:
+       return 0;
+    }
+diff --git a/src/compiler/glsl_types.h b/src/compiler/glsl_types.h
+index 1ad5b55d8d5..6923cfe3e27 100644
+--- a/src/compiler/glsl_types.h
++++ b/src/compiler/glsl_types.h
+@@ -1564,6 +1564,7 @@ unsigned glsl_count_dword_slots(const struct glsl_type *t, bool is_bindless);
+ unsigned glsl_get_component_slots(const struct glsl_type *t);
+ unsigned glsl_get_component_slots_aligned(const struct glsl_type *t, unsigned offset);
+ unsigned glsl_varying_count(const struct glsl_type *t);
++unsigned glsl_type_uniform_locations(const struct glsl_type *t);
+ 
+ static inline unsigned
+ glsl_count_attribute_slots(const struct glsl_type *t, bool is_gl_vertex_input)
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index 2ecd772aa94..63ae0f46b4a 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -69,6 +69,7 @@ inline unsigned glsl_type::count_attribute_slots(bool is_gl_vertex_input) const
+ inline unsigned glsl_type::varying_count() const { return glsl_varying_count(this); }
+ inline unsigned glsl_type::atomic_size() const { return glsl_atomic_size(this); }
+ inline int glsl_type::coordinate_components() const { return glsl_get_sampler_coordinate_components(this); }
++inline unsigned glsl_type::uniform_locations() const { return glsl_type_uniform_locations(this); }
+ 
+ inline unsigned glsl_type::cl_size() const { return glsl_get_cl_size(this); }
+ inline unsigned glsl_type::cl_alignment() const { return glsl_get_cl_alignment(this); }
+-- 
+2.42.0
+

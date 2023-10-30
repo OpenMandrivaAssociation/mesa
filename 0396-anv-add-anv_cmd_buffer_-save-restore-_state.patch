@@ -1,0 +1,132 @@
+From 94192418f836f00e3c6b57fecb17e8ffee88d373 Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Wed, 27 Sep 2023 16:52:45 -0700
+Subject: [PATCH 396/834] anv: add anv_cmd_buffer_{save,restore}_state
+
+They can be used to save/restore a subset of the current compute state.
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/intel/vulkan/anv_cmd_buffer.c | 66 +++++++++++++++++++++++++++++--
+ src/intel/vulkan/anv_private.h    | 22 +++++++++++
+ 2 files changed, 85 insertions(+), 3 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_cmd_buffer.c b/src/intel/vulkan/anv_cmd_buffer.c
+index 3b2ddc8d93e..d7fa1b54ac1 100644
+--- a/src/intel/vulkan/anv_cmd_buffer.c
++++ b/src/intel/vulkan/anv_cmd_buffer.c
+@@ -741,9 +741,7 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
+     */
+    assert(!set->pool || !set->pool->host_only);
+ 
+-   struct anv_descriptor_set_layout *set_layout =
+-      layout->set[set_index].layout;
+-
++   struct anv_descriptor_set_layout *set_layout = set->layout;
+    VkShaderStageFlags stages = set_layout->shader_stages;
+    struct anv_cmd_pipeline_state *pipe_state;
+ 
+@@ -1255,3 +1253,65 @@ void anv_CmdSetRayTracingPipelineStackSizeKHR(
+ 
+    rt->scratch.bo = bo;
+ }
++
++void
++anv_cmd_buffer_save_state(struct anv_cmd_buffer *cmd_buffer,
++                          uint32_t flags,
++                          struct anv_cmd_saved_state *state)
++{
++   state->flags = flags;
++
++   /* we only support the compute pipeline at the moment */
++   assert(state->flags & ANV_CMD_SAVED_STATE_COMPUTE_PIPELINE);
++   const struct anv_cmd_pipeline_state *pipe_state =
++      &cmd_buffer->state.compute.base;
++
++   if (state->flags & ANV_CMD_SAVED_STATE_COMPUTE_PIPELINE)
++      state->pipeline = pipe_state->pipeline;
++
++   if (state->flags & ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_0)
++      state->descriptor_set = pipe_state->descriptors[0];
++
++   if (state->flags & ANV_CMD_SAVED_STATE_PUSH_CONSTANTS) {
++      memcpy(state->push_constants, pipe_state->push_constants.client_data,
++             sizeof(state->push_constants));
++   }
++}
++
++void
++anv_cmd_buffer_restore_state(struct anv_cmd_buffer *cmd_buffer,
++                             struct anv_cmd_saved_state *state)
++{
++   VkCommandBuffer cmd_buffer_ = anv_cmd_buffer_to_handle(cmd_buffer);
++
++   assert(state->flags & ANV_CMD_SAVED_STATE_COMPUTE_PIPELINE);
++   const VkPipelineBindPoint bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
++   const VkShaderStageFlags stage_flags = VK_SHADER_STAGE_COMPUTE_BIT;
++   struct anv_cmd_compute_state *comp_state = &cmd_buffer->state.compute;
++   struct anv_cmd_pipeline_state *pipe_state = &comp_state->base;
++
++   if (state->flags & ANV_CMD_SAVED_STATE_COMPUTE_PIPELINE) {
++       if (state->pipeline) {
++          anv_CmdBindPipeline(cmd_buffer_, bind_point,
++                              anv_pipeline_to_handle(state->pipeline));
++       } else {
++          comp_state->pipeline = NULL;
++          pipe_state->pipeline = NULL;
++       }
++   }
++
++   if (state->flags & ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_0) {
++      if (state->descriptor_set) {
++         anv_cmd_buffer_bind_descriptor_set(cmd_buffer, bind_point, NULL, 0,
++                                            state->descriptor_set, NULL, NULL);
++      } else {
++         pipe_state->descriptors[0] = NULL;
++      }
++   }
++
++   if (state->flags & ANV_CMD_SAVED_STATE_PUSH_CONSTANTS) {
++      anv_CmdPushConstants(cmd_buffer_, VK_NULL_HANDLE, stage_flags, 0,
++                           sizeof(state->push_constants),
++                           state->push_constants);
++   }
++}
+diff --git a/src/intel/vulkan/anv_private.h b/src/intel/vulkan/anv_private.h
+index 71b8951e9e4..c14232a9b58 100644
+--- a/src/intel/vulkan/anv_private.h
++++ b/src/intel/vulkan/anv_private.h
+@@ -3797,6 +3797,28 @@ anv_cmd_buffer_get_view_count(struct anv_cmd_buffer *cmd_buffer)
+    return MAX2(1, util_bitcount(gfx->view_mask));
+ }
+ 
++/* Save/restore cmd buffer states for meta operations */
++enum anv_cmd_saved_state_flags {
++   ANV_CMD_SAVED_STATE_COMPUTE_PIPELINE         = BITFIELD_BIT(0),
++   ANV_CMD_SAVED_STATE_DESCRIPTOR_SET_0         = BITFIELD_BIT(1),
++   ANV_CMD_SAVED_STATE_PUSH_CONSTANTS           = BITFIELD_BIT(2),
++};
++
++struct anv_cmd_saved_state {
++   uint32_t flags;
++
++   struct anv_pipeline *pipeline;
++   struct anv_descriptor_set *descriptor_set;
++   uint8_t push_constants[MAX_PUSH_CONSTANTS_SIZE];
++};
++
++void anv_cmd_buffer_save_state(struct anv_cmd_buffer *cmd_buffer,
++                               uint32_t flags,
++                               struct anv_cmd_saved_state *state);
++
++void anv_cmd_buffer_restore_state(struct anv_cmd_buffer *cmd_buffer,
++                                  struct anv_cmd_saved_state *state);
++
+ enum anv_bo_sync_state {
+    /** Indicates that this is a new (or newly reset fence) */
+    ANV_BO_SYNC_STATE_RESET,
+-- 
+2.42.0
+

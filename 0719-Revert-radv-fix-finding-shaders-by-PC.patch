@@ -1,0 +1,42 @@
+From f9cc2c5ba443c8b809df03dde9f053f5339b1139 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Mon, 23 Oct 2023 15:43:17 +0200
+Subject: [PATCH 719/834] Revert "radv: fix finding shaders by PC"
+
+Shaders are no longer allocated contiguously in memory and the next
+pointer is now the shader.
+
+This fixes using the trap handler on GFX8.
+
+This reverts commit 2dcd12f38be629086148dfc9ff0da90aa1fc9698.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25852>
+---
+ src/amd/vulkan/radv_shader.c | 11 +----------
+ 1 file changed, 1 insertion(+), 10 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_shader.c b/src/amd/vulkan/radv_shader.c
+index f1a980617f8..2903ad2ba2e 100644
+--- a/src/amd/vulkan/radv_shader.c
++++ b/src/amd/vulkan/radv_shader.c
+@@ -2728,16 +2728,7 @@ radv_find_shader(struct radv_device *device, uint64_t pc)
+          uint64_t start = radv_buffer_get_va(block->arena->bo) + block->offset;
+          if (!block->freelist.prev && pc >= start && pc < start + block->size) {
+             mtx_unlock(&device->shader_arena_mutex);
+-
+-            struct radv_pipeline *pipeline = (struct radv_pipeline *)block->freelist.next;
+-            for (uint32_t i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
+-               struct radv_shader *shader = pipeline->shaders[i];
+-               if (!shader)
+-                  continue;
+-
+-               if (pc >= shader->va && pc < shader->va + align(shader->code_size, RADV_SHADER_ALLOC_ALIGNMENT))
+-                  return shader;
+-            }
++            return (struct radv_shader *)block->freelist.next;
+          }
+       }
+    }
+-- 
+2.42.0
+

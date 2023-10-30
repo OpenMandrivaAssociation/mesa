@@ -1,0 +1,47 @@
+From 5612f9a7042841cc0fab111dfd20bceed5e690b7 Mon Sep 17 00:00:00 2001
+From: Vinson Lee <vlee@freedesktop.org>
+Date: Sat, 14 Oct 2023 21:39:54 -0700
+Subject: [PATCH 493/834] broadcom/qpu: Remove duplicate variable opcode
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fix defect reported by Coverity Scan.
+
+Evaluation order violation (EVALUATION_ORDER)
+write_write_typo: In opcode = opcode = desc->opcode_first, opcode is
+written twice with the same value.
+
+Fixes: 3b20208f03f ("broadcom/qpu: add pack/unpack support for v71")
+Signed-off-by: Vinson Lee <vlee@freedesktop.org>
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25735>
+---
+ src/broadcom/qpu/qpu_pack.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/broadcom/qpu/qpu_pack.c b/src/broadcom/qpu/qpu_pack.c
+index 54e31e05a59..08fce4af168 100644
+--- a/src/broadcom/qpu/qpu_pack.c
++++ b/src/broadcom/qpu/qpu_pack.c
+@@ -1602,7 +1602,7 @@ v3d33_qpu_add_pack(const struct v3d_device_info *devinfo,
+         if (!desc)
+                 return false;
+ 
+-        uint32_t opcode = opcode = desc->opcode_first;
++        uint32_t opcode = desc->opcode_first;
+ 
+         /* If an operation doesn't use an arg, its mux values may be used to
+          * identify the operation type.
+@@ -1816,7 +1816,7 @@ v3d71_qpu_add_pack(const struct v3d_device_info *devinfo,
+         if (!desc)
+                 return false;
+ 
+-        uint32_t opcode = opcode = desc->opcode_first;
++        uint32_t opcode = desc->opcode_first;
+ 
+         /* If an operation doesn't use an arg, its raddr values may be used to
+          * identify the operation type.
+-- 
+2.42.0
+

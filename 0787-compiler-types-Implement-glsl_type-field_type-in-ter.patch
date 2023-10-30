@@ -1,0 +1,64 @@
+From e17adf51dbc97aa94fd57ab4eea5769bc81c3762 Mon Sep 17 00:00:00 2001
+From: Caio Oliveira <caio.oliveira@intel.com>
+Date: Thu, 7 Sep 2023 20:15:35 -0700
+Subject: [PATCH 787/834] compiler/types: Implement glsl_type::field_type() in
+ terms of existing functions
+
+Reviewed-by: Kenneth Graunke <kenneth@whitecape.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25129>
+---
+ src/compiler/glsl_types.cpp    | 17 -----------------
+ src/compiler/glsl_types_impl.h |  9 +++++++++
+ 2 files changed, 9 insertions(+), 17 deletions(-)
+
+diff --git a/src/compiler/glsl_types.cpp b/src/compiler/glsl_types.cpp
+index 2424c0d10dc..e07484de433 100644
+--- a/src/compiler/glsl_types.cpp
++++ b/src/compiler/glsl_types.cpp
+@@ -1703,23 +1703,6 @@ glsl_get_mul_type(const struct glsl_type *type_a, const struct glsl_type *type_b
+    return &glsl_type_builtin_error;
+ }
+ 
+-
+-const struct glsl_type *
+-glsl_type::field_type(const char *name) const
+-{
+-   if (this->base_type != GLSL_TYPE_STRUCT
+-       && this->base_type != GLSL_TYPE_INTERFACE)
+-      return error_type;
+-
+-   for (unsigned i = 0; i < this->length; i++) {
+-      if (strcmp(name, this->fields.structure[i].name) == 0)
+-         return this->fields.structure[i].type;
+-   }
+-
+-   return error_type;
+-}
+-
+-
+ extern "C" int
+ glsl_get_field_index(const struct glsl_type *t, const char *name)
+ {
+diff --git a/src/compiler/glsl_types_impl.h b/src/compiler/glsl_types_impl.h
+index d16d0251570..17615606851 100644
+--- a/src/compiler/glsl_types_impl.h
++++ b/src/compiler/glsl_types_impl.h
+@@ -178,6 +178,15 @@ glsl_type::get_explicit_type_for_size_align(glsl_type_size_align_func type_info,
+ inline const glsl_type *glsl_type::replace_vec3_with_vec4() const { return glsl_type_replace_vec3_with_vec4(this); }
+ inline const glsl_type *glsl_type::get_mul_type(const glsl_type *type_a, const glsl_type *type_b) { return glsl_get_mul_type(type_a, type_b); }
+ 
++inline const glsl_type *
++glsl_type::field_type(const char *n) const
++{
++   const int idx = glsl_get_field_index(this, n);
++   if (idx == -1)
++      return &glsl_type_builtin_error;
++   return glsl_get_struct_field(this, (unsigned)idx);
++}
++
+ inline bool
+ glsl_type::is_integer_16() const
+ {
+-- 
+2.42.0
+

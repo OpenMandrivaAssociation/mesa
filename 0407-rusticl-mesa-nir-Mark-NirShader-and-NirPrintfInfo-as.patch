@@ -1,0 +1,44 @@
+From dde84568ad01418b55f034b3a6005bd8b27a783a Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Wed, 4 Oct 2023 19:29:35 +0200
+Subject: [PATCH 407/834] rusticl/mesa/nir: Mark NirShader and NirPrintfInfo as
+ Send and Sync
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: @LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24062>
+---
+ src/gallium/frontends/rusticl/mesa/compiler/nir.rs | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/gallium/frontends/rusticl/mesa/compiler/nir.rs b/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
+index 1e051356183..eb563ca714b 100644
+--- a/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
++++ b/src/gallium/frontends/rusticl/mesa/compiler/nir.rs
+@@ -114,6 +114,10 @@ pub struct NirPrintfInfo {
+     printf_info: *mut u_printf_info,
+ }
+ 
++// SAFETY: `u_printf_info` is considered immutable
++unsafe impl Send for NirPrintfInfo {}
++unsafe impl Sync for NirPrintfInfo {}
++
+ impl NirPrintfInfo {
+     pub fn u_printf(&self, buf: &[u8]) {
+         unsafe {
+@@ -140,6 +144,12 @@ pub struct NirShader {
+     nir: NonNull<nir_shader>,
+ }
+ 
++// SAFETY: It's safe to share a nir_shader between threads.
++unsafe impl Send for NirShader {}
++
++// SAFETY: We do not allow interior mutability with &NirShader
++unsafe impl Sync for NirShader {}
++
+ impl NirShader {
+     pub fn new(nir: *mut nir_shader) -> Option<Self> {
+         NonNull::new(nir).map(|nir| Self { nir: nir })
+-- 
+2.42.0
+

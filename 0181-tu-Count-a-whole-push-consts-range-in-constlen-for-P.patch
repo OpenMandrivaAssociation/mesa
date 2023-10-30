@@ -1,0 +1,40 @@
+From 5ad78e61d08479b58d6ef100b7ec14ddd0ab8171 Mon Sep 17 00:00:00 2001
+From: Danylo Piliaiev <dpiliaiev@igalia.com>
+Date: Tue, 10 Oct 2023 14:09:52 +0200
+Subject: [PATCH 181/834] tu: Count a whole push consts range in constlen for
+ PREAMBLE push consts
+
+Either none push consts are loaded via preamble or all of them even if
+shader uses a single push const.
+
+Fixes misrenderings with Zink. Zink unconditionally declares push
+consts, regardless of whether they are actually used in the shader.
+
+Fixes: a5f0f7d4b162c04878fb9d505d55ebdd05c5c773
+("turnip,ir3: Implement A7XX push consts load via preamble")
+
+Signed-off-by: Danylo Piliaiev <dpiliaiev@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25638>
+---
+ src/freedreno/ir3/ir3_compiler_nir.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/freedreno/ir3/ir3_compiler_nir.c b/src/freedreno/ir3/ir3_compiler_nir.c
+index 54cc6ed3202..d1f36c7f493 100644
+--- a/src/freedreno/ir3/ir3_compiler_nir.c
++++ b/src/freedreno/ir3/ir3_compiler_nir.c
+@@ -2686,6 +2686,11 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
+       load->push_consts.dst_base = nir_src_as_uint(intr->src[0]);
+       load->push_consts.src_base = nir_intrinsic_base(intr);
+       load->push_consts.src_size = nir_intrinsic_range(intr);
++
++      ctx->so->constlen =
++         MAX2(ctx->so->constlen,
++              DIV_ROUND_UP(
++                 load->push_consts.dst_base + load->push_consts.src_size, 4));
+       break;
+    }
+    default:
+-- 
+2.42.0
+

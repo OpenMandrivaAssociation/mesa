@@ -1,0 +1,28 @@
+From 131d05da7b2cd3e0f06da19a8968d31c563805da Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Thu, 19 Oct 2023 07:26:10 -0500
+Subject: [PATCH 583/834] nvk: Enable descriptorIndexing
+
+This is the Vulkan 1.2 equivalent of VK_EXT_descriptor_indexing
+extension enable.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25812>
+---
+ src/nouveau/vulkan/nvk_physical_device.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/nouveau/vulkan/nvk_physical_device.c b/src/nouveau/vulkan/nvk_physical_device.c
+index 309294f561d..d02d948a5da 100644
+--- a/src/nouveau/vulkan/nvk_physical_device.c
++++ b/src/nouveau/vulkan/nvk_physical_device.c
+@@ -210,6 +210,7 @@ nvk_get_device_features(const struct nv_device_info *info,
+ 
+       /* Vulkan 1.2 */
+       .samplerMirrorClampToEdge = true,
++      .descriptorIndexing = true,
+       .drawIndirectCount = info->cls_eng3d >= TURING_A,
+       .shaderInputAttachmentArrayDynamicIndexing = true,
+       .shaderUniformTexelBufferArrayDynamicIndexing = true,
+-- 
+2.42.0
+

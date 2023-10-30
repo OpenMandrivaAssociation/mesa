@@ -1,0 +1,74 @@
+From c29d8a9e68b7994cc5efd82b45038548eeaa2a41 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Thu, 19 Oct 2023 19:27:07 +0100
+Subject: [PATCH 740/834] ac/nir,radv: pass workgroup size to
+ ac_nir_lower_ngg_ms
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25040>
+---
+ src/amd/common/ac_nir.h           | 1 +
+ src/amd/common/ac_nir_lower_ngg.c | 4 +---
+ src/amd/vulkan/radv_shader.c      | 5 ++++-
+ 3 files changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/amd/common/ac_nir.h b/src/amd/common/ac_nir.h
+index 0d91a7edb2c..8c7eac56031 100644
+--- a/src/amd/common/ac_nir.h
++++ b/src/amd/common/ac_nir.h
+@@ -196,6 +196,7 @@ ac_nir_lower_ngg_ms(nir_shader *shader,
+                     bool has_param_exports,
+                     bool *out_needs_scratch_ring,
+                     unsigned wave_size,
++                    unsigned workgroup_size,
+                     bool multiview,
+                     bool has_query,
+                     bool fast_launch_2);
+diff --git a/src/amd/common/ac_nir_lower_ngg.c b/src/amd/common/ac_nir_lower_ngg.c
+index e481c6d28b8..deedb4c08e5 100644
+--- a/src/amd/common/ac_nir_lower_ngg.c
++++ b/src/amd/common/ac_nir_lower_ngg.c
+@@ -4868,6 +4868,7 @@ ac_nir_lower_ngg_ms(nir_shader *shader,
+                     bool has_param_exports,
+                     bool *out_needs_scratch_ring,
+                     unsigned wave_size,
++                    unsigned hw_workgroup_size,
+                     bool multiview,
+                     bool has_query,
+                     bool fast_launch_2)
+@@ -4907,9 +4908,6 @@ ac_nir_lower_ngg_ms(nir_shader *shader,
+                                  shader->info.workgroup_size[1] *
+                                  shader->info.workgroup_size[2];
+ 
+-   unsigned hw_workgroup_size =
+-      ALIGN(MAX3(api_workgroup_size, max_primitives, max_vertices), wave_size);
+-
+    lower_ngg_ms_state state = {
+       .layout = layout,
+       .wave_size = wave_size,
+diff --git a/src/amd/vulkan/radv_shader.c b/src/amd/vulkan/radv_shader.c
+index 11bfd5f8fa3..62625274578 100644
+--- a/src/amd/vulkan/radv_shader.c
++++ b/src/amd/vulkan/radv_shader.c
+@@ -913,10 +913,13 @@ radv_lower_ngg(struct radv_device *device, struct radv_shader_stage *ngg_stage,
+ 
+       NIR_PASS_V(nir, ac_nir_lower_ngg_gs, &options);
+    } else if (nir->info.stage == MESA_SHADER_MESH) {
++      /* ACO aligns the workgroup size to the wave size. */
++      unsigned hw_workgroup_size = ALIGN(info->workgroup_size, info->wave_size);
++
+       bool scratch_ring = false;
+       NIR_PASS_V(nir, ac_nir_lower_ngg_ms, options.gfx_level, options.clipdist_enable_mask,
+                  options.vs_output_param_offset, options.has_param_exports, &scratch_ring, info->wave_size,
+-                 pl_key->has_multiview_view_index, info->ms.has_query, device->mesh_fast_launch_2);
++                 hw_workgroup_size, pl_key->has_multiview_view_index, info->ms.has_query, device->mesh_fast_launch_2);
+       ngg_stage->info.ms.needs_ms_scratch_ring = scratch_ring;
+    } else {
+       unreachable("invalid SW stage passed to radv_lower_ngg");
+-- 
+2.42.0
+

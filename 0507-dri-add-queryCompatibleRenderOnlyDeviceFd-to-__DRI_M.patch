@@ -1,0 +1,63 @@
+From 4d953efc28b451dac727b2b30aa1a5311cc575fb Mon Sep 17 00:00:00 2001
+From: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Date: Thu, 17 Aug 2023 17:01:32 -0300
+Subject: [PATCH 507/834] dri: add queryCompatibleRenderOnlyDeviceFd() to
+ __DRI_MESA extension
+
+With this change we are able to query the render node fd of a
+render-only device compatible with a given KMS-only device (at the
+egl/dri2 level).
+
+It uses pipe_loader_get_compatible_render_capable_device_fd(), which was
+added in commit "pipe-loader: add
+pipe_loader_get_compatible_render_capable_device_fd()".
+
+Signed-off-by: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Reviewed-by: Simon Ser <contact@emersion.fr>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24825>
+---
+ include/GL/internal/mesa_interface.h | 2 ++
+ src/gallium/frontends/dri/dri2.c     | 7 +++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/include/GL/internal/mesa_interface.h b/include/GL/internal/mesa_interface.h
+index f0a29503e46..a56509439e2 100644
+--- a/include/GL/internal/mesa_interface.h
++++ b/include/GL/internal/mesa_interface.h
+@@ -61,6 +61,8 @@ struct __DRImesaCoreExtensionRec {
+ 
+    /* driver function for finishing initialization inside createNewScreen(). */
+    const __DRIconfig **(*initScreen)(struct dri_screen *screen);
++
++   int (*queryCompatibleRenderOnlyDeviceFd)(int kms_only_fd);
+ };
+ 
+ #endif /* MESA_INTERFACE_H */
+diff --git a/src/gallium/frontends/dri/dri2.c b/src/gallium/frontends/dri/dri2.c
+index e37ff4d9a3f..a018ef70437 100644
+--- a/src/gallium/frontends/dri/dri2.c
++++ b/src/gallium/frontends/dri/dri2.c
+@@ -2477,12 +2477,19 @@ fail:
+    return NULL;
+ }
+ 
++static int
++dri_query_compatible_render_only_device_fd(int kms_only_fd)
++{
++   return pipe_loader_get_compatible_render_capable_device_fd(kms_only_fd);
++}
++
+ static const struct __DRImesaCoreExtensionRec mesaCoreExtension = {
+    .base = { __DRI_MESA, 1 },
+    .version_string = MESA_INTERFACE_VERSION_STRING,
+    .createNewScreen = driCreateNewScreen2,
+    .createContext = driCreateContextAttribs,
+    .initScreen = dri2_init_screen,
++   .queryCompatibleRenderOnlyDeviceFd = dri_query_compatible_render_only_device_fd,
+ };
+ 
+ /* This is the table of extensions that the loader will dlsym() for. */
+-- 
+2.42.0
+

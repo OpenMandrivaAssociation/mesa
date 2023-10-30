@@ -1,0 +1,812 @@
+From f4e7aefe079b74ef218677185697c31fff7104d2 Mon Sep 17 00:00:00 2001
+From: Maaz Mombasawala <mombasawalam@vmware.com>
+Date: Fri, 7 Jul 2023 17:22:15 -0700
+Subject: [PATCH 653/834] svga: Unify gmr and mob surface pool managers
+
+The svga driver contains several buffer managers with gmr* and mob* prefixes,
+but they are of similar functionality. The underlying vmwgfx kernel driver
+allocates memory of one type - mobs if supported by the virtual hardware,
+and gmrs otherwise - and returns an opaque pointer to userspace, so several
+managers are reduntant.
+
+This patch reduces the number of buffer managers by unifying similar managers
+and performing refactors where necessary.
+
+Signed-off-by: Maaz Mombasawala <mombasawalam@vmware.com>
+
+Reviewed-by: Charmaine Lee <charmainel@vmware.com>
+Reviewed-by: Zack Rusin <zackr@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25832>
+---
+ src/gallium/winsys/svga/drm/vmw_buffer.c      | 117 ++++++------
+ src/gallium/winsys/svga/drm/vmw_buffer.h      |   6 +-
+ src/gallium/winsys/svga/drm/vmw_context.c     |   4 +-
+ src/gallium/winsys/svga/drm/vmw_query.c       |   4 +-
+ src/gallium/winsys/svga/drm/vmw_screen.h      |  18 +-
+ src/gallium/winsys/svga/drm/vmw_screen_dri.c  |   4 +-
+ .../winsys/svga/drm/vmw_screen_ioctl.c        |   2 +-
+ .../winsys/svga/drm/vmw_screen_pools.c        | 173 ++++++------------
+ src/gallium/winsys/svga/drm/vmw_screen_svga.c |  24 +--
+ src/gallium/winsys/svga/drm/vmw_surface.c     |   7 +-
+ 10 files changed, 144 insertions(+), 215 deletions(-)
+
+diff --git a/src/gallium/winsys/svga/drm/vmw_buffer.c b/src/gallium/winsys/svga/drm/vmw_buffer.c
+index 92e720f67d7..618225d2ae0 100644
+--- a/src/gallium/winsys/svga/drm/vmw_buffer.c
++++ b/src/gallium/winsys/svga/drm/vmw_buffer.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -25,15 +25,14 @@
+ 
+ /**
+  * @file
+- * SVGA buffer manager for Guest Memory Regions (GMRs).
+- * 
+- * GMRs are used for pixel and vertex data upload/download to/from the virtual
+- * SVGA hardware. There is a limited number of GMRs available, and 
+- * creating/destroying them is also a slow operation so we must suballocate 
+- * them.
++ * SVGA buffer manager for DMA buffers.
+  * 
++ * DMA buffers are used for pixel and vertex data upload/download to/from
++ * the virtual SVGA hardware.
++ *
+  * This file implements a pipebuffer library's buffer manager, so that we can
+- * use pipepbuffer's suballocation, fencing, and debugging facilities with GMRs. 
++ * use pipepbuffer's suballocation, fencing, and debugging facilities with
++ * DMA buffers.
+  * 
+  * @author Jose Fonseca <jfonseca@vmware.com>
+  */
+@@ -51,14 +50,14 @@
+ #include "vmw_screen.h"
+ #include "vmw_buffer.h"
+ 
+-struct vmw_gmr_bufmgr;
++struct vmw_dma_bufmgr;
+ 
+ 
+-struct vmw_gmr_buffer
++struct vmw_dma_buffer
+ {
+    struct pb_buffer base;
+    
+-   struct vmw_gmr_bufmgr *mgr;
++   struct vmw_dma_bufmgr *mgr;
+    
+    struct vmw_region *region;
+    void *map;
+@@ -67,19 +66,19 @@ struct vmw_gmr_buffer
+ };
+ 
+ 
+-extern const struct pb_vtbl vmw_gmr_buffer_vtbl;
++extern const struct pb_vtbl vmw_dma_buffer_vtbl;
+ 
+ 
+-static inline struct vmw_gmr_buffer *
+-vmw_gmr_buffer(struct pb_buffer *buf)
++static inline struct vmw_dma_buffer *
++vmw_pb_to_dma_buffer(struct pb_buffer *buf)
+ {
+    assert(buf);
+-   assert(buf->vtbl == &vmw_gmr_buffer_vtbl);
+-   return (struct vmw_gmr_buffer *)buf;
++   assert(buf->vtbl == &vmw_dma_buffer_vtbl);
++   return container_of(buf, struct vmw_dma_buffer, base);
+ }
+ 
+ 
+-struct vmw_gmr_bufmgr
++struct vmw_dma_bufmgr
+ {
+    struct pb_manager base;
+    
+@@ -87,8 +86,8 @@ struct vmw_gmr_bufmgr
+ };
+ 
+ 
+-static inline struct vmw_gmr_bufmgr *
+-vmw_gmr_bufmgr(struct pb_manager *mgr)
++static inline struct vmw_dma_bufmgr *
++vmw_pb_to_dma_bufmgr(struct pb_manager *mgr)
+ {
+    assert(mgr);
+ 
+@@ -96,14 +95,14 @@ vmw_gmr_bufmgr(struct pb_manager *mgr)
+    STATIC_ASSERT((VMW_BUFFER_USAGE_SHARED & PB_USAGE_ALL) == 0);
+    STATIC_ASSERT((VMW_BUFFER_USAGE_SYNC & PB_USAGE_ALL) == 0);
+ 
+-   return (struct vmw_gmr_bufmgr *)mgr;
++   return container_of(mgr, struct vmw_dma_bufmgr, base);
+ }
+ 
+ 
+ static void
+-vmw_gmr_buffer_destroy(void *winsys, struct pb_buffer *_buf)
++vmw_dma_buffer_destroy(void *winsys, struct pb_buffer *_buf)
+ {
+-   struct vmw_gmr_buffer *buf = vmw_gmr_buffer(_buf);
++   struct vmw_dma_buffer *buf = vmw_pb_to_dma_buffer(_buf);
+ 
+    assert(buf->map_count == 0);
+    if (buf->map) {
+@@ -118,11 +117,11 @@ vmw_gmr_buffer_destroy(void *winsys, struct pb_buffer *_buf)
+ 
+ 
+ static void *
+-vmw_gmr_buffer_map(struct pb_buffer *_buf,
++vmw_dma_buffer_map(struct pb_buffer *_buf,
+                    enum pb_usage_flags flags,
+                    void *flush_ctx)
+ {
+-   struct vmw_gmr_buffer *buf = vmw_gmr_buffer(_buf);
++   struct vmw_dma_buffer *buf = vmw_pb_to_dma_buffer(_buf);
+    int ret;
+ 
+    if (!buf->map)
+@@ -147,9 +146,9 @@ vmw_gmr_buffer_map(struct pb_buffer *_buf,
+ 
+ 
+ static void
+-vmw_gmr_buffer_unmap(struct pb_buffer *_buf)
++vmw_dma_buffer_unmap(struct pb_buffer *_buf)
+ {
+-   struct vmw_gmr_buffer *buf = vmw_gmr_buffer(_buf);
++   struct vmw_dma_buffer *buf = vmw_pb_to_dma_buffer(_buf);
+    enum pb_usage_flags flags = buf->map_flags;
+ 
+    if ((_buf->usage & VMW_BUFFER_USAGE_SYNC) &&
+@@ -168,9 +167,9 @@ vmw_gmr_buffer_unmap(struct pb_buffer *_buf)
+ 
+ 
+ static void
+-vmw_gmr_buffer_get_base_buffer(struct pb_buffer *buf,
+-                           struct pb_buffer **base_buf,
+-                           pb_size *offset)
++vmw_dma_buffer_get_base_buffer(struct pb_buffer *buf,
++                               struct pb_buffer **base_buf,
++                               pb_size *offset)
+ {
+    *base_buf = buf;
+    *offset = 0;
+@@ -178,7 +177,7 @@ vmw_gmr_buffer_get_base_buffer(struct pb_buffer *buf,
+ 
+ 
+ static enum pipe_error
+-vmw_gmr_buffer_validate( struct pb_buffer *_buf, 
++vmw_dma_buffer_validate( struct pb_buffer *_buf,
+                          struct pb_validate *vl,
+                          enum pb_usage_flags flags )
+ {
+@@ -188,7 +187,7 @@ vmw_gmr_buffer_validate( struct pb_buffer *_buf,
+ 
+ 
+ static void
+-vmw_gmr_buffer_fence( struct pb_buffer *_buf, 
++vmw_dma_buffer_fence( struct pb_buffer *_buf,
+                       struct pipe_fence_handle *fence )
+ {
+    /* We don't need to do anything, as the pipebuffer library
+@@ -196,35 +195,35 @@ vmw_gmr_buffer_fence( struct pb_buffer *_buf,
+ }
+ 
+ 
+-const struct pb_vtbl vmw_gmr_buffer_vtbl = {
+-   vmw_gmr_buffer_destroy,
+-   vmw_gmr_buffer_map,
+-   vmw_gmr_buffer_unmap,
+-   vmw_gmr_buffer_validate,
+-   vmw_gmr_buffer_fence,
+-   vmw_gmr_buffer_get_base_buffer
++const struct pb_vtbl vmw_dma_buffer_vtbl = {
++   .destroy = vmw_dma_buffer_destroy,
++   .map = vmw_dma_buffer_map,
++   .unmap = vmw_dma_buffer_unmap,
++   .validate = vmw_dma_buffer_validate,
++   .fence = vmw_dma_buffer_fence,
++   .get_base_buffer = vmw_dma_buffer_get_base_buffer
+ };
+ 
+ 
+ static struct pb_buffer *
+-vmw_gmr_bufmgr_create_buffer(struct pb_manager *_mgr,
+-                         pb_size size,
+-                         const struct pb_desc *pb_desc) 
++vmw_dma_bufmgr_create_buffer(struct pb_manager *_mgr,
++                             pb_size size,
++                             const struct pb_desc *pb_desc)
+ {
+-   struct vmw_gmr_bufmgr *mgr = vmw_gmr_bufmgr(_mgr);
++   struct vmw_dma_bufmgr *mgr = vmw_pb_to_dma_bufmgr(_mgr);
+    struct vmw_winsys_screen *vws = mgr->vws;
+-   struct vmw_gmr_buffer *buf;
++   struct vmw_dma_buffer *buf;
+    const struct vmw_buffer_desc *desc =
+       (const struct vmw_buffer_desc *) pb_desc;
+    
+-   buf = CALLOC_STRUCT(vmw_gmr_buffer);
++   buf = CALLOC_STRUCT(vmw_dma_buffer);
+    if(!buf)
+       goto error1;
+ 
+    pipe_reference_init(&buf->base.reference, 1);
+    buf->base.alignment_log2 = util_logbase2(pb_desc->alignment);
+    buf->base.usage = pb_desc->usage & ~VMW_BUFFER_USAGE_SHARED;
+-   buf->base.vtbl = &vmw_gmr_buffer_vtbl;
++   buf->base.vtbl = &vmw_dma_buffer_vtbl;
+    buf->mgr = mgr;
+    buf->base.size = size;
+    if ((pb_desc->usage & VMW_BUFFER_USAGE_SHARED) && desc->region) {
+@@ -244,32 +243,32 @@ error1:
+ 
+ 
+ static void
+-vmw_gmr_bufmgr_flush(struct pb_manager *mgr) 
++vmw_dma_bufmgr_flush(struct pb_manager *mgr)
+ {
+    /* No-op */
+ }
+ 
+ 
+ static void
+-vmw_gmr_bufmgr_destroy(struct pb_manager *_mgr) 
++vmw_dma_bufmgr_destroy(struct pb_manager *_mgr)
+ {
+-   struct vmw_gmr_bufmgr *mgr = vmw_gmr_bufmgr(_mgr);
++   struct vmw_dma_bufmgr *mgr = vmw_pb_to_dma_bufmgr(_mgr);
+    FREE(mgr);
+ }
+ 
+ 
+ struct pb_manager *
+-vmw_gmr_bufmgr_create(struct vmw_winsys_screen *vws) 
++vmw_dma_bufmgr_create(struct vmw_winsys_screen *vws)
+ {
+-   struct vmw_gmr_bufmgr *mgr;
++   struct vmw_dma_bufmgr *mgr;
+    
+-   mgr = CALLOC_STRUCT(vmw_gmr_bufmgr);
++   mgr = CALLOC_STRUCT(vmw_dma_bufmgr);
+    if(!mgr)
+       return NULL;
+ 
+-   mgr->base.destroy = vmw_gmr_bufmgr_destroy;
+-   mgr->base.create_buffer = vmw_gmr_bufmgr_create_buffer;
+-   mgr->base.flush = vmw_gmr_bufmgr_flush;
++   mgr->base.destroy = vmw_dma_bufmgr_destroy;
++   mgr->base.create_buffer = vmw_dma_bufmgr_create_buffer;
++   mgr->base.flush = vmw_dma_bufmgr_flush;
+    
+    mgr->vws = vws;
+    
+@@ -278,20 +277,20 @@ vmw_gmr_bufmgr_create(struct vmw_winsys_screen *vws)
+ 
+ 
+ bool
+-vmw_gmr_bufmgr_region_ptr(struct pb_buffer *buf, 
++vmw_dma_bufmgr_region_ptr(struct pb_buffer *buf,
+                           struct SVGAGuestPtr *ptr)
+ {
+    struct pb_buffer *base_buf;
+    pb_size offset = 0;
+-   struct vmw_gmr_buffer *gmr_buf;
++   struct vmw_dma_buffer *dma_buf;
+    
+    pb_get_base_buffer( buf, &base_buf, &offset );
+    
+-   gmr_buf = vmw_gmr_buffer(base_buf);
+-   if(!gmr_buf)
++   dma_buf = vmw_pb_to_dma_buffer(base_buf);
++   if(!dma_buf)
+       return false;
+    
+-   *ptr = vmw_ioctl_region_ptr(gmr_buf->region);
++   *ptr = vmw_ioctl_region_ptr(dma_buf->region);
+    
+    ptr->offset += offset;
+    
+diff --git a/src/gallium/winsys/svga/drm/vmw_buffer.h b/src/gallium/winsys/svga/drm/vmw_buffer.h
+index deebb0efd6c..deb6b9a0a40 100644
+--- a/src/gallium/winsys/svga/drm/vmw_buffer.h
++++ b/src/gallium/winsys/svga/drm/vmw_buffer.h
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -88,10 +88,10 @@ vmw_svga_winsys_buffer_unmap(struct svga_winsys_screen *sws,
+                              struct svga_winsys_buffer *buf);
+ 
+ struct pb_manager *
+-vmw_gmr_bufmgr_create(struct vmw_winsys_screen *vws);
++vmw_dma_bufmgr_create(struct vmw_winsys_screen *vws);
+ 
+ bool
+-vmw_gmr_bufmgr_region_ptr(struct pb_buffer *buf, 
++vmw_dma_bufmgr_region_ptr(struct pb_buffer *buf,
+                           struct SVGAGuestPtr *ptr);
+ 
+ 
+diff --git a/src/gallium/winsys/svga/drm/vmw_context.c b/src/gallium/winsys/svga/drm/vmw_context.c
+index e54e636efaa..dcdab125d0a 100644
+--- a/src/gallium/winsys/svga/drm/vmw_context.c
++++ b/src/gallium/winsys/svga/drm/vmw_context.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -218,7 +218,7 @@ vmw_swc_flush(struct svga_winsys_context *swc,
+          struct vmw_buffer_relocation *reloc = &vswc->region.relocs[i];
+          struct SVGAGuestPtr ptr;
+ 
+-         if(!vmw_gmr_bufmgr_region_ptr(reloc->buffer, &ptr))
++         if(!vmw_dma_bufmgr_region_ptr(reloc->buffer, &ptr))
+             assert(0);
+ 
+          ptr.offset += reloc->offset;
+diff --git a/src/gallium/winsys/svga/drm/vmw_query.c b/src/gallium/winsys/svga/drm/vmw_query.c
+index 6f761d7bf7f..e79c24f7604 100644
+--- a/src/gallium/winsys/svga/drm/vmw_query.c
++++ b/src/gallium/winsys/svga/drm/vmw_query.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2015 VMware, Inc.  All rights reserved.
++ * Copyright 2015-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -37,7 +37,7 @@ vmw_svga_winsys_query_create(struct svga_winsys_screen *sws,
+                              uint32 queryResultLen)
+ {
+    struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
+-   struct pb_manager *provider = vws->pools.gmr;
++   struct pb_manager *provider = vws->pools.dma_base;
+    struct pb_desc desc = {0};
+    struct pb_buffer *pb_buf;
+    struct svga_winsys_gb_query *query;
+diff --git a/src/gallium/winsys/svga/drm/vmw_screen.h b/src/gallium/winsys/svga/drm/vmw_screen.h
+index d6d02dab64f..9fd17d51574 100644
+--- a/src/gallium/winsys/svga/drm/vmw_screen.h
++++ b/src/gallium/winsys/svga/drm/vmw_screen.h
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -86,17 +86,14 @@ struct vmw_winsys_screen
+    } ioctl;
+ 
+    struct {
+-      struct pb_manager *gmr;
+-      struct pb_manager *gmr_mm;
+-      struct pb_manager *gmr_fenced;
+-      struct pb_manager *gmr_slab;
+-      struct pb_manager *gmr_slab_fenced;
++      struct pb_manager *dma_base;
++      struct pb_manager *dma_mm;
+       struct pb_manager *query_mm;
+       struct pb_manager *query_fenced;
+-      struct pb_manager *mob_fenced;
+-      struct pb_manager *mob_cache;
+-      struct pb_manager *mob_shader_slab;
+-      struct pb_manager *mob_shader_slab_fenced;
++      struct pb_manager *dma_fenced;
++      struct pb_manager *dma_cache;
++      struct pb_manager *dma_slab;
++      struct pb_manager *dma_slab_fenced;
+    } pools;
+ 
+    struct pb_fence_ops *fence_ops;
+@@ -241,7 +238,6 @@ vmw_ioctl_releasefromcpu(struct vmw_region *region,
+ bool vmw_ioctl_init(struct vmw_winsys_screen *vws);
+ bool vmw_pools_init(struct vmw_winsys_screen *vws);
+ bool vmw_query_pools_init(struct vmw_winsys_screen *vws);
+-bool vmw_mob_pools_init(struct vmw_winsys_screen *vws);
+ bool vmw_winsys_screen_init_svga(struct vmw_winsys_screen *vws);
+ 
+ void vmw_ioctl_cleanup(struct vmw_winsys_screen *vws);
+diff --git a/src/gallium/winsys/svga/drm/vmw_screen_dri.c b/src/gallium/winsys/svga/drm/vmw_screen_dri.c
+index dfcc15b64e8..bc699770798 100644
+--- a/src/gallium/winsys/svga/drm/vmw_screen_dri.c
++++ b/src/gallium/winsys/svga/drm/vmw_screen_dri.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -149,7 +149,7 @@ vmw_drm_gb_surface_from_handle(struct svga_winsys_screen *sws,
+     SVGA3dSurfaceAllFlags flags;
+     uint32_t mip_levels;
+     struct vmw_buffer_desc desc;
+-    struct pb_manager *provider = vws->pools.gmr;
++    struct pb_manager *provider = vws->pools.dma_base;
+     struct pb_buffer *pb_buf;
+     uint32_t handle;
+     int ret;
+diff --git a/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c b/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c
+index dc5ba16e366..4a2268b718a 100644
+--- a/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c
++++ b/src/gallium/winsys/svga/drm/vmw_screen_ioctl.c
+@@ -159,7 +159,7 @@ vmw_ioctl_surface_create(struct vmw_winsys_screen *vws,
+    req->flags = (uint32_t) flags;
+    req->scanout = !!(usage & SVGA_SURFACE_USAGE_SCANOUT);
+    req->format = (uint32_t) format;
+-   req->shareable = TRUE;
++   req->shareable = true;
+ 
+    assert(numFaces * numMipLevels < DRM_VMW_MAX_SURFACE_FACES*
+ 	  DRM_VMW_MAX_MIP_LEVELS);
+diff --git a/src/gallium/winsys/svga/drm/vmw_screen_pools.c b/src/gallium/winsys/svga/drm/vmw_screen_pools.c
+index b3b169d87c2..b56652f9493 100644
+--- a/src/gallium/winsys/svga/drm/vmw_screen_pools.c
++++ b/src/gallium/winsys/svga/drm/vmw_screen_pools.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -40,32 +40,25 @@
+ void
+ vmw_pools_cleanup(struct vmw_winsys_screen *vws)
+ {
+-   if (vws->pools.mob_shader_slab_fenced)
+-      vws->pools.mob_shader_slab_fenced->destroy
+-         (vws->pools.mob_shader_slab_fenced);
+-   if (vws->pools.mob_shader_slab)
+-      vws->pools.mob_shader_slab->destroy(vws->pools.mob_shader_slab);
+-   if (vws->pools.mob_fenced)
+-      vws->pools.mob_fenced->destroy(vws->pools.mob_fenced);
+-   if (vws->pools.mob_cache)
+-      vws->pools.mob_cache->destroy(vws->pools.mob_cache);
++   if (vws->pools.dma_slab_fenced)
++      vws->pools.dma_slab_fenced->destroy
++         (vws->pools.dma_slab_fenced);
++   if (vws->pools.dma_slab)
++      vws->pools.dma_slab->destroy(vws->pools.dma_slab);
++   if (vws->pools.dma_fenced)
++      vws->pools.dma_fenced->destroy(vws->pools.dma_fenced);
++   if (vws->pools.dma_cache)
++      vws->pools.dma_cache->destroy(vws->pools.dma_cache);
+ 
+    if (vws->pools.query_fenced)
+       vws->pools.query_fenced->destroy(vws->pools.query_fenced);
+    if (vws->pools.query_mm)
+       vws->pools.query_mm->destroy(vws->pools.query_mm);
+ 
+-   if(vws->pools.gmr_fenced)
+-      vws->pools.gmr_fenced->destroy(vws->pools.gmr_fenced);
+-   if (vws->pools.gmr_mm)
+-      vws->pools.gmr_mm->destroy(vws->pools.gmr_mm);
+-   if (vws->pools.gmr_slab_fenced)
+-      vws->pools.gmr_slab_fenced->destroy(vws->pools.gmr_slab_fenced);
+-   if (vws->pools.gmr_slab)
+-      vws->pools.gmr_slab->destroy(vws->pools.gmr_slab);
+-
+-   if(vws->pools.gmr)
+-      vws->pools.gmr->destroy(vws->pools.gmr);
++   if (vws->pools.dma_mm)
++      vws->pools.dma_mm->destroy(vws->pools.dma_mm);
++   if (vws->pools.dma_base)
++      vws->pools.dma_base->destroy(vws->pools.dma_base);
+ }
+ 
+ 
+@@ -90,7 +83,7 @@ vmw_query_pools_init(struct vmw_winsys_screen *vws)
+    desc.alignment = 16;
+    desc.usage = ~(VMW_BUFFER_USAGE_SHARED | VMW_BUFFER_USAGE_SYNC);
+ 
+-   vws->pools.query_mm = pb_slab_range_manager_create(vws->pools.gmr, 16, 128,
++   vws->pools.query_mm = pb_slab_range_manager_create(vws->pools.dma_base, 16, 128,
+                                                       VMW_QUERY_POOL_SIZE,
+                                                       &desc);
+    if (!vws->pools.query_mm)
+@@ -110,96 +103,43 @@ vmw_query_pools_init(struct vmw_winsys_screen *vws)
+ }
+ 
+ /**
+- * vmw_mob_pool_init - Create a pool of fenced kernel buffers.
++ * vmw_pool_init - Create a pool of buffers.
+  *
+  * @vws: Pointer to a struct vmw_winsys_screen.
+- *
+- * Typically this pool should be created on demand when we
+- * detect that the app will be using MOB buffers.
+  */
+ bool
+-vmw_mob_pools_init(struct vmw_winsys_screen *vws)
++vmw_pools_init(struct vmw_winsys_screen *vws)
+ {
+    struct pb_desc desc;
+ 
+-   vws->pools.mob_cache = 
+-      pb_cache_manager_create(vws->pools.gmr, 100000, 2.0f,
++   vws->pools.dma_base = vmw_dma_bufmgr_create(vws);
++   if (!vws->pools.dma_base)
++      goto error;
++
++   /*
++    * A managed pool for DMA buffers.
++    */
++   vws->pools.dma_mm = mm_bufmgr_create(vws->pools.dma_base,
++                                        VMW_GMR_POOL_SIZE,
++                                        12 /* 4096 alignment */);
++   if(!vws->pools.dma_mm)
++      goto error;
++
++   vws->pools.dma_cache =
++      pb_cache_manager_create(vws->pools.dma_base, 100000, 2.0f,
+                               VMW_BUFFER_USAGE_SHARED,
+                               64 * 1024 * 1024);
+-   if (!vws->pools.mob_cache)
+-      return false;
+ 
+-   vws->pools.mob_fenced = 
+-      simple_fenced_bufmgr_create(vws->pools.mob_cache,
++   if (!vws->pools.dma_cache)
++      goto error;
++
++   vws->pools.dma_fenced =
++      simple_fenced_bufmgr_create(vws->pools.dma_cache,
+                                   vws->fence_ops);
+-   if(!vws->pools.mob_fenced)
+-      goto out_no_mob_fenced;
+    
+-   desc.alignment = 64;
+-   desc.usage = ~(SVGA_BUFFER_USAGE_PINNED | VMW_BUFFER_USAGE_SHARED |
+-                  VMW_BUFFER_USAGE_SYNC);
+-   vws->pools.mob_shader_slab =
+-      pb_slab_range_manager_create(vws->pools.mob_cache,
+-                                   64,
+-                                   8192,
+-                                   16384,
+-                                   &desc);
+-   if(!vws->pools.mob_shader_slab)
+-      goto out_no_mob_shader_slab;
+-
+-   vws->pools.mob_shader_slab_fenced =
+-      simple_fenced_bufmgr_create(vws->pools.mob_shader_slab,
+-				  vws->fence_ops);
+-   if(!vws->pools.mob_shader_slab_fenced)
+-      goto out_no_mob_shader_slab_fenced;
+-
+-   return true;
+-
+- out_no_mob_shader_slab_fenced:
+-   vws->pools.mob_shader_slab->destroy(vws->pools.mob_shader_slab);
+- out_no_mob_shader_slab:
+-   vws->pools.mob_fenced->destroy(vws->pools.mob_fenced);
+- out_no_mob_fenced:
+-   vws->pools.mob_cache->destroy(vws->pools.mob_cache);
+-   return false;
+-}
+-
+-/**
+- * vmw_pools_init - Create a pool of GMR buffers.
+- *
+- * @vws: Pointer to a struct vmw_winsys_screen.
+- */
+-bool
+-vmw_pools_init(struct vmw_winsys_screen *vws)
+-{
+-   struct pb_desc desc;
+-
+-   vws->pools.gmr = vmw_gmr_bufmgr_create(vws);
+-   if(!vws->pools.gmr)
++   if(!vws->pools.dma_fenced)
+       goto error;
+ 
+-   if ((vws->base.have_gb_objects && vws->base.have_gb_dma) ||
+-       !vws->base.have_gb_objects) {
+-      /*
+-       * A managed pool for DMA buffers.
+-       */
+-      vws->pools.gmr_mm = mm_bufmgr_create(vws->pools.gmr,
+-                                           VMW_GMR_POOL_SIZE,
+-                                           12 /* 4096 alignment */);
+-      if(!vws->pools.gmr_mm)
+-         goto error;
+-
+-      vws->pools.gmr_fenced = simple_fenced_bufmgr_create
+-         (vws->pools.gmr_mm, vws->fence_ops);
+-
+-#ifdef DEBUG
+-      vws->pools.gmr_fenced = pb_debug_manager_create(vws->pools.gmr_fenced,
+-                                                      4096,
+-                                                      4096);
+-#endif
+-      if(!vws->pools.gmr_fenced)
+-         goto error;
+-
+    /*
+     * The slab pool allocates buffers directly from the kernel except
+     * for very small buffers which are allocated from a slab in order
+@@ -208,31 +148,26 @@ vmw_pools_init(struct vmw_winsys_screen *vws)
+     * Here we use it only for emergency in the case our pre-allocated
+     * managed buffer pool runs out of memory.
+     */
++   desc.alignment = 64;
++   desc.usage = ~(SVGA_BUFFER_USAGE_PINNED | VMW_BUFFER_USAGE_SHARED |
++                  VMW_BUFFER_USAGE_SYNC);
++   vws->pools.dma_slab =
++      pb_slab_range_manager_create(vws->pools.dma_cache,
++                                   64,
++                                   8192,
++                                   16384,
++                                   &desc);
++   if(!vws->pools.dma_slab)
++     goto error;
+ 
+-      desc.alignment = 64;
+-      desc.usage = ~(SVGA_BUFFER_USAGE_PINNED | SVGA_BUFFER_USAGE_SHADER |
+-                     VMW_BUFFER_USAGE_SHARED | VMW_BUFFER_USAGE_SYNC);
+-      vws->pools.gmr_slab = pb_slab_range_manager_create(vws->pools.gmr,
+-                                                         64,
+-                                                         8192,
+-                                                         16384,
+-                                                         &desc);
+-      if (!vws->pools.gmr_slab)
+-         goto error;
+-
+-      vws->pools.gmr_slab_fenced =
+-         simple_fenced_bufmgr_create(vws->pools.gmr_slab, vws->fence_ops);
+-
+-      if (!vws->pools.gmr_slab_fenced)
+-         goto error;
+-   }
++   vws->pools.dma_slab_fenced =
++      simple_fenced_bufmgr_create(vws->pools.dma_slab,
++		                  vws->fence_ops);
++   if (!vws->pools.dma_slab_fenced)
++      goto error;
+ 
+    vws->pools.query_fenced = NULL;
+    vws->pools.query_mm = NULL;
+-   vws->pools.mob_cache = NULL;
+-
+-   if (vws->base.have_gb_objects && !vmw_mob_pools_init(vws))
+-      goto error;
+ 
+    return true;
+ 
+diff --git a/src/gallium/winsys/svga/drm/vmw_screen_svga.c b/src/gallium/winsys/svga/drm/vmw_screen_svga.c
+index 2562e80ff7d..f3e7744003c 100644
+--- a/src/gallium/winsys/svga/drm/vmw_screen_svga.c
++++ b/src/gallium/winsys/svga/drm/vmw_screen_svga.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -385,20 +385,20 @@ vmw_svga_winsys_buffer_create(struct svga_winsys_screen *sws,
+ 	 return NULL;
+       provider = vws->pools.query_fenced;
+    } else if (usage == SVGA_BUFFER_USAGE_SHADER) {
+-      provider = vws->pools.mob_shader_slab_fenced;
++      provider = vws->pools.dma_slab_fenced;
+    } else {
+       if (size > VMW_GMR_POOL_SIZE)
+          return NULL;
+-      provider = vws->pools.gmr_fenced;
++      provider = vws->pools.dma_fenced;
+    }
+ 
+    assert(provider);
+    buffer = provider->create_buffer(provider, size, &desc.pb_desc);
+ 
+-   if(!buffer && provider == vws->pools.gmr_fenced) {
++   if(!buffer && provider == vws->pools.dma_fenced) {
+ 
+       assert(provider);
+-      provider = vws->pools.gmr_slab_fenced;
++      provider = vws->pools.dma_slab_fenced;
+       buffer = provider->create_buffer(provider, size, &desc.pb_desc);
+    }
+ 
+@@ -507,7 +507,7 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
+    surface->screen = vws;
+    (void) mtx_init(&surface->mutex, mtx_plain);
+    surface->shared = !!(usage & SVGA_SURFACE_USAGE_SHARED);
+-   provider = (surface->shared) ? vws->pools.gmr : vws->pools.mob_fenced;
++   provider = (surface->shared) ? vws->pools.dma_base : vws->pools.dma_fenced;
+ 
+    /*
+     * When multisampling is not supported sample count received is 0,
+@@ -552,7 +552,7 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
+          desc.pb_desc.usage = 0;
+          pb_buf = provider->create_buffer(provider, buffer_size, &desc.pb_desc);
+          surface->buf = vmw_svga_winsys_buffer_wrap(pb_buf);
+-         if (surface->buf && !vmw_gmr_bufmgr_region_ptr(pb_buf, &ptr))
++         if (surface->buf && !vmw_dma_bufmgr_region_ptr(pb_buf, &ptr))
+             assert(0);
+       }
+ 
+@@ -617,8 +617,8 @@ vmw_svga_winsys_surface_create(struct svga_winsys_screen *sws,
+ 
+       /* Best estimate for surface size, used for early flushing. */
+       surface->size = buffer_size;
+-      surface->buf = NULL; 
+-   }      
++      surface->buf = NULL;
++   }
+ 
+    return svga_winsys_surface(surface);
+ 
+@@ -642,8 +642,8 @@ vmw_svga_winsys_surface_can_create(struct svga_winsys_screen *sws,
+    struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
+    uint32_t buffer_size;
+ 
+-   buffer_size = svga3dsurface_get_serialized_size(format, size, 
+-                                                   numMipLevels, 
++   buffer_size = svga3dsurface_get_serialized_size(format, size,
++                                                   numMipLevels,
+                                                    numLayers);
+    if (numSamples > 1)
+       buffer_size *= numSamples;
+@@ -702,7 +702,7 @@ static bool
+ vmw_svga_winsys_get_cap(struct svga_winsys_screen *sws,
+                         SVGA3dDevCapIndex index,
+                         SVGA3dDevCapResult *result)
+-{   
++{
+    struct vmw_winsys_screen *vws = vmw_winsys_screen(sws);
+ 
+    if (index > vws->ioctl.num_cap_3d ||
+diff --git a/src/gallium/winsys/svga/drm/vmw_surface.c b/src/gallium/winsys/svga/drm/vmw_surface.c
+index 22baf0fd943..392288eb290 100644
+--- a/src/gallium/winsys/svga/drm/vmw_surface.c
++++ b/src/gallium/winsys/svga/drm/vmw_surface.c
+@@ -1,5 +1,5 @@
+ /**********************************************************
+- * Copyright 2009-2015 VMware, Inc.  All rights reserved.
++ * Copyright 2009-2023 VMware, Inc.  All rights reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person
+  * obtaining a copy of this software and associated documentation
+@@ -54,7 +54,7 @@ vmw_svga_winsys_surface_init(struct svga_winsys_screen *sws,
+    if (data)
+       goto out_mapped;
+ 
+-   provider = vws->pools.mob_fenced;
++   provider = vws->pools.dma_fenced;
+    memset(&desc, 0, sizeof(desc));
+    desc.alignment = 4096;
+    pb_buf = provider->create_buffer(provider, vsrf->size, &desc);
+@@ -98,7 +98,6 @@ out_unlock:
+ }
+ 
+  
+- 
+ void *
+ vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
+                             struct svga_winsys_surface *srf,
+@@ -168,7 +167,7 @@ vmw_svga_winsys_surface_map(struct svga_winsys_context *swc,
+       /*
+        * Attempt to get a new buffer.
+        */
+-      provider = vws->pools.mob_fenced;
++      provider = vws->pools.dma_fenced;
+       memset(&desc, 0, sizeof(desc));
+       desc.alignment = 4096;
+       pb_buf = provider->create_buffer(provider, vsrf->size, &desc);
+-- 
+2.42.0
+

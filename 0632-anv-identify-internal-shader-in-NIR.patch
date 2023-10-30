@@ -1,0 +1,45 @@
+From 1af1085d769895c815c79e1442e264a82ff0b123 Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Thu, 14 Sep 2023 19:08:57 +0300
+Subject: [PATCH 632/834] anv: identify internal shader in NIR
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Reviewed-by: Ivan Briano <ivan.briano@intel.com>
+Tested-by: Felix DeGrood <felix.j.degrood@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25361>
+---
+ src/intel/vulkan/anv_internal_kernels.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/intel/vulkan/anv_internal_kernels.c b/src/intel/vulkan/anv_internal_kernels.c
+index 0a5d65e5d47..dcbb21cf7a9 100644
+--- a/src/intel/vulkan/anv_internal_kernels.c
++++ b/src/intel/vulkan/anv_internal_kernels.c
+@@ -143,6 +143,7 @@ lower_load_ubo_to_uniforms(nir_builder *b, nir_intrinsic_instr *intrin,
+ static struct anv_shader_bin *
+ compile_upload_spirv(struct anv_device *device,
+                      gl_shader_stage stage,
++                     const char *name,
+                      const void *hash_key,
+                      uint32_t hash_key_size,
+                      const struct anv_internal_kernel_bind_map *bind_map,
+@@ -170,6 +171,8 @@ compile_upload_spirv(struct anv_device *device,
+ 
+    assert(nir != NULL);
+ 
++   nir->info.name = ralloc_strdup(nir, name);
++
+    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
+    NIR_PASS_V(nir, nir_opt_cse);
+    NIR_PASS_V(nir, nir_opt_gcm, true);
+@@ -471,6 +474,7 @@ anv_device_init_internal_kernels(struct anv_device *device)
+          device->internal_kernels[i] =
+             compile_upload_spirv(device,
+                                  internal_kernels[i].stage,
++                                 internal_kernels[i].key.name,
+                                  &internal_kernels[i].key,
+                                  sizeof(internal_kernels[i].key),
+                                  &internal_kernels[i].bind_map,
+-- 
+2.42.0
+

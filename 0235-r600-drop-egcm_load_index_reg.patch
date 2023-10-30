@@ -1,0 +1,152 @@
+From 7953e14878749fb4489cec5cb33aab1a6a4d6aa9 Mon Sep 17 00:00:00 2001
+From: Gert Wollny <gert.wollny@collabora.com>
+Date: Fri, 29 Sep 2023 15:36:13 +0200
+Subject: [PATCH 235/834] r600: drop egcm_load_index_reg
+
+This is now handled in SFN.
+v2: remove obsolte comments (Vitaliy Kuzmin)
+
+Signed-off-by: Gert Wollny <gert.wollny@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25475>
+---
+ src/gallium/drivers/r600/eg_asm.c   | 54 -----------------------------
+ src/gallium/drivers/r600/r600_asm.c | 19 +++++-----
+ src/gallium/drivers/r600/r600_asm.h |  1 -
+ 3 files changed, 9 insertions(+), 65 deletions(-)
+
+diff --git a/src/gallium/drivers/r600/eg_asm.c b/src/gallium/drivers/r600/eg_asm.c
+index a55e74a3115..a98dfd04639 100644
+--- a/src/gallium/drivers/r600/eg_asm.c
++++ b/src/gallium/drivers/r600/eg_asm.c
+@@ -174,60 +174,6 @@ void eg_bytecode_export_read(struct r600_bytecode *bc,
+ }
+ #endif
+ 
+-int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_clause)
+-{
+-	struct r600_bytecode_alu alu;
+-	int r;
+-	unsigned type;
+-
+-	assert(id < 2);
+-	assert(bc->gfx_level >= EVERGREEN);
+-
+-	if (bc->index_loaded[id])
+-		return 0;
+-
+-	/* Hack to put MOVA and SET_CF_IDX in the same clause as AR only persists for one clause */
+-	if (bc->gfx_level == EVERGREEN && (bc->cf_last == NULL || (bc->cf_last->ndw >> 1) >= 110)) {
+-		bc->force_add_cf = 1;
+-	}
+-
+-	memset(&alu, 0, sizeof(alu));
+-	alu.op = ALU_OP1_MOVA_INT;
+-	alu.src[0].sel = bc->index_reg[id];
+-	alu.src[0].chan = bc->index_reg_chan[id];
+-	if (bc->gfx_level == CAYMAN)
+-		alu.dst.sel = id == 0 ? CM_V_SQ_MOVA_DST_CF_IDX0 : CM_V_SQ_MOVA_DST_CF_IDX1;
+-
+-	alu.last = 1;
+-	r = r600_bytecode_add_alu(bc, &alu);
+-	if (r)
+-		return r;
+-
+-	bc->ar_loaded = 0; /* clobbered */
+-
+-	if (bc->gfx_level == EVERGREEN) {
+-		memset(&alu, 0, sizeof(alu));
+-		alu.op = id == 0 ? ALU_OP0_SET_CF_IDX0 : ALU_OP0_SET_CF_IDX1;
+-		alu.last = 1;
+-		r = r600_bytecode_add_alu(bc, &alu);
+-		if (r)
+-			return r;
+-	}
+-
+-	/* Must split ALU group as index only applies to following group */
+-	if (inside_alu_clause) {
+-		type = bc->cf_last->op;
+-		if ((r = r600_bytecode_add_cf(bc))) {
+-			return r;
+-		}
+-		bc->cf_last->op = type;
+-	}
+-
+-	bc->index_loaded[id] = 1;
+-
+-	return 0;
+-}
+-
+ int eg_bytecode_gds_build(struct r600_bytecode *bc, struct r600_bytecode_gds *gds, unsigned id)
+ {
+ 	unsigned gds_op = (r600_isa_fetch_opcode(bc->isa->hw_class, gds->op) >> 8) & 0x3f;
+diff --git a/src/gallium/drivers/r600/r600_asm.c b/src/gallium/drivers/r600/r600_asm.c
+index dea3bc91b3e..85fcb31d194 100644
+--- a/src/gallium/drivers/r600/r600_asm.c
++++ b/src/gallium/drivers/r600/r600_asm.c
+@@ -1308,11 +1308,10 @@ int r600_bytecode_add_alu_type(struct r600_bytecode *bc,
+ 	}
+ 	bc->cf_last->op = type;
+ 
+-	/* Load index register if required */
+ 	if (bc->gfx_level >= EVERGREEN) {
+ 		for (i = 0; i < 3; i++)
+ 			if (nalu->src[i].kc_bank &&  nalu->src[i].kc_rel)
+-				egcm_load_index_reg(bc, nalu->src[i].kc_rel - 1, true);
++				assert(bc->index_loaded[nalu->src[i].kc_rel - 1]);
+ 	}
+ 
+ 	/* Check AR usage and load it if required */
+@@ -1457,10 +1456,9 @@ static int r600_bytecode_add_vtx_internal(struct r600_bytecode *bc, const struct
+ 		return -ENOMEM;
+ 	memcpy(nvtx, vtx, sizeof(struct r600_bytecode_vtx));
+ 
+-	/* Load index register if required */
+ 	if (bc->gfx_level >= EVERGREEN) {
+-		if (vtx->buffer_index_mode)
+-			egcm_load_index_reg(bc, vtx->buffer_index_mode - 1, false);
++		assert(!vtx->buffer_index_mode ||
++		       bc->index_loaded[vtx->buffer_index_mode - 1]);
+ 	}
+ 
+ 
+@@ -1525,10 +1523,11 @@ int r600_bytecode_add_tex(struct r600_bytecode *bc, const struct r600_bytecode_t
+ 		return -ENOMEM;
+ 	memcpy(ntex, tex, sizeof(struct r600_bytecode_tex));
+ 
+-	/* Load index register if required */
+ 	if (bc->gfx_level >= EVERGREEN) {
+-		if (tex->sampler_index_mode || tex->resource_index_mode)
+-			egcm_load_index_reg(bc, tex->resource_index_mode - 1, false);
++		assert(!tex->sampler_index_mode ||
++		       bc->index_loaded[tex->sampler_index_mode - 1]);
++		assert(!tex->resource_index_mode ||
++                       bc->index_loaded[tex->resource_index_mode - 1]);
+ 	}
+ 
+ 	/* we can't fetch data und use it as texture lookup address in the same TEX clause */
+@@ -1599,8 +1598,8 @@ int r600_bytecode_add_gds(struct r600_bytecode *bc, const struct r600_bytecode_g
+ 	memcpy(ngds, gds, sizeof(struct r600_bytecode_gds));
+ 
+ 	if (bc->gfx_level >= EVERGREEN) {
+-		if (gds->uav_index_mode)
+-			egcm_load_index_reg(bc, gds->uav_index_mode - 1, false);
++		assert(!gds->uav_index_mode ||
++		       bc->index_loaded[gds->uav_index_mode - 1]);
+ 	}
+ 
+ 	if (bc->cf_last == NULL ||
+diff --git a/src/gallium/drivers/r600/r600_asm.h b/src/gallium/drivers/r600/r600_asm.h
+index 1bf187016e2..fd38782da25 100644
+--- a/src/gallium/drivers/r600/r600_asm.h
++++ b/src/gallium/drivers/r600/r600_asm.h
+@@ -290,7 +290,6 @@ struct r600_bytecode {
+ 
+ /* eg_asm.c */
+ int eg_bytecode_cf_build(struct r600_bytecode *bc, struct r600_bytecode_cf *cf);
+-int egcm_load_index_reg(struct r600_bytecode *bc, unsigned id, bool inside_alu_clause);
+ int eg_bytecode_gds_build(struct r600_bytecode *bc, struct r600_bytecode_gds *gds, unsigned id);
+ int eg_bytecode_alu_build(struct r600_bytecode *bc,
+ 			  struct r600_bytecode_alu *alu, unsigned id);
+-- 
+2.42.0
+

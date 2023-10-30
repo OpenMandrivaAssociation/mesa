@@ -1,0 +1,28 @@
+From 7afdbd5f6d136f433302bacecc221b9afab88328 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Tue, 10 Oct 2023 21:32:54 +0200
+Subject: [PATCH 129/834] nir/load_libclc: fix libclc memory leak
+
+Fixes: ef453f54394 ("spirv: Add a shared libclc loader")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Dave Airlie <airlied@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25649>
+---
+ src/compiler/clc/nir_load_libclc.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/compiler/clc/nir_load_libclc.c b/src/compiler/clc/nir_load_libclc.c
+index d9d1ad2d6a3..e736a2b2d3f 100644
+--- a/src/compiler/clc/nir_load_libclc.c
++++ b/src/compiler/clc/nir_load_libclc.c
+@@ -393,6 +393,7 @@ nir_load_libclc_shader(unsigned ptr_bit_size,
+       blob_init(&blob);
+       nir_serialize(&blob, nir, false);
+       disk_cache_put(disk_cache, cache_key, blob.data, blob.size, NULL);
++      blob_finish(&blob);
+    }
+ #endif
+ 
+-- 
+2.42.0
+

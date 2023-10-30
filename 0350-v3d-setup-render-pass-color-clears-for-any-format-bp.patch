@@ -1,0 +1,44 @@
+From e743d41756101cce7cda469895f76d60de8506a7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alejandro=20Pi=C3=B1eiro?= <apinheiro@igalia.com>
+Date: Fri, 22 Oct 2021 11:40:49 +0200
+Subject: [PATCH 350/834] v3d: setup render pass color clears for any format
+ bpp in v71
+
+Reviewed-by: Iago Toral Quiroga <itoral@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/gallium/drivers/v3d/v3dx_rcl.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/src/gallium/drivers/v3d/v3dx_rcl.c b/src/gallium/drivers/v3d/v3dx_rcl.c
+index f59e0559905..8bac9739e29 100644
+--- a/src/gallium/drivers/v3d/v3dx_rcl.c
++++ b/src/gallium/drivers/v3d/v3dx_rcl.c
+@@ -979,6 +979,24 @@ v3dX(emit_rcl)(struct v3d_job *job)
+ 
+                         base_addr += (job->tile_height * rt.stride) / 8;
+                 }
++
++                if (surf->internal_bpp >= V3D_INTERNAL_BPP_64) {
++                        cl_emit(&job->rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART2, rt) {
++                                rt.clear_color_mid_bits = /* 40 bits (32 + 8)  */
++                                        ((uint64_t) job->clear_color[i][1]) |
++                                        (((uint64_t) (job->clear_color[i][2] & 0xff)) << 32);
++                                rt.render_target_number = i;
++                        }
++                }
++
++                if (surf->internal_bpp >= V3D_INTERNAL_BPP_128) {
++                        cl_emit(&job->rcl, TILE_RENDERING_MODE_CFG_RENDER_TARGET_PART3, rt) {
++                                rt.clear_color_top_bits = /* 56 bits (24 + 32) */
++                                        (((uint64_t) (job->clear_color[i][2] & 0xffffff00)) >> 8) |
++                                        (((uint64_t) (job->clear_color[i][3])) << 24);
++                                rt.render_target_number = i;
++                        }
++                }
+ #endif
+         }
+ 
+-- 
+2.42.0
+

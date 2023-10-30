@@ -1,0 +1,19 @@
+From c8c90eb456aa46fe773e01e881c0b99f0e0264c7 Mon Sep 17 00:00:00 2001
+From: Eric Engestrom <eric@engestrom.ch>
+Date: Wed, 25 Oct 2023 21:29:33 +0100
+Subject: [PATCH 834/834] VERSION: bump for rc1
+
+---
+ VERSION | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/VERSION b/VERSION
+index 67ca207feec..5c34834d2af 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-23.3.0-devel
++23.3.0-rc1
+-- 
+2.42.0
+

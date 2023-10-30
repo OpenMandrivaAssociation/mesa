@@ -1,0 +1,86 @@
+From 26c2c96d6228e27cdaa1335f798bf962df147bf1 Mon Sep 17 00:00:00 2001
+From: Rohan Garg <rohan.garg@intel.com>
+Date: Tue, 10 Oct 2023 16:59:17 +0200
+Subject: [PATCH 160/834] anv: enable FCV for Gen12.5
+
+Now that we have proper handling of FCV_CCS_E everywhere, we can turn
+this on for Gen12.5.
+
+This helps fix a performance regression where enabling fast
+clears to non-zero values with CCS_E caused additional partial resolves,
+regressing performance on certain games. Performance is helped on the
+following games:
+  - F1'22: +45%
+  - RDR2: +6%
+
+Signed-off-by: Rohan Garg <rohan.garg@intel.com>
+Reviewed-by: Nanley Chery <nanley.g.chery@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25589>
+---
+ src/intel/genxml/gen125.xml        |  2 ++
+ src/intel/vulkan/anv_image.c       | 22 ++++++++++++++++++----
+ src/intel/vulkan/genX_init_state.c |  2 ++
+ 3 files changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/src/intel/genxml/gen125.xml b/src/intel/genxml/gen125.xml
+index 72b3eeacc55..9be1033f49e 100644
+--- a/src/intel/genxml/gen125.xml
++++ b/src/intel/genxml/gen125.xml
+@@ -421,6 +421,8 @@
+     <field name="3D Scoreboard Hashing Mode Mask" start="52" end="52" type="bool" />
+     <field name="Subslice Hashing Table Enable Mask" start="53" end="53" type="bool" />
+     <field name="Slice Hashing Table Enable Mask" start="54" end="54" type="bool" />
++    <field name="Fast Clear Optimization Enable" start="106" end="106" type="bool" />
++    <field name="Fast Clear Optimization Enable Mask" start="122" end="122" type="bool" />
+   </instruction>
+   <instruction name="3DSTATE_BINDING_TABLE_POINTERS_DS" bias="2" length="2" engine="render">
+     <field name="DWord Length" start="0" end="7" type="uint" default="0" />
+diff --git a/src/intel/vulkan/anv_image.c b/src/intel/vulkan/anv_image.c
+index d8e8220d826..2b61e9587a0 100644
+--- a/src/intel/vulkan/anv_image.c
++++ b/src/intel/vulkan/anv_image.c
+@@ -769,10 +769,24 @@ add_aux_surface_if_supported(struct anv_device *device,
+       if (anv_formats_ccs_e_compatible(device->info, image->vk.create_flags,
+                                        image->vk.format, image->vk.tiling,
+                                        image->vk.usage, fmt_list)) {
+-         image->planes[plane].aux_usage =
+-            intel_needs_workaround(device->info, 1607794140) ?
+-               ISL_AUX_USAGE_FCV_CCS_E :
+-               ISL_AUX_USAGE_CCS_E;
++         if (intel_needs_workaround(device->info, 1607794140)) {
++            /* FCV is permanently enabled on this HW. */
++            image->planes[plane].aux_usage = ISL_AUX_USAGE_FCV_CCS_E;
++         } else if (device->info->verx10 == 125) {
++            /* FCV is enabled via 3DSTATE_3D_MODE. We'd expect plain CCS_E to
++             * perform better because it allows for non-zero fast clear colors,
++             * but we've run into regressions in several benchmarks (F1 22 and
++             * RDR2) when trying to enable it. When non-zero clear colors are
++             * enabled, we've observed many partial resolves. We haven't yet
++             * root-caused what layout transitions are causing these resolves,
++             * so in the meantime, we choose to reduce our clear color support.
++             * With only zero clear colors being supported, we might as well
++             * turn on FCV.
++             */
++            image->planes[plane].aux_usage = ISL_AUX_USAGE_FCV_CCS_E;
++         } else {
++            image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_E;
++         }
+       } else if (device->info->ver >= 12) {
+          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                        "The CCS_D aux mode is not yet handled on "
+diff --git a/src/intel/vulkan/genX_init_state.c b/src/intel/vulkan/genX_init_state.c
+index 965ff32f25e..ff534193e5a 100644
+--- a/src/intel/vulkan/genX_init_state.c
++++ b/src/intel/vulkan/genX_init_state.c
+@@ -161,6 +161,8 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
+       mode.CrossSliceHashingMode = (util_bitcount(ppipe_mask) > 1 ?
+ 				    hashing32x32 : NormalMode);
+       mode.CrossSliceHashingModeMask = -1;
++      mode.FastClearOptimizationEnable = true;
++      mode.FastClearOptimizationEnableMask = true;
+    }
+ #endif
+ }
+-- 
+2.42.0
+

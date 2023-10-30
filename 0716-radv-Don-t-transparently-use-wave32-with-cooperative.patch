@@ -1,0 +1,39 @@
+From 31863aa48cd70ee949e4ea1317346cf6aa4c87c8 Mon Sep 17 00:00:00 2001
+From: Bas Nieuwenhuizen <bas@basnieuwenhuizen.nl>
+Date: Sun, 23 Jul 2023 22:14:04 +0200
+Subject: [PATCH 716/834] radv: Don't transparently use wave32 with cooperative
+ matrices.
+
+The instruction has different regsizes for wave32 vs. wave64.
+
+To ensure cases with cooperative matrix load/store without any
+actual wmma instructions get handled correctly, also require
+full subgroups if subgroup invocation/id are used. Not sure
+those could be transparently changed anyway.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24683>
+---
+ src/amd/vulkan/radv_shader_info.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_shader_info.c b/src/amd/vulkan/radv_shader_info.c
+index 44dec6af0e9..c87f401f60b 100644
+--- a/src/amd/vulkan/radv_shader_info.c
++++ b/src/amd/vulkan/radv_shader_info.c
+@@ -911,10 +911,11 @@ gather_shader_info_cs(struct radv_device *device, const nir_shader *nir, const s
+    unsigned local_size = nir->info.workgroup_size[0] * nir->info.workgroup_size[1] * nir->info.workgroup_size[2];
+ 
+    /* Games don't always request full subgroups when they should, which can cause bugs if cswave32
+-    * is enabled.
++    * is enabled. Furthermore, if cooperative matrices or subgroup info are used, we can't transparently change
++    * the subgroup size.
+     */
+    const bool require_full_subgroups =
+-      pipeline_key->stage_info[MESA_SHADER_COMPUTE].subgroup_require_full ||
++      pipeline_key->stage_info[MESA_SHADER_COMPUTE].subgroup_require_full || nir->info.cs.has_cooperative_matrix ||
+       (default_wave_size == 32 && nir->info.uses_wide_subgroup_intrinsics && local_size % RADV_SUBGROUP_SIZE == 0);
+ 
+    const unsigned required_subgroup_size = pipeline_key->stage_info[MESA_SHADER_COMPUTE].subgroup_required_size * 32;
+-- 
+2.42.0
+

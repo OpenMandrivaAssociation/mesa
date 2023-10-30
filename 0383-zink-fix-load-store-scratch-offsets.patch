@@ -1,0 +1,39 @@
+From 764851a24cd98e2f7d464c68bd43f6d03037312c Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Fri, 29 Sep 2023 10:53:53 +0200
+Subject: [PATCH 383/834] zink: fix load/store scratch offsets
+
+The offset is originally in bytes, so we have to handle it just like
+shared load/stores.
+
+Fixes: ddc5c304899 ("zink: handle global and scratch vars")
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/drivers/zink/zink_compiler.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/zink_compiler.c b/src/gallium/drivers/zink/zink_compiler.c
+index d2061e492a9..7dd83c63d05 100644
+--- a/src/gallium/drivers/zink/zink_compiler.c
++++ b/src/gallium/drivers/zink/zink_compiler.c
+@@ -2044,6 +2044,7 @@ rewrite_bo_access_instr(nir_builder *b, nir_instr *instr, void *data)
+       }
+       return true;
+    }
++   case nir_intrinsic_load_scratch:
+    case nir_intrinsic_load_shared:
+       b->cursor = nir_before_instr(instr);
+       bool force_2x32 = intr->def.bit_size == 64 && !has_int64;
+@@ -2080,6 +2081,7 @@ rewrite_bo_access_instr(nir_builder *b, nir_instr *instr, void *data)
+       }
+       return true;
+    }
++   case nir_intrinsic_store_scratch:
+    case nir_intrinsic_store_shared: {
+       b->cursor = nir_before_instr(instr);
+       bool force_2x32 = nir_src_bit_size(intr->src[0]) == 64 && !has_int64;
+-- 
+2.42.0
+

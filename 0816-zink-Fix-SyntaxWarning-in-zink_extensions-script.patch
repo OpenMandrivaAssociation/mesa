@@ -1,0 +1,31 @@
+From 6bbbdd5ceb7b803a844f820964e68cd92c057215 Mon Sep 17 00:00:00 2001
+From: Seppo Yli-Olli <seppo.yliolli@gmail.com>
+Date: Wed, 25 Oct 2023 11:55:47 +0000
+Subject: [PATCH 816/834] zink: Fix SyntaxWarning in zink_extensions script
+
+Fix regex pattern in zink_extensions to use proper escaping. While the original
+code works, it relies on Python ignoring incorrect syntax and fallbacking to
+passing through the escape. Current behaviour results in SyntaxWarning
+whenever the code is used.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25881>
+---
+ src/gallium/drivers/zink/zink_extensions.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/zink/zink_extensions.py b/src/gallium/drivers/zink/zink_extensions.py
+index 9f0675d4c97..31634400ebd 100644
+--- a/src/gallium/drivers/zink/zink_extensions.py
++++ b/src/gallium/drivers/zink/zink_extensions.py
+@@ -113,7 +113,7 @@ class Extension:
+             match_os = re.match(".*win32$", original)
+ 
+             # try to match extensions with alphanumeric names, like robustness2
+-            match_alphanumeric = re.match("([a-z]+)(\d+)", original)
++            match_alphanumeric = re.match(r"([a-z]+)(\d+)", original)
+ 
+             if match_types is not None or match_os is not None:
+                 return original.upper()
+-- 
+2.42.0
+

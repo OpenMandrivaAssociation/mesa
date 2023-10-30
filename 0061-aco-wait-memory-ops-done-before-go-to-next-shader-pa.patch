@@ -1,0 +1,88 @@
+From 5ef7c5482975537ca838b51ca356f654ecf7a9ad Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Sat, 19 Aug 2023 15:36:00 +0800
+Subject: [PATCH 061/834] aco: wait memory ops done before go to next shader
+ part
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Next part don't know whether p_end_with_regs args are loaded from
+memory ops or not, need to wait it's done here.
+
+Other memory load needs to be waited too like:
+  a = load_mem()
+  b = ...
+  if (...) {
+    wait_mem(a)
+    store_mem(a)
+  }
+  p_end_with_regs(b)
+
+"a" still needs to be waited, otherwise next shader part regs may
+be overwritten by unfinished memory loads.
+
+Memory stores are waited too. When >=gfx10 and last VGT has no
+parameter export, we need to wait all memeory stores done before
+pos export (see ac_nir_export_position). So when merged shader
+(ES+GS or VS+GS) is partially built, first stage needs to wait
+all memory stores done, otherwise second stage don't know if
+any memory stores pending before.
+
+Reviewed-by: Daniel Schürmann <daniel@schuermann.dev>
+Signe-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24973>
+---
+ src/amd/compiler/aco_insert_waitcnt.cpp    | 11 ++++++-----
+ src/amd/compiler/aco_lower_to_hw_instr.cpp |  6 ++++++
+ 2 files changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/src/amd/compiler/aco_insert_waitcnt.cpp b/src/amd/compiler/aco_insert_waitcnt.cpp
+index 71d073965f8..6e292a9bb72 100644
+--- a/src/amd/compiler/aco_insert_waitcnt.cpp
++++ b/src/amd/compiler/aco_insert_waitcnt.cpp
+@@ -1082,6 +1082,12 @@ handle_block(Program* program, Block& block, wait_ctx& ctx)
+       }
+    }
+ 
++   /* For last block of a program which has succeed shader part, wait all memory ops done
++    * before go to next shader part.
++    */
++   if (block.kind & block_kind_end_with_regs)
++      force_waitcnt(ctx, queued_imm);
++
+    if (!queued_imm.empty())
+       emit_waitcnt(ctx, new_instructions, queued_imm);
+    if (!queued_delay.empty())
+@@ -1153,11 +1159,6 @@ insert_wait_states(Program* program)
+          in_ctx[current.index] = ctx;
+       }
+ 
+-      if (current.instructions.empty()) {
+-         out_ctx[current.index] = std::move(ctx);
+-         continue;
+-      }
+-
+       loop_progress = std::max<unsigned>(loop_progress, current.loop_nest_depth);
+       done[current.index] = true;
+ 
+diff --git a/src/amd/compiler/aco_lower_to_hw_instr.cpp b/src/amd/compiler/aco_lower_to_hw_instr.cpp
+index 480ea19dd58..edadca72bb9 100644
+--- a/src/amd/compiler/aco_lower_to_hw_instr.cpp
++++ b/src/amd/compiler/aco_lower_to_hw_instr.cpp
+@@ -3065,6 +3065,12 @@ lower_to_hw_instr(Program* program)
+ 
+       Builder bld(program, end_with_regs_block);
+       bld.sopp(aco_opcode::s_branch, exit_block->index);
++
++      /* For insert waitcnt pass to add waitcnt in exit block, otherwise waitcnt will be added
++       * after the s_branch which won't be executed.
++       */
++      end_with_regs_block->kind &= ~block_kind_end_with_regs;
++      exit_block->kind |= block_kind_end_with_regs;
+    }
+ }
+ 
+-- 
+2.42.0
+

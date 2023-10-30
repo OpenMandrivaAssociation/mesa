@@ -1,0 +1,33 @@
+From 1c1b890be3dd4f1238753a5b748832f279ad0071 Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Mon, 11 Sep 2023 22:37:46 -0400
+Subject: [PATCH 611/834] d3d12: Do not destroy codec when destroying video
+ buffer
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ src/gallium/drivers/d3d12/d3d12_video_buffer.cpp | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp b/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp
+index 62a1d2725d1..0dfdf65a4aa 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_buffer.cpp
+@@ -151,13 +151,6 @@ d3d12_video_buffer_destroy(struct pipe_video_buffer *buffer)
+       pD3D12VideoBuffer->base.associated_data = nullptr;
+    }
+ 
+-   // Destroy (if any) codec where the associated data came from
+-   if (pD3D12VideoBuffer->base.codec != nullptr) {
+-      d3d12_video_decoder_destroy(pD3D12VideoBuffer->base.codec);
+-      // Set to nullptr after cleanup, no dangling pointers
+-      pD3D12VideoBuffer->base.codec = nullptr;
+-   }
+-
+    for (uint i = 0; i < pD3D12VideoBuffer->surfaces.size(); ++i) {
+       if (pD3D12VideoBuffer->surfaces[i] != NULL) {
+          pipe_surface_reference(&pD3D12VideoBuffer->surfaces[i], NULL);
+-- 
+2.42.0
+

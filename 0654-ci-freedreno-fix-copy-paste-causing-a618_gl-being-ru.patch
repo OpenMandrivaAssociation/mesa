@@ -1,0 +1,32 @@
+From 5d87cd4e5194b86d9bce5b440f2fa86649b3b1a8 Mon Sep 17 00:00:00 2001
+From: David Heidelberg <david.heidelberg@collabora.com>
+Date: Thu, 19 Oct 2023 17:22:02 +0200
+Subject: [PATCH 654/834] ci/freedreno: fix copy paste causing a618_gl being
+ run only in manual pipeline
+
+Fixes: 9d442b459a43 ("ci/freedreno: handle disabling farm properly for each FD/Collabora farm")
+Closes: #9992
+
+Acked-by: Guilherme Gallo <guilherme.gallo@collabora.com>
+Signed-off-by: David Heidelberg <david.heidelberg@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25816>
+---
+ src/freedreno/ci/gitlab-ci-inc.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/freedreno/ci/gitlab-ci-inc.yml b/src/freedreno/ci/gitlab-ci-inc.yml
+index 845b4ec16ed..ea2fdf942dc 100644
+--- a/src/freedreno/ci/gitlab-ci-inc.yml
++++ b/src/freedreno/ci/gitlab-ci-inc.yml
+@@ -80,7 +80,7 @@
+ .collabora-turnip-rules:
+   stage: freedreno
+   rules:
+-    - !reference [.freedreno-farm-manual-rules, rules]
++    - !reference [.collabora-farm-rules, rules]
+     - !reference [.freedreno-common-rules, rules]
+     - !reference [.vulkan-rules, rules]
+     - changes: *freedreno_vulkan_file_list
+-- 
+2.42.0
+

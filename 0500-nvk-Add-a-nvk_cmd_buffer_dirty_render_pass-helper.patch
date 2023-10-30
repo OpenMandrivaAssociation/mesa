@@ -1,0 +1,67 @@
+From c6509ffcea2448295061f5c17cd3df9d43d76361 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 17 Oct 2023 08:28:45 -0500
+Subject: [PATCH 500/834] nvk: Add a nvk_cmd_buffer_dirty_render_pass() helper
+
+This makes the dirtying work properly in the case where dynamic
+rendering is being used.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25765>
+---
+ src/nouveau/vulkan/nvk_cmd_draw.c | 19 ++++++++++++++-----
+ 1 file changed, 14 insertions(+), 5 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_cmd_draw.c b/src/nouveau/vulkan/nvk_cmd_draw.c
+index 047a403d79b..0a4ea4afaea 100644
+--- a/src/nouveau/vulkan/nvk_cmd_draw.c
++++ b/src/nouveau/vulkan/nvk_cmd_draw.c
+@@ -443,6 +443,17 @@ nvk_queue_init_context_draw_state(struct nvk_queue *queue)
+                                   0, NULL);
+ }
+ 
++static void
++nvk_cmd_buffer_dirty_render_pass(struct nvk_cmd_buffer *cmd)
++{
++   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
++
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE);
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE);
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE);
++   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE);
++}
++
+ void
+ nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
+                               const VkCommandBufferBeginInfo *pBeginInfo)
+@@ -488,6 +499,8 @@ nvk_cmd_buffer_begin_graphics(struct nvk_cmd_buffer *cmd,
+             inheritance_info->depthAttachmentFormat;
+          render->stencil_att.vk_format =
+             inheritance_info->stencilAttachmentFormat;
++
++         nvk_cmd_buffer_dirty_render_pass(cmd);
+       }
+    }
+ }
+@@ -546,7 +559,6 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
+ {
+    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+    struct nvk_rendering_state *render = &cmd->state.gfx.render;
+-   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+ 
+    memset(render, 0, sizeof(*render));
+ 
+@@ -570,10 +582,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
+    nvk_attachment_init(&render->stencil_att,
+                        pRenderingInfo->pStencilAttachment);
+ 
+-   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE);
+-   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_WRITE_ENABLE);
+-   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_DEPTH_BOUNDS_TEST_ENABLE);
+-   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_DS_STENCIL_TEST_ENABLE);
++   nvk_cmd_buffer_dirty_render_pass(cmd);
+ 
+    /* Always emit at least one color attachment, even if it's just a dummy. */
+    uint32_t color_att_count = MAX2(1, render->color_att_count);
+-- 
+2.42.0
+

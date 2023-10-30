@@ -1,0 +1,37 @@
+From a5ef1067be42ec769d0784b74cd59cb45862a15f Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 381/834] zink: implement remaining pack ops via bitcast
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index b2080f6cf15..258672b8999 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -2101,6 +2101,17 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
+       result = spirv_builder_emit_quadop(&ctx->builder, SpvOpBitFieldInsert, dest_type, src[0], src[1], src[2], src[3]);
+       break;
+ 
++   /* those are all simple bitcasts, we could do better, but it doesn't matter */
++   case nir_op_pack_32_4x8:
++   case nir_op_pack_32_2x16:
++   case nir_op_pack_64_4x16:
++   case nir_op_unpack_32_4x8:
++   case nir_op_unpack_32_2x16:
++   case nir_op_unpack_64_4x16: {
++      result = emit_bitcast(ctx, dest_type, src[0]);
++      break;
++   }
++
+    case nir_op_pack_32_2x16_split:
+    case nir_op_pack_64_2x32_split: {
+       nir_alu_type type = nir_alu_type_get_base_type(nir_op_infos[alu->op].input_types[0]);
+-- 
+2.42.0
+

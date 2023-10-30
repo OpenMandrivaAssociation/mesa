@@ -1,0 +1,55 @@
+From 16383332a9ebcdc3562cacf616503f5953d77c19 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Mon, 9 Oct 2023 19:38:26 +0200
+Subject: [PATCH 433/834] rusticl: Make EventSig take ownership of its
+ environment
+
+Needed because some events may consume their inputs. E.g. it will shortly be needed for the SVMFreeCb.
+SVMMemFill will also soon require mutable access.
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/core/event.rs | 10 +++-------
+ 1 file changed, 3 insertions(+), 7 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/core/event.rs b/src/gallium/frontends/rusticl/core/event.rs
+index 44520928cc7..ecea0568f58 100644
+--- a/src/gallium/frontends/rusticl/core/event.rs
++++ b/src/gallium/frontends/rusticl/core/event.rs
+@@ -24,7 +24,7 @@ static_assert!(CL_RUNNING == 1);
+ static_assert!(CL_SUBMITTED == 2);
+ static_assert!(CL_QUEUED == 3);
+ 
+-pub type EventSig = Box<dyn Fn(&Arc<Queue>, &PipeContext) -> CLResult<()>>;
++pub type EventSig = Box<dyn FnOnce(&Arc<Queue>, &PipeContext) -> CLResult<()>>;
+ 
+ pub enum EventTimes {
+     Queued = CL_PROFILING_COMMAND_QUEUED as isize,
+@@ -205,10 +205,9 @@ impl Event {
+                 // We already have the lock so can't call set_time on the event
+                 lock.time_submit = queue.device.screen().get_timestamp();
+             }
+-            let work = lock.work.take();
+             let mut query_start = None;
+             let mut query_end = None;
+-            let new = work.as_ref().map_or(
++            let new = lock.work.take().map_or(
+                 // if there is no work
+                 CL_SUBMITTED as cl_int,
+                 |w| {
+@@ -229,10 +228,7 @@ impl Event {
+                     res
+                 },
+             );
+-            // we have to make sure that the work object is dropped before we notify about the
+-            // status change. It's probably fine to move the value above, but we have to be
+-            // absolutely sure it happens before the status update.
+-            drop(work);
++
+             if profiling_enabled {
+                 lock.time_start = query_start.unwrap().read_blocked();
+                 lock.time_end = query_end.unwrap().read_blocked();
+-- 
+2.42.0
+

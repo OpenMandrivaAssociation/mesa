@@ -1,0 +1,42 @@
+From 20b37b273f86d6eff4a99b30de90c914d6cc3c08 Mon Sep 17 00:00:00 2001
+From: Iago Toral Quiroga <itoral@igalia.com>
+Date: Wed, 29 Sep 2021 11:54:18 +0200
+Subject: [PATCH 277/834] broadcom/compiler: make vir_write_rX return false on
+ platforms without accums
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Alejandro Piñeiro <apinheiro@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25450>
+---
+ src/broadcom/compiler/vir.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/broadcom/compiler/vir.c b/src/broadcom/compiler/vir.c
+index ef91bd7c556..1a24c6e1618 100644
+--- a/src/broadcom/compiler/vir.c
++++ b/src/broadcom/compiler/vir.c
+@@ -158,6 +158,9 @@ vir_is_tex(const struct v3d_device_info *devinfo, struct qinst *inst)
+ bool
+ vir_writes_r3(const struct v3d_device_info *devinfo, struct qinst *inst)
+ {
++        if (!devinfo->has_accumulators)
++                return false;
++
+         for (int i = 0; i < vir_get_nsrc(inst); i++) {
+                 switch (inst->src[i].file) {
+                 case QFILE_VPM:
+@@ -180,6 +183,9 @@ vir_writes_r3(const struct v3d_device_info *devinfo, struct qinst *inst)
+ bool
+ vir_writes_r4(const struct v3d_device_info *devinfo, struct qinst *inst)
+ {
++        if (!devinfo->has_accumulators)
++                return false;
++
+         switch (inst->dst.file) {
+         case QFILE_MAGIC:
+                 switch (inst->dst.index) {
+-- 
+2.42.0
+

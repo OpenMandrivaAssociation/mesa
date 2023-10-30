@@ -1,0 +1,89 @@
+From 3d3641e446794e3ebfe07de81b37c4d60eea26f0 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Tue, 10 Oct 2023 10:26:19 -0500
+Subject: [PATCH 133/834] nvk: Emit MME_DMA_SYSMEMBAR before indirect
+ draw/dispatch
+
+This fixes issues where we may read stale data from other parts of the
+GPU when we go to do an indirect draw fetch.
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25653>
+---
+ src/nouveau/vulkan/nvk_cmd_dispatch.c |  3 ++-
+ src/nouveau/vulkan/nvk_cmd_draw.c     | 15 ++++++++++-----
+ 2 files changed, 12 insertions(+), 6 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_cmd_dispatch.c b/src/nouveau/vulkan/nvk_cmd_dispatch.c
+index 26cc86eb1c6..05a2c734a92 100644
+--- a/src/nouveau/vulkan/nvk_cmd_dispatch.c
++++ b/src/nouveau/vulkan/nvk_cmd_dispatch.c
+@@ -394,8 +394,9 @@ nvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
+    if (unlikely(qmd_addr == 0))
+       return;
+ 
+-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 16);
++   struct nv_push *p = nvk_cmd_buffer_push(cmd, 18);
+ 
++   P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+    P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DISPATCH_INDIRECT));
+    P_INLINE_DATA(p, nvk_compute_local_size(cmd));
+diff --git a/src/nouveau/vulkan/nvk_cmd_draw.c b/src/nouveau/vulkan/nvk_cmd_draw.c
+index 6a9ee86233c..43e68bfb241 100644
+--- a/src/nouveau/vulkan/nvk_cmd_draw.c
++++ b/src/nouveau/vulkan/nvk_cmd_draw.c
+@@ -2101,7 +2101,8 @@ nvk_CmdDrawIndirect(VkCommandBuffer commandBuffer,
+    });
+ 
+    if (nvk_cmd_buffer_3d_cls(cmd) >= TURING_A) {
+-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
++      struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
++      P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+       P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+       P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDIRECT));
+       P_INLINE_DATA(p, begin);
+@@ -2218,7 +2219,8 @@ nvk_CmdDrawIndexedIndirect(VkCommandBuffer commandBuffer,
+    });
+ 
+    if (nvk_cmd_buffer_3d_cls(cmd) >= TURING_A) {
+-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
++      struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
++      P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+       P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+       P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDEXED_INDIRECT));
+       P_INLINE_DATA(p, begin);
+@@ -2315,7 +2317,8 @@ nvk_CmdDrawIndirectCount(VkCommandBuffer commandBuffer,
+       .split_mode = SPLIT_MODE_NORMAL_BEGIN_NORMAL_END,
+    });
+ 
+-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
++   struct nv_push *p = nvk_cmd_buffer_push(cmd, 12);
++   P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+    P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDIRECT_COUNT));
+    P_INLINE_DATA(p, begin);
+@@ -2392,7 +2395,8 @@ nvk_CmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer,
+       .split_mode = SPLIT_MODE_NORMAL_BEGIN_NORMAL_END,
+    });
+ 
+-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
++   struct nv_push *p = nvk_cmd_buffer_push(cmd, 12);
++   P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+    P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+    P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_INDEXED_INDIRECT_COUNT));
+    P_INLINE_DATA(p, begin);
+@@ -2508,9 +2512,10 @@ nvk_CmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer,
+    });
+ 
+    if (nvk_cmd_buffer_3d_cls(cmd) >= TURING_A) {
+-      struct nv_push *p = nvk_cmd_buffer_push(cmd, 12);
++      struct nv_push *p = nvk_cmd_buffer_push(cmd, 14);
+       P_IMMD(p, NV9097, SET_DRAW_AUTO_START, counterOffset);
+       P_IMMD(p, NV9097, SET_DRAW_AUTO_STRIDE, vertexStride);
++      P_IMMD(p, NVC597, MME_DMA_SYSMEMBAR, 0);
+       P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+ 
+       P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_XFB_DRAW_INDIRECT));
+-- 
+2.42.0
+

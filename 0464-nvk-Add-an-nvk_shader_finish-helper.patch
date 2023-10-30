@@ -1,0 +1,67 @@
+From 0c84c559725c75cce1fb4724f3bf5716af3663a2 Mon Sep 17 00:00:00 2001
+From: Faith Ekstrand <faith.ekstrand@collabora.com>
+Date: Sat, 14 Oct 2023 00:18:45 -0500
+Subject: [PATCH 464/834] nvk: Add an nvk_shader_finish() helper
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25747>
+---
+ src/nouveau/vulkan/nvk_pipeline.c | 10 ++--------
+ src/nouveau/vulkan/nvk_shader.c   | 11 +++++++++++
+ src/nouveau/vulkan/nvk_shader.h   |  3 +++
+ 3 files changed, 16 insertions(+), 8 deletions(-)
+
+diff --git a/src/nouveau/vulkan/nvk_pipeline.c b/src/nouveau/vulkan/nvk_pipeline.c
+index 2b5815ebb4f..36a71c4fb56 100644
+--- a/src/nouveau/vulkan/nvk_pipeline.c
++++ b/src/nouveau/vulkan/nvk_pipeline.c
+@@ -32,14 +32,8 @@ nvk_pipeline_free(struct nvk_device *dev,
+                   struct nvk_pipeline *pipeline,
+                   const VkAllocationCallbacks *pAllocator)
+ {
+-   for (uint32_t s = 0; s < ARRAY_SIZE(pipeline->shaders); s++) {
+-      if (pipeline->shaders[s].upload_size > 0) {
+-         nvk_heap_free(dev, &dev->shader_heap,
+-                       pipeline->shaders[s].upload_addr,
+-                       pipeline->shaders[s].upload_size);
+-      }
+-      free(pipeline->shaders[s].xfb);
+-   }
++   for (uint32_t s = 0; s < ARRAY_SIZE(pipeline->shaders); s++)
++      nvk_shader_finish(dev, &pipeline->shaders[s]);
+ 
+    vk_object_free(&dev->vk, pAllocator, pipeline);
+ }
+diff --git a/src/nouveau/vulkan/nvk_shader.c b/src/nouveau/vulkan/nvk_shader.c
+index ee7df9b9af1..59c550dbd6e 100644
+--- a/src/nouveau/vulkan/nvk_shader.c
++++ b/src/nouveau/vulkan/nvk_shader.c
+@@ -1306,3 +1306,14 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
+ 
+    return result;
+ }
++
++void
++nvk_shader_finish(struct nvk_device *dev, struct nvk_shader *shader)
++{
++   if (shader->upload_size > 0) {
++      nvk_heap_free(dev, &dev->shader_heap,
++                    shader->upload_addr,
++                    shader->upload_size);
++   }
++   free(shader->xfb);
++}
+diff --git a/src/nouveau/vulkan/nvk_shader.h b/src/nouveau/vulkan/nvk_shader.h
+index 8c4c58d4361..14b2fa4813b 100644
+--- a/src/nouveau/vulkan/nvk_shader.h
++++ b/src/nouveau/vulkan/nvk_shader.h
+@@ -146,4 +146,7 @@ nvk_compile_nir(struct nvk_physical_device *dev, nir_shader *nir,
+ 
+ VkResult
+ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader);
++
++void
++nvk_shader_finish(struct nvk_device *dev, struct nvk_shader *shader);
+ #endif
+-- 
+2.42.0
+

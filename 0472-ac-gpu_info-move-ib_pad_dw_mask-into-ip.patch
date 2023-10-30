@@ -1,0 +1,125 @@
+From 5edc0da8ece801548e9465ce36cdfc451cb3216c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Thu, 5 Oct 2023 05:37:44 -0400
+Subject: [PATCH 472/834] ac/gpu_info: move ib_pad_dw_mask into ip[]
+
+No change in behavior.
+
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25578>
+---
+ src/amd/common/ac_gpu_info.c                  | 22 +++++++++----------
+ src/amd/common/ac_gpu_info.h                  |  2 +-
+ src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c |  2 +-
+ src/gallium/winsys/amdgpu/drm/amdgpu_cs.c     |  6 ++---
+ 4 files changed, 16 insertions(+), 16 deletions(-)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index 60f04922403..b1383fd3505 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -689,15 +689,15 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+    }
+ 
+    /* This is "align_mask" copied from the kernel, maximums of all IP versions. */
+-   info->ib_pad_dw_mask[AMD_IP_GFX] = 0xff;
+-   info->ib_pad_dw_mask[AMD_IP_COMPUTE] = 0xff;
+-   info->ib_pad_dw_mask[AMD_IP_SDMA] = 0xf;
+-   info->ib_pad_dw_mask[AMD_IP_UVD] = 0xf;
+-   info->ib_pad_dw_mask[AMD_IP_VCE] = 0x3f;
+-   info->ib_pad_dw_mask[AMD_IP_UVD_ENC] = 0x3f;
+-   info->ib_pad_dw_mask[AMD_IP_VCN_DEC] = 0xf;
+-   info->ib_pad_dw_mask[AMD_IP_VCN_ENC] = 0x3f;
+-   info->ib_pad_dw_mask[AMD_IP_VCN_JPEG] = 0xf;
++   info->ip[AMD_IP_GFX].ib_pad_dw_mask = 0xff;
++   info->ip[AMD_IP_COMPUTE].ib_pad_dw_mask = 0xff;
++   info->ip[AMD_IP_SDMA].ib_pad_dw_mask = 0xf;
++   info->ip[AMD_IP_UVD].ib_pad_dw_mask = 0xf;
++   info->ip[AMD_IP_VCE].ib_pad_dw_mask = 0x3f;
++   info->ip[AMD_IP_UVD_ENC].ib_pad_dw_mask = 0x3f;
++   info->ip[AMD_IP_VCN_DEC].ib_pad_dw_mask = 0xf;
++   info->ip[AMD_IP_VCN_ENC].ib_pad_dw_mask = 0x3f;
++   info->ip[AMD_IP_VCN_JPEG].ib_pad_dw_mask = 0xf;
+ 
+    /* Only require gfx or compute. */
+    if (!info->ip[AMD_IP_GFX].num_queues && !info->ip[AMD_IP_COMPUTE].num_queues) {
+@@ -1682,9 +1682,9 @@ void ac_print_gpu_info(const struct radeon_info *info, FILE *f)
+ 
+    for (unsigned i = 0; i < AMD_NUM_IP_TYPES; i++) {
+       if (info->ip[i].num_queues) {
+-         fprintf(f, "    IP %-7s %2u.%u \tqueues:%u (align:%u, pad_dw:0x%x)\n", ip_string[i],
++         fprintf(f, "    IP %-7s %2u.%u \tqueues:%u \talign:%u \tpad_dw:0x%x\n", ip_string[i],
+                  info->ip[i].ver_major, info->ip[i].ver_minor, info->ip[i].num_queues,
+-                 info->ip[i].ib_alignment, info->ib_pad_dw_mask[i]);
++                 info->ip[i].ib_alignment, info->ip[i].ib_pad_dw_mask);
+       }
+    }
+ 
+diff --git a/src/amd/common/ac_gpu_info.h b/src/amd/common/ac_gpu_info.h
+index 384f71c7ccb..54ca2a6da9a 100644
+--- a/src/amd/common/ac_gpu_info.h
++++ b/src/amd/common/ac_gpu_info.h
+@@ -27,6 +27,7 @@ struct amd_ip_info {
+    uint8_t ver_rev;
+    uint8_t num_queues;
+    uint32_t ib_alignment;
++   uint32_t ib_pad_dw_mask;
+ };
+ 
+ struct radeon_info {
+@@ -80,7 +81,6 @@ struct radeon_info {
+    bool family_overridden; /* AMD_FORCE_FAMILY was used, skip command submission */
+    bool is_pro_graphics;
+    bool has_graphics; /* false if the chip is compute-only */
+-   uint32_t ib_pad_dw_mask[AMD_NUM_IP_TYPES];
+    bool has_clear_state;
+    bool has_distributed_tess;
+    bool has_dcc_constant_encode;
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+index e95d5d37a39..9ecc7d4f01d 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+@@ -429,7 +429,7 @@ radv_amdgpu_cs_finalize(struct radeon_cmdbuf *_cs)
+ 
+    assert(cs->base.cdw <= cs->base.reserved_dw);
+ 
+-   uint32_t ib_pad_dw_mask = MAX2(3, cs->ws->info.ib_pad_dw_mask[ip_type]);
++   uint32_t ib_pad_dw_mask = MAX2(3, cs->ws->info.ip[ip_type].ib_pad_dw_mask);
+    uint32_t nop_packet = get_nop_packet(cs);
+ 
+    if (cs->use_ib) {
+diff --git a/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c b/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c
+index 886f3272705..459a93bea1c 100644
+--- a/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c
++++ b/src/gallium/winsys/amdgpu/drm/amdgpu_cs.c
+@@ -1169,7 +1169,7 @@ amdgpu_cs_setup_preemption(struct radeon_cmdbuf *rcs, const uint32_t *preamble_i
+    memcpy(map, preamble_ib, preamble_num_dw * 4);
+ 
+    /* Pad the IB. */
+-   uint32_t ib_pad_dw_mask = ws->info.ib_pad_dw_mask[cs->ip_type];
++   uint32_t ib_pad_dw_mask = ws->info.ip[cs->ip_type].ib_pad_dw_mask;
+    while (preamble_num_dw & ib_pad_dw_mask)
+       map[preamble_num_dw++] = PKT3_NOP_PAD;
+    amdgpu_bo_unmap(&ws->dummy_ws.base, preamble_bo);
+@@ -1245,7 +1245,7 @@ static bool amdgpu_cs_check_space(struct radeon_cmdbuf *rcs, unsigned dw)
+    rcs->current.max_dw += cs_epilog_dw;
+ 
+    /* Pad with NOPs but leave 4 dwords for INDIRECT_BUFFER. */
+-   uint32_t ib_pad_dw_mask = cs->ws->info.ib_pad_dw_mask[cs->ip_type];
++   uint32_t ib_pad_dw_mask = cs->ws->info.ip[cs->ip_type].ib_pad_dw_mask;
+    while ((rcs->current.cdw & ib_pad_dw_mask) != ib_pad_dw_mask - 3)
+       radeon_emit(rcs, PKT3_NOP_PAD);
+ 
+@@ -1803,7 +1803,7 @@ static int amdgpu_cs_flush(struct radeon_cmdbuf *rcs,
+    struct amdgpu_cs *cs = amdgpu_cs(rcs);
+    struct amdgpu_winsys *ws = cs->ws;
+    int error_code = 0;
+-   uint32_t ib_pad_dw_mask = ws->info.ib_pad_dw_mask[cs->ip_type];
++   uint32_t ib_pad_dw_mask = ws->info.ip[cs->ip_type].ib_pad_dw_mask;
+ 
+    rcs->current.max_dw += amdgpu_cs_epilog_dws(cs);
+ 
+-- 
+2.42.0
+

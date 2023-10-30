@@ -1,0 +1,61 @@
+From 13cac671fd0d4292bba83cdd01f45be6a02ffec4 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Tue, 24 Oct 2023 16:52:41 +0200
+Subject: [PATCH 729/834] ac/gpu_info: fix querying the maximum number of IBs
+ per ring
+
+The kernel uses 32-bit and Mesa was using 8-bit...
+
+Fixes: 96345ae2ed3 ("ac/gpu_info: query the maximum number of IBs per submit from the kernel")
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25867>
+---
+ src/amd/common/ac_gpu_info.c                  | 4 +++-
+ src/amd/common/ac_gpu_info.h                  | 2 +-
+ src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c | 2 +-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index af2c39d4512..777aa493298 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -1544,7 +1544,9 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+       /* When the number of IBs can't be queried from the kernel, we choose a
+        * rough estimate that should work well (as of kernel 6.3).
+        */
+-      memset(info->max_submitted_ibs, 50, AMD_NUM_IP_TYPES);
++      for (unsigned i = 0; i < AMD_NUM_IP_TYPES; ++i)
++         info->max_submitted_ibs[i] = 50;
++
+       info->max_submitted_ibs[AMD_IP_GFX] = info->gfx_level >= GFX7 ? 192 : 144;
+       info->max_submitted_ibs[AMD_IP_COMPUTE] = 124;
+       info->max_submitted_ibs[AMD_IP_VCN_JPEG] = 16;
+diff --git a/src/amd/common/ac_gpu_info.h b/src/amd/common/ac_gpu_info.h
+index 404dac55d35..07323199089 100644
+--- a/src/amd/common/ac_gpu_info.h
++++ b/src/amd/common/ac_gpu_info.h
+@@ -192,7 +192,7 @@ struct radeon_info {
+    uint32_t drm_major; /* version */
+    uint32_t drm_minor;
+    uint32_t drm_patchlevel;
+-   uint8_t max_submitted_ibs[AMD_NUM_IP_TYPES];
++   uint32_t max_submitted_ibs[AMD_NUM_IP_TYPES];
+    bool is_amdgpu;
+    bool has_userptr;
+    bool has_syncobj;
+diff --git a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+index 39c8887785b..1d116de2ad1 100644
+--- a/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
++++ b/src/amd/vulkan/winsys/amdgpu/radv_amdgpu_cs.c
+@@ -1017,7 +1017,7 @@ radv_amdgpu_winsys_cs_submit_internal(struct radv_amdgpu_ctx *ctx, int queue_idx
+       goto fail;
+ 
+    /* Configure the CS request. */
+-   const uint8_t *max_ib_per_ip = ws->info.max_submitted_ibs;
++   const uint32_t *max_ib_per_ip = ws->info.max_submitted_ibs;
+    struct radv_amdgpu_cs_request request = {
+       .ip_type = last_cs->hw_ip,
+       .ip_instance = 0,
+-- 
+2.42.0
+

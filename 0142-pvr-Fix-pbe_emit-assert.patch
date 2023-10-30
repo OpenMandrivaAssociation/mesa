@@ -1,0 +1,52 @@
+From e5feea38262b479b402e2cb07ff336b4f1638879 Mon Sep 17 00:00:00 2001
+From: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Date: Wed, 27 Sep 2023 19:30:25 +0100
+Subject: [PATCH 142/834] pvr: Fix pbe_emit assert
+
+The `eot_surface_count` also includes surfaces which don't need an
+emit. Surfaces with PVR_RESOLVE_TYPE_TRANSFER don't need an emit
+since they'll be resolved through a transfer op, but they still count
+against the total, thus the assert was incorrect.
+
+Signed-off-by: Karmjit Mahil <Karmjit.Mahil@imgtec.com>
+Reviewed-by: Frank Binns <frank.binns@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25584>
+---
+ src/imagination/vulkan/pvr_cmd_buffer.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/imagination/vulkan/pvr_cmd_buffer.c b/src/imagination/vulkan/pvr_cmd_buffer.c
+index 23708609790..212bd7f6b47 100644
+--- a/src/imagination/vulkan/pvr_cmd_buffer.c
++++ b/src/imagination/vulkan/pvr_cmd_buffer.c
+@@ -1307,7 +1307,7 @@ pvr_setup_emit_state(const struct pvr_device_info *dev_info,
+                      struct pvr_render_pass_info *render_pass_info,
+                      struct pvr_emit_state *emit_state)
+ {
+-   assert(hw_render->eot_surface_count < PVR_MAX_COLOR_ATTACHMENTS);
++   assert(hw_render->pbe_emits <= PVR_NUM_PBE_EMIT_REGS);
+ 
+    if (hw_render->eot_surface_count == 0) {
+       emit_state->emit_count = 1;
+@@ -1346,6 +1346,9 @@ pvr_setup_emit_state(const struct pvr_device_info *dev_info,
+          samples = (uint32_t)resolve_src->vk.image->samples;
+       }
+ 
++      assert(emit_state->emit_count < ARRAY_SIZE(emit_state->pbe_cs_words));
++      assert(emit_state->emit_count < ARRAY_SIZE(emit_state->pbe_reg_words));
++
+       pvr_setup_pbe_state(dev_info,
+                           framebuffer,
+                           emit_state->emit_count,
+@@ -1358,6 +1361,8 @@ pvr_setup_emit_state(const struct pvr_device_info *dev_info,
+                           emit_state->pbe_reg_words[i]);
+       emit_state->emit_count += 1;
+    }
++
++   assert(emit_state->emit_count == hw_render->pbe_emits);
+ }
+ 
+ static inline bool
+-- 
+2.42.0
+

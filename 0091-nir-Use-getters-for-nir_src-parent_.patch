@@ -1,0 +1,2045 @@
+From c39896b17b48178fdf89400ce209c22a61f583db Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Date: Mon, 14 Aug 2023 09:58:47 -0400
+Subject: [PATCH 091/834] nir: Use getters for nir_src::parent_*
+
+First, we need to give the parent_instr field a unique name to be able to
+replace with a helper.  We have parent_instr fields for both nir_src and
+nir_def, so let's rename nir_src::parent_instr in preparation for rework.
+
+This was done with a combination of sed and manual fix-ups.
+
+Then we use semantic patches plus manual fixups:
+
+    @@
+    expression s;
+    @@
+
+    -s->renamed_parent_instr
+    +nir_src_parent_instr(s)
+
+    @@
+    expression s;
+    @@
+
+    -s.renamed_parent_instr
+    +nir_src_parent_instr(&s)
+
+    @@
+    expression s;
+    @@
+
+    -s->parent_if
+    +nir_src_parent_if(s)
+
+    @@
+    expression s;
+    @@
+
+    -s.renamed_parent_if
+    +nir_src_parent_if(&s)
+
+    @@
+    expression s;
+    @@
+
+    -s->is_if
+    +nir_src_is_if(s)
+
+    @@
+    expression s;
+    @@
+
+    -s.is_if
+    +nir_src_is_if(&s)
+
+Signed-off-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Rhys Perry <pendingchaos02@gmail.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24671>
+---
+ .../aco_instruction_selection_setup.cpp       |  8 ++---
+ src/asahi/compiler/agx_nir_opt_preamble.c     | 11 +++---
+ src/compiler/nir/nir.c                        | 20 +++++------
+ src/compiler/nir/nir.h                        | 34 +++++++++----------
+ src/compiler/nir/nir_deref.c                  | 21 ++++++------
+ src/compiler/nir/nir_from_ssa.c               | 10 +++---
+ src/compiler/nir/nir_group_loads.c            |  4 +--
+ src/compiler/nir/nir_legacy.c                 | 14 ++++----
+ src/compiler/nir/nir_loop_analyze.c           |  2 +-
+ src/compiler/nir/nir_lower_flrp.c             |  2 +-
+ src/compiler/nir/nir_lower_mediump.c          |  4 +--
+ .../nir/nir_lower_reg_intrinsics_to_ssa.c     |  2 +-
+ src/compiler/nir/nir_lower_scratch.c          | 10 +++---
+ src/compiler/nir/nir_lower_shader_calls.c     | 20 +++++------
+ src/compiler/nir/nir_lower_vec_to_regs.c      |  4 +--
+ .../nir/nir_move_vec_src_uses_to_dest.c       | 10 +++---
+ src/compiler/nir/nir_opt_comparison_pre.c     |  2 +-
+ src/compiler/nir/nir_opt_copy_propagate.c     |  4 +--
+ src/compiler/nir/nir_opt_dead_cf.c            |  6 ++--
+ src/compiler/nir/nir_opt_gcm.c                |  4 +--
+ src/compiler/nir/nir_opt_if.c                 | 16 ++++-----
+ src/compiler/nir/nir_opt_intrinsics.c         | 10 +++---
+ src/compiler/nir/nir_opt_move.c               |  2 +-
+ src/compiler/nir/nir_opt_peephole_select.c    | 12 +++----
+ src/compiler/nir/nir_opt_phi_precision.c      |  6 ++--
+ src/compiler/nir/nir_opt_preamble.c           |  2 +-
+ src/compiler/nir/nir_opt_reassociate_bfi.c    |  4 +--
+ .../nir/nir_opt_rematerialize_compares.c      | 16 ++++-----
+ src/compiler/nir/nir_opt_shrink_vectors.c     | 12 +++----
+ src/compiler/nir/nir_opt_sink.c               |  6 ++--
+ src/compiler/nir/nir_opt_undef.c              |  6 ++--
+ src/compiler/nir/nir_opt_vectorize.c          |  6 ++--
+ src/compiler/nir/nir_range_analysis.c         |  8 ++---
+ src/compiler/nir/nir_remove_dead_variables.c  |  6 ++--
+ src/compiler/nir/nir_repair_ssa.c             | 20 +++++------
+ src/compiler/nir/nir_schedule.c               | 14 ++++----
+ src/compiler/nir/nir_search.c                 |  4 +--
+ src/compiler/nir/nir_search_helpers.h         |  6 ++--
+ src/compiler/nir/nir_to_lcssa.c               | 20 +++++------
+ src/compiler/nir/nir_trivialize_registers.c   |  4 +--
+ src/compiler/nir/nir_validate.c               | 14 ++++----
+ src/freedreno/ir3/ir3_nir_opt_preamble.c      | 10 +++---
+ src/gallium/auxiliary/nir/nir_to_tgsi.c       |  8 ++---
+ .../drivers/etnaviv/etnaviv_compiler_nir.c    |  4 +--
+ .../drivers/etnaviv/etnaviv_compiler_nir.h    |  4 +--
+ src/gallium/drivers/lima/ir/gp/nir.c          |  4 +--
+ .../lima/ir/lima_nir_duplicate_consts.c       | 10 +++---
+ .../lima/ir/lima_nir_duplicate_intrinsic.c    | 10 +++---
+ .../drivers/lima/ir/lima_nir_split_loads.c    | 14 ++++----
+ src/gallium/drivers/r300/compiler/nir_to_rc.c |  8 ++---
+ .../r600/sfn/sfn_nir_lower_tess_io.cpp        |  2 +-
+ .../drivers/zink/nir_to_spirv/nir_to_spirv.c  |  4 +--
+ .../frontends/lavapipe/lvp_lower_exec_graph.c |  3 +-
+ src/intel/compiler/brw_fs.cpp                 |  6 ++--
+ ...brw_nir_lower_non_uniform_resource_intel.c |  2 +-
+ .../compiler/brw_nir_opt_peephole_ffma.c      |  4 +--
+ src/microsoft/clc/clc_compiler.c              |  8 ++---
+ src/microsoft/compiler/dxil_nir.c             |  6 ++--
+ src/microsoft/compiler/nir_to_dxil.c          |  2 +-
+ src/panfrost/midgard/nir_fuse_io_16.c         |  4 +--
+ 60 files changed, 251 insertions(+), 248 deletions(-)
+
+diff --git a/src/amd/compiler/aco_instruction_selection_setup.cpp b/src/amd/compiler/aco_instruction_selection_setup.cpp
+index d444b89f63d..e7e56549205 100644
+--- a/src/amd/compiler/aco_instruction_selection_setup.cpp
++++ b/src/amd/compiler/aco_instruction_selection_setup.cpp
+@@ -69,9 +69,9 @@ bool
+ only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
+ {
+    nir_foreach_use (src, ssa) {
+-      switch (src->parent_instr->type) {
++      switch (nir_src_parent_instr(src)->type) {
+       case nir_instr_type_alu: {
+-         nir_alu_instr* alu = nir_instr_as_alu(src->parent_instr);
++         nir_alu_instr* alu = nir_instr_as_alu(nir_src_parent_instr(src));
+          if (alu->op != nir_op_unpack_64_2x32_split_x && alu->op != nir_op_unpack_64_2x32_split_y)
+             return false;
+          if (!only_used_by_cross_lane_instrs(&alu->def, follow_phis))
+@@ -80,7 +80,7 @@ only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
+          continue;
+       }
+       case nir_instr_type_intrinsic: {
+-         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(src->parent_instr);
++         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+          if (intrin->intrinsic != nir_intrinsic_read_invocation &&
+              intrin->intrinsic != nir_intrinsic_read_first_invocation &&
+              intrin->intrinsic != nir_intrinsic_lane_permute_16_amd)
+@@ -93,7 +93,7 @@ only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
+          if (!follow_phis)
+             return false;
+ 
+-         nir_phi_instr* phi = nir_instr_as_phi(src->parent_instr);
++         nir_phi_instr* phi = nir_instr_as_phi(nir_src_parent_instr(src));
+          if (!only_used_by_cross_lane_instrs(&phi->def, false))
+             return false;
+ 
+diff --git a/src/asahi/compiler/agx_nir_opt_preamble.c b/src/asahi/compiler/agx_nir_opt_preamble.c
+index 65515753788..d86a7510439 100644
+--- a/src/asahi/compiler/agx_nir_opt_preamble.c
++++ b/src/asahi/compiler/agx_nir_opt_preamble.c
+@@ -54,7 +54,7 @@ rewrite_cost(nir_def *def, const void *data)
+ {
+    bool mov_needed = false;
+    nir_foreach_use(use, def) {
+-      nir_instr *parent_instr = use->parent_instr;
++      nir_instr *parent_instr = nir_src_parent_instr(use);
+       if (parent_instr->type != nir_instr_type_alu) {
+          mov_needed = true;
+          break;
+@@ -83,18 +83,19 @@ avoid_instr(const nir_instr *instr, const void *data)
+     */
+    if (def) {
+       nir_foreach_use(use, def) {
+-         if (use->parent_instr->type == nir_instr_type_tex) {
++         if (nir_src_parent_instr(use)->type == nir_instr_type_tex) {
+             /* Check if used as a bindless texture handle */
+-            nir_tex_instr *tex = nir_instr_as_tex(use->parent_instr);
++            nir_tex_instr *tex = nir_instr_as_tex(nir_src_parent_instr(use));
+             int handle_idx =
+                nir_tex_instr_src_index(tex, nir_tex_src_texture_handle);
+ 
+             if (handle_idx >= 0 && tex->src[handle_idx].src.ssa == def)
+                return true;
+-         } else if (use->parent_instr->type == nir_instr_type_intrinsic) {
++         } else if (nir_src_parent_instr(use)->type ==
++                    nir_instr_type_intrinsic) {
+             /* Check if used as a bindless image handle */
+             nir_intrinsic_instr *intr =
+-               nir_instr_as_intrinsic(use->parent_instr);
++               nir_instr_as_intrinsic(nir_src_parent_instr(use));
+ 
+             switch (intr->intrinsic) {
+             case nir_intrinsic_bindless_image_load:
+diff --git a/src/compiler/nir/nir.c b/src/compiler/nir/nir.c
+index 6282dea3a53..baf1c907107 100644
+--- a/src/compiler/nir/nir.c
++++ b/src/compiler/nir/nir.c
+@@ -1486,7 +1486,7 @@ nir_instr_clear_src(nir_instr *instr, nir_src *src)
+ void
+ nir_instr_move_src(nir_instr *dest_instr, nir_src *dest, nir_src *src)
+ {
+-   assert(!src_is_valid(dest) || dest->parent_instr == dest_instr);
++   assert(!src_is_valid(dest) || nir_src_parent_instr(dest) == dest_instr);
+ 
+    src_remove_all_uses(dest);
+    src_remove_all_uses(src);
+@@ -1571,14 +1571,14 @@ nir_def_rewrite_uses_after(nir_def *def, nir_def *new_ssa,
+       return;
+ 
+    nir_foreach_use_including_if_safe(use_src, def) {
+-      if (!use_src->is_if) {
+-         assert(use_src->parent_instr != def->parent_instr);
++      if (!nir_src_is_if(use_src)) {
++         assert(nir_src_parent_instr(use_src) != def->parent_instr);
+ 
+          /* Since def already dominates all of its uses, the only way a use can
+           * not be dominated by after_me is if it is between def and after_me in
+           * the instruction list.
+           */
+-         if (is_instr_between(def->parent_instr, after_me, use_src->parent_instr))
++         if (is_instr_between(def->parent_instr, after_me, nir_src_parent_instr(use_src)))
+             continue;
+       }
+ 
+@@ -1602,16 +1602,16 @@ get_store_value(nir_intrinsic_instr *intrin)
+ nir_component_mask_t
+ nir_src_components_read(const nir_src *src)
+ {
+-   assert(src->parent_instr);
++   assert(nir_src_parent_instr(src));
+ 
+-   if (src->parent_instr->type == nir_instr_type_alu) {
+-      nir_alu_instr *alu = nir_instr_as_alu(src->parent_instr);
++   if (nir_src_parent_instr(src)->type == nir_instr_type_alu) {
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+       nir_alu_src *alu_src = exec_node_data(nir_alu_src, src, src);
+       int src_idx = alu_src - &alu->src[0];
+       assert(src_idx >= 0 && src_idx < nir_op_infos[alu->op].num_inputs);
+       return nir_alu_instr_src_read_mask(alu, src_idx);
+-   } else if (src->parent_instr->type == nir_instr_type_intrinsic) {
+-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(src->parent_instr);
++   } else if (nir_src_parent_instr(src)->type == nir_instr_type_intrinsic) {
++      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+       if (nir_intrinsic_has_write_mask(intrin) && src->ssa == get_store_value(intrin))
+          return nir_intrinsic_write_mask(intrin);
+       else
+@@ -1627,7 +1627,7 @@ nir_def_components_read(const nir_def *def)
+    nir_component_mask_t read_mask = 0;
+ 
+    nir_foreach_use_including_if(use, def) {
+-      read_mask |= use->is_if ? 1 : nir_src_components_read(use);
++      read_mask |= nir_src_is_if(use) ? 1 : nir_src_components_read(use);
+ 
+       if (read_mask == (1 << def->num_components) - 1)
+          return read_mask;
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 7623bc2b0be..0c936401458 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -999,7 +999,7 @@ struct nir_if;
+ typedef struct nir_src {
+    union {
+       /** Instruction that consumes this value as a source. */
+-      nir_instr *parent_instr;
++      nir_instr *renamed_parent_instr;
+       struct nir_if *parent_if;
+    };
+ 
+@@ -1018,7 +1018,7 @@ nir_src_is_if(const nir_src *src)
+ static inline nir_instr *
+ nir_src_parent_instr(const nir_src *src)
+ {
+-   return src->parent_instr;
++   return src->renamed_parent_instr;
+ }
+ 
+ static inline struct nir_if *
+@@ -1031,7 +1031,7 @@ static inline void
+ nir_src_set_parent_instr(nir_src *src, nir_instr *parent_instr)
+ {
+    src->is_if = false;
+-   src->parent_instr = parent_instr;
++   src->renamed_parent_instr = parent_instr;
+ }
+ 
+ static inline void
+@@ -1058,19 +1058,19 @@ nir_src_init(void)
+ 
+ #define nir_foreach_use(src, reg_or_ssa_def)         \
+    nir_foreach_use_including_if(src, reg_or_ssa_def) \
+-      if (!src->is_if)
++      if (!nir_src_is_if(src))
+ 
+ #define nir_foreach_use_safe(src, reg_or_ssa_def)         \
+    nir_foreach_use_including_if_safe(src, reg_or_ssa_def) \
+-      if (!src->is_if)
++      if (!nir_src_is_if(src))
+ 
+ #define nir_foreach_if_use(src, reg_or_ssa_def)      \
+    nir_foreach_use_including_if(src, reg_or_ssa_def) \
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+ 
+ #define nir_foreach_if_use_safe(src, reg_or_ssa_def)      \
+    nir_foreach_use_including_if_safe(src, reg_or_ssa_def) \
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+ 
+ static inline bool
+ nir_def_used_by_if(const nir_def *def)
+@@ -4284,13 +4284,13 @@ nir_after_block_before_jump(nir_block *block)
+ static inline nir_cursor
+ nir_before_src(nir_src *src)
+ {
+-   if (src->is_if) {
++   if (nir_src_is_if(src)) {
+       nir_block *prev_block =
+-         nir_cf_node_as_block(nir_cf_node_prev(&src->parent_if->cf_node));
++         nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
+       return nir_after_block(prev_block);
+-   } else if (src->parent_instr->type == nir_instr_type_phi) {
++   } else if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
+ #ifndef NDEBUG
+-      nir_phi_instr *cond_phi = nir_instr_as_phi(src->parent_instr);
++      nir_phi_instr *cond_phi = nir_instr_as_phi(nir_src_parent_instr(src));
+       bool found = false;
+       nir_foreach_phi_src(phi_src, cond_phi) {
+          if (phi_src->src.ssa == src->ssa) {
+@@ -4306,7 +4306,7 @@ nir_before_src(nir_src *src)
+       nir_phi_src *phi_src = list_entry(src, nir_phi_src, src);
+       return nir_after_block_before_jump(phi_src->pred);
+    } else {
+-      return nir_before_instr(src->parent_instr);
++      return nir_before_instr(nir_src_parent_instr(src));
+    }
+ }
+ 
+@@ -4498,7 +4498,7 @@ static inline void
+ nir_src_rewrite(nir_src *src, nir_def *new_ssa)
+ {
+    assert(src->ssa);
+-   assert(src->is_if ? (src->parent_if != NULL) : (src->parent_instr != NULL));
++   assert(nir_src_is_if(src) ? (nir_src_parent_if(src) != NULL) : (nir_src_parent_instr(src) != NULL));
+    list_del(&src->use_link);
+    src->ssa = new_ssa;
+    list_addtail(&src->use_link, &new_ssa->uses);
+@@ -6372,13 +6372,13 @@ nir_is_store_reg(nir_intrinsic_instr *intr)
+    assert(reg->intrinsic == nir_intrinsic_decl_reg); \
+                                                      \
+    nir_foreach_use(load, &reg->def)             \
+-      if (nir_is_load_reg(nir_instr_as_intrinsic(load->parent_instr)))
++      if (nir_is_load_reg(nir_instr_as_intrinsic(nir_src_parent_instr(load))))
+ 
+ #define nir_foreach_reg_store(store, reg)            \
+    assert(reg->intrinsic == nir_intrinsic_decl_reg); \
+                                                      \
+    nir_foreach_use(store, &reg->def)            \
+-      if (nir_is_store_reg(nir_instr_as_intrinsic(store->parent_instr)))
++      if (nir_is_store_reg(nir_instr_as_intrinsic(nir_src_parent_instr(store))))
+ 
+ static inline nir_intrinsic_instr *
+ nir_load_reg_for_def(const nir_def *def)
+@@ -6403,10 +6403,10 @@ nir_store_reg_for_def(const nir_def *def)
+       return NULL;
+ 
+    nir_src *src = list_first_entry(&def->uses, nir_src, use_link);
+-   if (src->is_if)
++   if (nir_src_is_if(src))
+       return NULL;
+ 
+-   nir_instr *parent = src->parent_instr;
++   nir_instr *parent = nir_src_parent_instr(src);
+    if (parent->type != nir_instr_type_intrinsic)
+       return NULL;
+ 
+diff --git a/src/compiler/nir/nir_deref.c b/src/compiler/nir/nir_deref.c
+index 902e7a23cd9..5ffbe72ccdb 100644
+--- a/src/compiler/nir/nir_deref.c
++++ b/src/compiler/nir/nir_deref.c
+@@ -157,10 +157,10 @@ nir_deref_instr_has_complex_use(nir_deref_instr *deref,
+                                 nir_deref_instr_has_complex_use_options opts)
+ {
+    nir_foreach_use_including_if(use_src, &deref->def) {
+-      if (use_src->is_if)
++      if (nir_src_is_if(use_src))
+          return true;
+ 
+-      nir_instr *use_instr = use_src->parent_instr;
++      nir_instr *use_instr = nir_src_parent_instr(use_src);
+ 
+       switch (use_instr->type) {
+       case nir_instr_type_deref: {
+@@ -834,17 +834,18 @@ nir_rematerialize_deref_in_use_blocks(nir_deref_instr *instr)
+    };
+ 
+    nir_foreach_use_safe(use, &instr->def) {
+-      if (use->parent_instr->block == instr->instr.block)
++      nir_instr *parent = nir_src_parent_instr(use);
++      if (parent->block == instr->instr.block)
+          continue;
+ 
+       /* If a deref is used in a phi, we can't rematerialize it, as the new
+        * derefs would appear before the phi, which is not valid.
+        */
+-      if (use->parent_instr->type == nir_instr_type_phi)
++      if (parent->type == nir_instr_type_phi)
+          continue;
+ 
+-      state.block = use->parent_instr->block;
+-      state.builder.cursor = nir_before_instr(use->parent_instr);
++      state.block = parent->block;
++      state.builder.cursor = nir_before_instr(parent);
+       rematerialize_deref_src(use, &state);
+    }
+ 
+@@ -886,10 +887,10 @@ static void
+ nir_deref_instr_fixup_child_types(nir_deref_instr *parent)
+ {
+    nir_foreach_use(use, &parent->def) {
+-      if (use->parent_instr->type != nir_instr_type_deref)
++      if (nir_src_parent_instr(use)->type != nir_instr_type_deref)
+          continue;
+ 
+-      nir_deref_instr *child = nir_instr_as_deref(use->parent_instr);
++      nir_deref_instr *child = nir_instr_as_deref(nir_src_parent_instr(use));
+       switch (child->deref_type) {
+       case nir_deref_type_var:
+          unreachable("nir_deref_type_var cannot be a child");
+@@ -1198,12 +1199,12 @@ opt_deref_cast(nir_builder *b, nir_deref_instr *cast)
+    bool trivial_array_cast = is_trivial_array_deref_cast(cast);
+ 
+    nir_foreach_use_including_if_safe(use_src, &cast->def) {
+-      assert(!use_src->is_if && "there cannot be if-uses");
++      assert(!nir_src_is_if(use_src) && "there cannot be if-uses");
+ 
+       /* If this isn't a trivial array cast, we can't propagate into
+        * ptr_as_array derefs.
+        */
+-      if (is_deref_ptr_as_array(use_src->parent_instr) &&
++      if (is_deref_ptr_as_array(nir_src_parent_instr(use_src)) &&
+           !trivial_array_cast)
+          continue;
+ 
+diff --git a/src/compiler/nir/nir_from_ssa.c b/src/compiler/nir/nir_from_ssa.c
+index 41e1ee7a572..83a57e32df3 100644
+--- a/src/compiler/nir/nir_from_ssa.c
++++ b/src/compiler/nir/nir_from_ssa.c
+@@ -542,8 +542,8 @@ nir_rewrite_uses_to_load_reg(nir_builder *b, nir_def *old,
+       b->cursor = nir_before_src(use);
+ 
+       /* If this is a parallel copy, it can just take the register directly */
+-      if (!use->is_if &&
+-          use->parent_instr->type == nir_instr_type_parallel_copy) {
++      if (!nir_src_is_if(use) &&
++          nir_src_parent_instr(use)->type == nir_instr_type_parallel_copy) {
+ 
+          nir_parallel_copy_entry *copy_entry =
+             list_entry(use, nir_parallel_copy_entry, src);
+@@ -1208,9 +1208,9 @@ ssa_def_is_local_to_block(nir_def *def, UNUSED void *state)
+ {
+    nir_block *block = def->parent_instr->block;
+    nir_foreach_use_including_if(use_src, def) {
+-      if (use_src->is_if ||
+-          use_src->parent_instr->block != block ||
+-          use_src->parent_instr->type == nir_instr_type_phi) {
++      if (nir_src_is_if(use_src) ||
++          nir_src_parent_instr(use_src)->block != block ||
++          nir_src_parent_instr(use_src)->type == nir_instr_type_phi) {
+          return false;
+       }
+    }
+diff --git a/src/compiler/nir/nir_group_loads.c b/src/compiler/nir/nir_group_loads.c
+index aad2b4cf105..675f87f9faa 100644
+--- a/src/compiler/nir/nir_group_loads.c
++++ b/src/compiler/nir/nir_group_loads.c
+@@ -198,8 +198,8 @@ group_loads(nir_instr *first, nir_instr *last)
+          bool all_uses_after_last = true;
+ 
+          nir_foreach_use(use, def) {
+-            if (use->parent_instr->block == instr->block &&
+-                use->parent_instr->index <= last->index) {
++            if (nir_src_parent_instr(use)->block == instr->block &&
++                nir_src_parent_instr(use)->index <= last->index) {
+                all_uses_after_last = false;
+                break;
+             }
+diff --git a/src/compiler/nir/nir_legacy.c b/src/compiler/nir/nir_legacy.c
+index 77a8fed435f..3ed1b2a3fd8 100644
+--- a/src/compiler/nir/nir_legacy.c
++++ b/src/compiler/nir/nir_legacy.c
+@@ -18,10 +18,10 @@ nir_legacy_float_mod_folds(nir_alu_instr *mod)
+       return false;
+ 
+    nir_foreach_use_including_if(src, &mod->def) {
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+          return false;
+ 
+-      nir_instr *parent = src->parent_instr;
++      nir_instr *parent = nir_src_parent_instr(src);
+       if (parent->type != nir_instr_type_alu)
+          return false;
+ 
+@@ -204,15 +204,15 @@ chase_fsat(nir_def **def)
+       return false;
+ 
+    nir_src *use = list_first_entry(&(*def)->uses, nir_src, use_link);
+-   if (use->is_if || use->parent_instr->type != nir_instr_type_alu)
++   if (nir_src_is_if(use) || nir_src_parent_instr(use)->type != nir_instr_type_alu)
+       return false;
+ 
+-   nir_alu_instr *fsat = nir_instr_as_alu(use->parent_instr);
++   nir_alu_instr *fsat = nir_instr_as_alu(nir_src_parent_instr(use));
+    if (fsat->op != nir_op_fsat || !nir_legacy_fsat_folds(fsat))
+       return false;
+ 
+    /* Otherwise, we're good */
+-   nir_alu_instr *alu = nir_instr_as_alu(use->parent_instr);
++   nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use));
+    *def = &alu->def;
+    return true;
+ }
+@@ -290,8 +290,8 @@ fuse_mods_with_registers(nir_builder *b, nir_instr *instr, void *fuse_fabs_)
+           * nir_legacy_float_mod_folds() returned true.
+           */
+          nir_foreach_use_including_if_safe(use, &alu->def) {
+-            assert(!use->is_if);
+-            assert(use->parent_instr->type == nir_instr_type_alu);
++            assert(!nir_src_is_if(use));
++            assert(nir_src_parent_instr(use)->type == nir_instr_type_alu);
+             nir_alu_src *alu_use = list_entry(use, nir_alu_src, src);
+             nir_src_rewrite(&alu_use->src, &load->def);
+             for (unsigned i = 0; i < NIR_MAX_VEC_COMPONENTS; ++i)
+diff --git a/src/compiler/nir/nir_loop_analyze.c b/src/compiler/nir/nir_loop_analyze.c
+index 6b1a1acd29c..b7114ca9a67 100644
+--- a/src/compiler/nir/nir_loop_analyze.c
++++ b/src/compiler/nir/nir_loop_analyze.c
+@@ -1330,7 +1330,7 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
+ 
+       int iterations = calculate_iterations(lv->basis, limit.def,
+                                             initial_val, step_val, limit_val,
+-                                            nir_instr_as_alu(lv->update_src->src.parent_instr),
++                                            nir_instr_as_alu(nir_src_parent_instr(&lv->update_src->src)),
+                                             cond,
+                                             alu_op, limit_rhs,
+                                             invert_cond,
+diff --git a/src/compiler/nir/nir_lower_flrp.c b/src/compiler/nir/nir_lower_flrp.c
+index 2e41ae98256..d54f838c6b5 100644
+--- a/src/compiler/nir/nir_lower_flrp.c
++++ b/src/compiler/nir/nir_lower_flrp.c
+@@ -333,7 +333,7 @@ get_similar_flrp_stats(nir_alu_instr *alu, struct similar_flrp_stats *st)
+ 
+    nir_foreach_use(other_use, alu->src[2].src.ssa) {
+       /* Is the use also a flrp? */
+-      nir_instr *const other_instr = other_use->parent_instr;
++      nir_instr *const other_instr = nir_src_parent_instr(other_use);
+       if (other_instr->type != nir_instr_type_alu)
+          continue;
+ 
+diff --git a/src/compiler/nir/nir_lower_mediump.c b/src/compiler/nir/nir_lower_mediump.c
+index 68da6ce30a9..01377f7ddf7 100644
+--- a/src/compiler/nir/nir_lower_mediump.c
++++ b/src/compiler/nir/nir_lower_mediump.c
+@@ -858,7 +858,7 @@ fold_16bit_destination(nir_def *ssa, nir_alu_type dest_type,
+    bool allow_rtne = rdm == nir_rounding_mode_rtne;
+ 
+    nir_foreach_use(use, ssa) {
+-      nir_instr *instr = use->parent_instr;
++      nir_instr *instr = nir_src_parent_instr(use);
+       is_f32_to_f16 &= (allow_standard && is_f32_to_f16_conversion(instr)) ||
+                        (allow_rtz && is_n_to_m_conversion(instr, 32, nir_op_f2f16_rtz)) ||
+                        (allow_rtne && is_n_to_m_conversion(instr, 32, nir_op_f2f16_rtne));
+@@ -870,7 +870,7 @@ fold_16bit_destination(nir_def *ssa, nir_alu_type dest_type,
+ 
+    /* All uses are the same conversions. Replace them with mov. */
+    nir_foreach_use(use, ssa) {
+-      nir_alu_instr *conv = nir_instr_as_alu(use->parent_instr);
++      nir_alu_instr *conv = nir_instr_as_alu(nir_src_parent_instr(use));
+       conv->op = nir_op_mov;
+    }
+ 
+diff --git a/src/compiler/nir/nir_lower_reg_intrinsics_to_ssa.c b/src/compiler/nir/nir_lower_reg_intrinsics_to_ssa.c
+index 833719495a3..b844f4e5b82 100644
+--- a/src/compiler/nir/nir_lower_reg_intrinsics_to_ssa.c
++++ b/src/compiler/nir/nir_lower_reg_intrinsics_to_ssa.c
+@@ -46,7 +46,7 @@ setup_reg(nir_intrinsic_instr *decl, struct regs_to_ssa_state *state)
+    memset(state->defs, 0, state->defs_words * sizeof(*state->defs));
+ 
+    nir_foreach_reg_store(store, decl)
+-      BITSET_SET(state->defs, store->parent_instr->block->index);
++      BITSET_SET(state->defs, nir_src_parent_instr(store)->block->index);
+ 
+    state->values[decl->def.index] =
+       nir_phi_builder_add_value(state->phi_builder, num_components,
+diff --git a/src/compiler/nir/nir_lower_scratch.c b/src/compiler/nir/nir_lower_scratch.c
+index 0ac449ddcea..55e58688171 100644
+--- a/src/compiler/nir/nir_lower_scratch.c
++++ b/src/compiler/nir/nir_lower_scratch.c
+@@ -74,15 +74,15 @@ static bool
+ only_used_for_load_store(nir_deref_instr *deref)
+ {
+    nir_foreach_use(src, &deref->def) {
+-      if (!src->parent_instr)
++      if (!nir_src_parent_instr(src))
+          return false;
+-      if (src->parent_instr->type == nir_instr_type_deref) {
+-         if (!only_used_for_load_store(nir_instr_as_deref(src->parent_instr)))
++      if (nir_src_parent_instr(src)->type == nir_instr_type_deref) {
++         if (!only_used_for_load_store(nir_instr_as_deref(nir_src_parent_instr(src))))
+             return false;
+-      } else if (src->parent_instr->type != nir_instr_type_intrinsic) {
++      } else if (nir_src_parent_instr(src)->type != nir_instr_type_intrinsic) {
+          return false;
+       } else {
+-         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(src->parent_instr);
++         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+          if (intrin->intrinsic != nir_intrinsic_load_deref &&
+              intrin->intrinsic != nir_intrinsic_store_deref)
+             return false;
+diff --git a/src/compiler/nir/nir_lower_shader_calls.c b/src/compiler/nir/nir_lower_shader_calls.c
+index a0f8ce47c84..c10f9301d64 100644
+--- a/src/compiler/nir/nir_lower_shader_calls.c
++++ b/src/compiler/nir/nir_lower_shader_calls.c
+@@ -387,11 +387,11 @@ static bool
+ rewrite_instr_src_from_phi_builder(nir_src *src, void *_pbv_arr)
+ {
+    nir_block *block;
+-   if (src->parent_instr->type == nir_instr_type_phi) {
++   if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
+       nir_phi_src *phi_src = exec_node_data(nir_phi_src, src, src);
+       block = phi_src->pred;
+    } else {
+-      block = src->parent_instr->block;
++      block = nir_src_parent_instr(src)->block;
+    }
+ 
+    nir_def *new_def = get_phi_builder_def_for_src(src, _pbv_arr, block);
+@@ -1566,16 +1566,16 @@ nir_opt_trim_stack_values(nir_shader *shader)
+          nir_def *def = nir_instr_def(instr);
+ 
+          nir_foreach_use_safe(use_src, def) {
+-            if (use_src->parent_instr->type == nir_instr_type_alu) {
+-               nir_alu_instr *alu = nir_instr_as_alu(use_src->parent_instr);
++            if (nir_src_parent_instr(use_src)->type == nir_instr_type_alu) {
++               nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use_src));
+                nir_alu_src *alu_src = exec_node_data(nir_alu_src, use_src, src);
+ 
+                unsigned count = alu->def.num_components;
+                for (unsigned idx = 0; idx < count; ++idx)
+                   alu_src->swizzle[idx] = swiz_map[alu_src->swizzle[idx]];
+-            } else if (use_src->parent_instr->type == nir_instr_type_intrinsic) {
++            } else if (nir_src_parent_instr(use_src)->type == nir_instr_type_intrinsic) {
+                nir_intrinsic_instr *use_intrin =
+-                  nir_instr_as_intrinsic(use_src->parent_instr);
++                  nir_instr_as_intrinsic(nir_src_parent_instr(use_src));
+                assert(nir_intrinsic_has_write_mask(use_intrin));
+                unsigned write_mask = nir_intrinsic_write_mask(use_intrin);
+                unsigned new_write_mask = 0;
+@@ -1776,7 +1776,7 @@ find_last_dominant_use_block(nir_function_impl *impl, nir_def *value)
+ 
+       nir_foreach_if_use(src, value) {
+          nir_block *block_before_if =
+-            nir_cf_node_as_block(nir_cf_node_prev(&src->parent_if->cf_node));
++            nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
+          if (!nir_block_dominates(block, block_before_if)) {
+             fits = false;
+             break;
+@@ -1786,13 +1786,13 @@ find_last_dominant_use_block(nir_function_impl *impl, nir_def *value)
+          continue;
+ 
+       nir_foreach_use(src, value) {
+-         if (src->parent_instr->type == nir_instr_type_phi &&
+-             block == src->parent_instr->block) {
++         if (nir_src_parent_instr(src)->type == nir_instr_type_phi &&
++             block == nir_src_parent_instr(src)->block) {
+             fits = false;
+             break;
+          }
+ 
+-         if (!nir_block_dominates(block, src->parent_instr->block)) {
++         if (!nir_block_dominates(block, nir_src_parent_instr(src)->block)) {
+             fits = false;
+             break;
+          }
+diff --git a/src/compiler/nir/nir_lower_vec_to_regs.c b/src/compiler/nir/nir_lower_vec_to_regs.c
+index b543fe1c153..51bd32e01bd 100644
+--- a/src/compiler/nir/nir_lower_vec_to_regs.c
++++ b/src/compiler/nir/nir_lower_vec_to_regs.c
+@@ -78,10 +78,10 @@ try_coalesce(nir_builder *b, nir_def *reg, nir_alu_instr *vec,
+     * only use of the source value.
+     */
+    nir_foreach_use_including_if(src, vec->src[start_idx].src.ssa) {
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+          return 0;
+ 
+-      if (src->parent_instr != &vec->instr)
++      if (nir_src_parent_instr(src) != &vec->instr)
+          return 0;
+    }
+ 
+diff --git a/src/compiler/nir/nir_move_vec_src_uses_to_dest.c b/src/compiler/nir/nir_move_vec_src_uses_to_dest.c
+index 39e2ff96464..176cc3f6177 100644
+--- a/src/compiler/nir/nir_move_vec_src_uses_to_dest.c
++++ b/src/compiler/nir/nir_move_vec_src_uses_to_dest.c
+@@ -82,7 +82,7 @@ move_vec_src_uses_to_dest_block(nir_block *block, bool skip_const_srcs)
+        */
+       if (list_is_singular(&vec->def.uses)) {
+          nir_src *src = list_first_entry(&vec->def.uses, nir_src, use_link);
+-         nir_instr *use_instr = src->parent_instr;
++         nir_instr *use_instr = nir_src_parent_instr(src);
+          if (use_instr->type == nir_instr_type_intrinsic) {
+             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(use_instr);
+             if (intr->intrinsic == nir_intrinsic_store_output)
+@@ -121,18 +121,18 @@ move_vec_src_uses_to_dest_block(nir_block *block, bool skip_const_srcs)
+          }
+ 
+          nir_foreach_use_safe(use, vec->src[i].src.ssa) {
+-            if (use->parent_instr == &vec->instr)
++            if (nir_src_parent_instr(use) == &vec->instr)
+                continue;
+ 
+             /* We need to dominate the use if we are going to rewrite it */
+-            if (!ssa_def_dominates_instr(&vec->def, use->parent_instr))
++            if (!ssa_def_dominates_instr(&vec->def, nir_src_parent_instr(use)))
+                continue;
+ 
+             /* For now, we'll just rewrite ALU instructions */
+-            if (use->parent_instr->type != nir_instr_type_alu)
++            if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+                continue;
+ 
+-            nir_alu_instr *use_alu = nir_instr_as_alu(use->parent_instr);
++            nir_alu_instr *use_alu = nir_instr_as_alu(nir_src_parent_instr(use));
+ 
+             /* Figure out which source we're actually looking at */
+             nir_alu_src *use_alu_src = exec_node_data(nir_alu_src, use, src);
+diff --git a/src/compiler/nir/nir_opt_comparison_pre.c b/src/compiler/nir/nir_opt_comparison_pre.c
+index 191833a88d6..614bc469086 100644
+--- a/src/compiler/nir/nir_opt_comparison_pre.c
++++ b/src/compiler/nir/nir_opt_comparison_pre.c
+@@ -144,7 +144,7 @@ is_compatible_condition(const nir_alu_instr *instr)
+       return true;
+ 
+    nir_foreach_use(src, &instr->def) {
+-      const nir_instr *const user_instr = src->parent_instr;
++      const nir_instr *const user_instr = nir_src_parent_instr(src);
+ 
+       if (user_instr->type != nir_instr_type_alu)
+          continue;
+diff --git a/src/compiler/nir/nir_opt_copy_propagate.c b/src/compiler/nir/nir_opt_copy_propagate.c
+index e10f83bd629..b8cf05bae45 100644
+--- a/src/compiler/nir/nir_opt_copy_propagate.c
++++ b/src/compiler/nir/nir_opt_copy_propagate.c
+@@ -82,7 +82,7 @@ static bool
+ copy_propagate_alu(nir_alu_src *src, nir_alu_instr *copy)
+ {
+    nir_def *def = NULL;
+-   nir_alu_instr *user = nir_instr_as_alu(src->src.parent_instr);
++   nir_alu_instr *user = nir_instr_as_alu(nir_src_parent_instr(&src->src));
+    unsigned src_idx = src - user->src;
+    assert(src_idx < nir_op_infos[user->op].num_inputs);
+    unsigned num_comp = nir_ssa_alu_instr_src_components(user, src_idx);
+@@ -134,7 +134,7 @@ copy_prop_instr(nir_instr *instr)
+    bool progress = false;
+ 
+    nir_foreach_use_including_if_safe(src, &mov->def) {
+-      if (!src->is_if && src->parent_instr->type == nir_instr_type_alu)
++      if (!nir_src_is_if(src) && nir_src_parent_instr(src)->type == nir_instr_type_alu)
+          progress |= copy_propagate_alu(container_of(src, nir_alu_src, src), mov);
+       else
+          progress |= copy_propagate(src, mov);
+diff --git a/src/compiler/nir/nir_opt_dead_cf.c b/src/compiler/nir/nir_opt_dead_cf.c
+index 45141856057..bd6559a3672 100644
+--- a/src/compiler/nir/nir_opt_dead_cf.c
++++ b/src/compiler/nir/nir_opt_dead_cf.c
+@@ -136,10 +136,10 @@ def_only_used_in_cf_node(nir_def *def, void *_node)
+    nir_foreach_use_including_if(use, def) {
+       nir_block *block;
+ 
+-      if (use->is_if)
+-         block = nir_cf_node_as_block(nir_cf_node_prev(&use->parent_if->cf_node));
++      if (nir_src_is_if(use))
++         block = nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(use)->cf_node));
+       else
+-         block = use->parent_instr->block;
++         block = nir_src_parent_instr(use)->block;
+ 
+       /* Because NIR is structured, we can easily determine whether or not a
+        * value escapes a CF node by looking at the block indices of its uses
+diff --git a/src/compiler/nir/nir_opt_gcm.c b/src/compiler/nir/nir_opt_gcm.c
+index a6509b278c9..1b9ae687ea9 100644
+--- a/src/compiler/nir/nir_opt_gcm.c
++++ b/src/compiler/nir/nir_opt_gcm.c
+@@ -622,7 +622,7 @@ gcm_schedule_late_def(nir_def *def, void *void_state)
+    nir_block *lca = NULL;
+ 
+    nir_foreach_use(use_src, def) {
+-      nir_instr *use_instr = use_src->parent_instr;
++      nir_instr *use_instr = nir_src_parent_instr(use_src);
+ 
+       gcm_schedule_late_instr(use_instr, state);
+ 
+@@ -646,7 +646,7 @@ gcm_schedule_late_def(nir_def *def, void *void_state)
+    }
+ 
+    nir_foreach_if_use(use_src, def) {
+-      nir_if *if_stmt = use_src->parent_if;
++      nir_if *if_stmt = nir_src_parent_if(use_src);
+ 
+       /* For if statements, we consider the block to be the one immediately
+        * preceding the if CF node.
+diff --git a/src/compiler/nir/nir_opt_if.c b/src/compiler/nir/nir_opt_if.c
+index 6b2bb120f3c..ec9b3df2106 100644
+--- a/src/compiler/nir/nir_opt_if.c
++++ b/src/compiler/nir/nir_opt_if.c
+@@ -473,7 +473,7 @@ opt_split_alu_of_phi(nir_builder *b, nir_loop *loop)
+             continue;
+ 
+          nir_src *use = list_first_entry(&alu->def.uses, nir_src, use_link);
+-         if (use->is_if || !is_trivial_bcsel(use->parent_instr, true))
++         if (nir_src_is_if(use) || !is_trivial_bcsel(nir_src_parent_instr(use), true))
+             continue;
+       }
+ 
+@@ -1261,10 +1261,10 @@ propagate_condition_eval(nir_builder *b, nir_if *nif, nir_src *use_src,
+ static bool
+ can_propagate_through_alu(nir_src *src)
+ {
+-   if (src->parent_instr->type != nir_instr_type_alu)
++   if (nir_src_parent_instr(src)->type != nir_instr_type_alu)
+       return false;
+ 
+-   nir_alu_instr *alu = nir_instr_as_alu(src->parent_instr);
++   nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+    switch (alu->op) {
+    case nir_op_ior:
+    case nir_op_iand:
+@@ -1292,8 +1292,8 @@ evaluate_condition_use(nir_builder *b, nir_if *nif, nir_src *use_src)
+       progress = true;
+    }
+ 
+-   if (!use_src->is_if && can_propagate_through_alu(use_src)) {
+-      nir_alu_instr *alu = nir_instr_as_alu(use_src->parent_instr);
++   if (!nir_src_is_if(use_src) && can_propagate_through_alu(use_src)) {
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use_src));
+ 
+       nir_foreach_use_including_if_safe(alu_use, &alu->def)
+          progress |= propagate_condition_eval(b, nif, use_src, alu_use, alu);
+@@ -1309,7 +1309,7 @@ opt_if_evaluate_condition_use(nir_builder *b, nir_if *nif)
+ 
+    /* Evaluate any uses of the if condition inside the if branches */
+    nir_foreach_use_including_if_safe(use_src, nif->condition.ssa) {
+-      if (!(use_src->is_if && use_src->parent_if == nif))
++      if (!(nir_src_is_if(use_src) && nir_src_parent_if(use_src) == nif))
+          progress |= evaluate_condition_use(b, nif, use_src);
+    }
+ 
+@@ -1327,8 +1327,8 @@ rewrite_comp_uses_within_if(nir_builder *b, nir_if *nif, bool invert,
+ 
+    nir_def *new_ssa = NULL;
+    nir_foreach_use_safe(use, scalar.def) {
+-      if (use->parent_instr->block->index < first->index ||
+-          use->parent_instr->block->index > last->index)
++      if (nir_src_parent_instr(use)->block->index < first->index ||
++          nir_src_parent_instr(use)->block->index > last->index)
+          continue;
+ 
+       /* Only rewrite users which use only the new component. This is to avoid a
+diff --git a/src/compiler/nir/nir_opt_intrinsics.c b/src/compiler/nir/nir_opt_intrinsics.c
+index 94a2e4da334..08866e1751b 100644
+--- a/src/compiler/nir/nir_opt_intrinsics.c
++++ b/src/compiler/nir/nir_opt_intrinsics.c
+@@ -247,10 +247,10 @@ try_opt_exclusive_scan_to_inclusive(nir_intrinsic_instr *intrin)
+       return false;
+ 
+    nir_foreach_use_including_if(src, &intrin->def) {
+-      if (src->is_if || src->parent_instr->type != nir_instr_type_alu)
++      if (nir_src_is_if(src) || nir_src_parent_instr(src)->type != nir_instr_type_alu)
+          return false;
+ 
+-      nir_alu_instr *alu = nir_instr_as_alu(src->parent_instr);
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+ 
+       if (alu->op != (nir_op)nir_intrinsic_reduction_op(intrin))
+          return false;
+@@ -281,7 +281,7 @@ try_opt_exclusive_scan_to_inclusive(nir_intrinsic_instr *intrin)
+ 
+    nir_foreach_use_including_if_safe(src, &intrin->def) {
+       /* Remove alu. */
+-      nir_alu_instr *alu = nir_instr_as_alu(src->parent_instr);
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+       nir_def_rewrite_uses(&alu->def, &intrin->def);
+       nir_instr_remove(&alu->instr);
+    }
+@@ -304,8 +304,8 @@ opt_intrinsics_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
+ 
+       bool progress = false;
+       nir_foreach_use_safe(use_src, &intrin->def) {
+-         if (use_src->parent_instr->type == nir_instr_type_alu) {
+-            nir_alu_instr *alu = nir_instr_as_alu(use_src->parent_instr);
++         if (nir_src_parent_instr(use_src)->type == nir_instr_type_alu) {
++            nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use_src));
+ 
+             if (alu->op == nir_op_ieq ||
+                 alu->op == nir_op_ine) {
+diff --git a/src/compiler/nir/nir_opt_move.c b/src/compiler/nir/nir_opt_move.c
+index 884a2aa78ea..63450908777 100644
+--- a/src/compiler/nir/nir_opt_move.c
++++ b/src/compiler/nir/nir_opt_move.c
+@@ -78,7 +78,7 @@ nir_opt_move_block(nir_block *block, nir_move_options options)
+       const nir_def *def = nir_instr_def(instr);
+       nir_instr *first_user = instr == if_cond_instr ? NULL : last_instr;
+       nir_foreach_use(use, def) {
+-         nir_instr *parent = use->parent_instr;
++         nir_instr *parent = nir_src_parent_instr(use);
+          if (parent->type == nir_instr_type_phi || parent->block != block)
+             continue;
+          if (!first_user || parent->index > first_user->index)
+diff --git a/src/compiler/nir/nir_opt_peephole_select.c b/src/compiler/nir/nir_opt_peephole_select.c
+index f0b2c7f1925..9de5402d7f7 100644
+--- a/src/compiler/nir/nir_opt_peephole_select.c
++++ b/src/compiler/nir/nir_opt_peephole_select.c
+@@ -223,9 +223,9 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
+          } else {
+             /* The only uses of this definition must be phis in the successor */
+             nir_foreach_use_including_if(use, &mov->def) {
+-               if (use->is_if ||
+-                   use->parent_instr->type != nir_instr_type_phi ||
+-                   use->parent_instr->block != block->successors[0])
++               if (nir_src_is_if(use) ||
++                   nir_src_parent_instr(use)->type != nir_instr_type_phi ||
++                   nir_src_parent_instr(use)->block != block->successors[0])
+                   return false;
+             }
+          }
+@@ -307,9 +307,9 @@ nir_opt_collapse_if(nir_if *if_stmt, nir_shader *shader, unsigned limit,
+          nir_phi_get_src_from_block(phi, nir_if_first_else_block(if_stmt));
+ 
+       nir_foreach_use(src, &phi->def) {
+-         assert(src->parent_instr->type == nir_instr_type_phi);
++         assert(nir_src_parent_instr(src)->type == nir_instr_type_phi);
+          nir_phi_src *phi_src =
+-            nir_phi_get_src_from_block(nir_instr_as_phi(src->parent_instr),
++            nir_phi_get_src_from_block(nir_instr_as_phi(nir_src_parent_instr(src)),
+                                        nir_if_first_else_block(parent_if));
+          if (phi_src->src.ssa != else_src->src.ssa)
+             return false;
+@@ -339,7 +339,7 @@ nir_opt_collapse_if(nir_if *if_stmt, nir_shader *shader, unsigned limit,
+          nir_phi_get_src_from_block(phi, nir_if_first_else_block(if_stmt));
+       nir_foreach_use_safe(src, &phi->def) {
+          nir_phi_src *phi_src =
+-            nir_phi_get_src_from_block(nir_instr_as_phi(src->parent_instr),
++            nir_phi_get_src_from_block(nir_instr_as_phi(nir_src_parent_instr(src)),
+                                        nir_if_first_else_block(parent_if));
+          if (phi_src->src.ssa == else_src->src.ssa)
+             nir_src_rewrite(&phi_src->src, &phi->def);
+diff --git a/src/compiler/nir/nir_opt_phi_precision.c b/src/compiler/nir/nir_opt_phi_precision.c
+index 45f1016daef..9d418606793 100644
+--- a/src/compiler/nir/nir_opt_phi_precision.c
++++ b/src/compiler/nir/nir_opt_phi_precision.c
+@@ -214,10 +214,10 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
+       /* an if use means the phi is used directly in a conditional, ie.
+        * without a conversion
+        */
+-      if (use->is_if)
++      if (nir_src_is_if(use))
+          return false;
+ 
+-      op = narrowing_conversion_op(use->parent_instr, op);
++      op = narrowing_conversion_op(nir_src_parent_instr(use), op);
+ 
+       /* Not a (compatible) narrowing conversion: */
+       if (op == INVALID_OP)
+@@ -253,7 +253,7 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
+       /* We've previously established that all the uses were alu
+        * conversion ops.  Turn them into movs instead.
+        */
+-      nir_alu_instr *alu = nir_instr_as_alu(use->parent_instr);
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use));
+       alu->op = nir_op_mov;
+    }
+    nir_def_rewrite_uses(&phi->def, &new_phi->def);
+diff --git a/src/compiler/nir/nir_opt_preamble.c b/src/compiler/nir/nir_opt_preamble.c
+index 73ad89dfb45..d5382b569c0 100644
+--- a/src/compiler/nir/nir_opt_preamble.c
++++ b/src/compiler/nir/nir_opt_preamble.c
+@@ -385,7 +385,7 @@ nir_opt_preamble(nir_shader *shader, const nir_opt_preamble_options *options,
+          state->candidate = false;
+          state->must_stay = false;
+          nir_foreach_use(use, def) {
+-            nir_def *use_def = nir_instr_def(use->parent_instr);
++            nir_def *use_def = nir_instr_def(nir_src_parent_instr(use));
+             if (!use_def || !ctx.states[use_def->index].can_move ||
+                 ctx.states[use_def->index].must_stay) {
+                if (is_candidate)
+diff --git a/src/compiler/nir/nir_opt_reassociate_bfi.c b/src/compiler/nir/nir_opt_reassociate_bfi.c
+index dabdc042d67..8b68abe1f85 100644
+--- a/src/compiler/nir/nir_opt_reassociate_bfi.c
++++ b/src/compiler/nir/nir_opt_reassociate_bfi.c
+@@ -90,10 +90,10 @@ nir_opt_reassociate_bfi_instr(nir_builder *b,
+    nir_src *use = list_first_entry(&bfiCD0->def.uses,
+                                    nir_src, use_link);
+ 
+-   if (use->parent_instr->type != nir_instr_type_alu)
++   if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+       return false;
+ 
+-   nir_alu_instr *bfiABx = nir_instr_as_alu(use->parent_instr);
++   nir_alu_instr *bfiABx = nir_instr_as_alu(nir_src_parent_instr(use));
+    if (bfiABx->op != nir_op_bfi || bfiABx->def.num_components != 1)
+       return false;
+ 
+diff --git a/src/compiler/nir/nir_opt_rematerialize_compares.c b/src/compiler/nir/nir_opt_rematerialize_compares.c
+index 429dd15a14e..528ca2905da 100644
+--- a/src/compiler/nir/nir_opt_rematerialize_compares.c
++++ b/src/compiler/nir/nir_opt_rematerialize_compares.c
+@@ -91,10 +91,10 @@ static bool
+ all_uses_are_bcsel(const nir_alu_instr *instr)
+ {
+    nir_foreach_use(use, &instr->def) {
+-      if (use->parent_instr->type != nir_instr_type_alu)
++      if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+          return false;
+ 
+-      nir_alu_instr *const alu = nir_instr_as_alu(use->parent_instr);
++      nir_alu_instr *const alu = nir_instr_as_alu(nir_src_parent_instr(use));
+       if (alu->op != nir_op_bcsel &&
+           alu->op != nir_op_b32csel)
+          return false;
+@@ -113,10 +113,10 @@ static bool
+ all_uses_are_compare_with_zero(const nir_alu_instr *instr)
+ {
+    nir_foreach_use(use, &instr->def) {
+-      if (use->parent_instr->type != nir_instr_type_alu)
++      if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+          return false;
+ 
+-      nir_alu_instr *const alu = nir_instr_as_alu(use->parent_instr);
++      nir_alu_instr *const alu = nir_instr_as_alu(nir_src_parent_instr(use));
+       if (!is_two_src_comparison(alu))
+          return false;
+ 
+@@ -159,8 +159,8 @@ nir_opt_rematerialize_compares_impl(nir_shader *shader, nir_function_impl *impl)
+           * cannot be run after this pass.
+           */
+          nir_foreach_use_including_if_safe(use, &alu->def) {
+-            if (use->is_if) {
+-               nir_if *const if_stmt = use->parent_if;
++            if (nir_src_is_if(use)) {
++               nir_if *const if_stmt = nir_src_parent_if(use);
+ 
+                nir_block *const prev_block =
+                   nir_cf_node_as_block(nir_cf_node_prev(&if_stmt->cf_node));
+@@ -178,7 +178,7 @@ nir_opt_rematerialize_compares_impl(nir_shader *shader, nir_function_impl *impl)
+                nir_src_rewrite(&if_stmt->condition, &clone->def);
+                progress = true;
+             } else {
+-               nir_instr *const use_instr = use->parent_instr;
++               nir_instr *const use_instr = nir_src_parent_instr(use);
+ 
+                /* If the use is in the same block as the def, don't
+                 * rematerialize.
+@@ -279,7 +279,7 @@ nir_opt_rematerialize_alu_impl(nir_shader *shader, nir_function_impl *impl)
+           * block because CSE cannot be run after this pass.
+           */
+          nir_foreach_use_safe(use, &alu->def) {
+-            nir_instr *const use_instr = use->parent_instr;
++            nir_instr *const use_instr = nir_src_parent_instr(use);
+ 
+             /* If the use is in the same block as the def, don't
+              * rematerialize.
+diff --git a/src/compiler/nir/nir_opt_shrink_vectors.c b/src/compiler/nir/nir_opt_shrink_vectors.c
+index f2a4732821f..3a72e51e84b 100644
+--- a/src/compiler/nir/nir_opt_shrink_vectors.c
++++ b/src/compiler/nir/nir_opt_shrink_vectors.c
+@@ -67,7 +67,7 @@ shrink_dest_to_read_mask(nir_def *def)
+ 
+    /* don't remove any channels if used by an intrinsic */
+    nir_foreach_use(use_src, def) {
+-      if (use_src->parent_instr->type == nir_instr_type_intrinsic)
++      if (nir_src_parent_instr(use_src)->type == nir_instr_type_intrinsic)
+          return false;
+    }
+ 
+@@ -126,7 +126,7 @@ reswizzle_alu_uses(nir_def *def, uint8_t *reswizzle)
+ {
+    nir_foreach_use(use_src, def) {
+       /* all uses must be ALU instructions */
+-      assert(use_src->parent_instr->type == nir_instr_type_alu);
++      assert(nir_src_parent_instr(use_src)->type == nir_instr_type_alu);
+       nir_alu_src *alu_src = (nir_alu_src *)use_src;
+ 
+       /* reswizzle ALU sources */
+@@ -139,7 +139,7 @@ static bool
+ is_only_used_by_alu(nir_def *def)
+ {
+    nir_foreach_use(use_src, def) {
+-      if (use_src->parent_instr->type != nir_instr_type_alu)
++      if (nir_src_parent_instr(use_src)->type != nir_instr_type_alu)
+          return false;
+    }
+ 
+@@ -416,10 +416,10 @@ opt_shrink_vectors_phi(nir_builder *b, nir_phi_instr *instr)
+    /* Check the uses. */
+    nir_component_mask_t mask = 0;
+    nir_foreach_use(src, def) {
+-      if (src->parent_instr->type != nir_instr_type_alu)
++      if (nir_src_parent_instr(src)->type != nir_instr_type_alu)
+          return false;
+ 
+-      nir_alu_instr *alu = nir_instr_as_alu(src->parent_instr);
++      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+ 
+       nir_alu_src *alu_src = exec_node_data(nir_alu_src, src, src);
+       int src_idx = alu_src - &alu->src[0];
+@@ -431,7 +431,7 @@ opt_shrink_vectors_phi(nir_builder *b, nir_phi_instr *instr)
+        * This can happen in the case of loops.
+        */
+       nir_foreach_use(alu_use_src, alu_def) {
+-         if (alu_use_src->parent_instr != &instr->instr) {
++         if (nir_src_parent_instr(alu_use_src) != &instr->instr) {
+             mask |= src_read_mask;
+          }
+       }
+diff --git a/src/compiler/nir/nir_opt_sink.c b/src/compiler/nir/nir_opt_sink.c
+index 185ea123202..ae3db4a1601 100644
+--- a/src/compiler/nir/nir_opt_sink.c
++++ b/src/compiler/nir/nir_opt_sink.c
+@@ -194,11 +194,11 @@ get_preferred_block(nir_def *def, bool sink_out_of_loops)
+    nir_foreach_use_including_if(use, def) {
+       nir_block *use_block;
+ 
+-      if (use->is_if) {
++      if (nir_src_is_if(use)) {
+          use_block =
+-            nir_cf_node_as_block(nir_cf_node_prev(&use->parent_if->cf_node));
++            nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(use)->cf_node));
+       } else {
+-         nir_instr *instr = use->parent_instr;
++         nir_instr *instr = nir_src_parent_instr(use);
+          use_block = instr->block;
+ 
+          /*
+diff --git a/src/compiler/nir/nir_opt_undef.c b/src/compiler/nir/nir_opt_undef.c
+index 0f227b0bd6d..880e67fc926 100644
+--- a/src/compiler/nir/nir_opt_undef.c
++++ b/src/compiler/nir/nir_opt_undef.c
+@@ -167,9 +167,7 @@ struct visit_info {
+ static void
+ visit_undef_use(nir_src *src, struct visit_info *info)
+ {
+-   nir_instr *instr = src->parent_instr;
+-
+-   if (src->is_if) {
++   if (nir_src_is_if(src)) {
+       /* If the use is "if", keep undef because the branch will be eliminated
+        * by nir_opt_dead_cf.
+        */
+@@ -177,6 +175,8 @@ visit_undef_use(nir_src *src, struct visit_info *info)
+       return;
+    }
+ 
++   nir_instr *instr = nir_src_parent_instr(src);
++
+    if (instr->type == nir_instr_type_alu) {
+       /* Replacing undef with a constant is only beneficial with ALU
+        * instructions because it can eliminate them or simplify them.
+diff --git a/src/compiler/nir/nir_opt_vectorize.c b/src/compiler/nir/nir_opt_vectorize.c
+index 9218d3d531a..d69442c0a9e 100644
+--- a/src/compiler/nir/nir_opt_vectorize.c
++++ b/src/compiler/nir/nir_opt_vectorize.c
+@@ -244,7 +244,7 @@ instr_try_combine(struct set *instr_set, nir_instr *instr1, nir_instr *instr2)
+ 
+    /* update all ALU uses */
+    nir_foreach_use_safe(src, &alu1->def) {
+-      nir_instr *user_instr = src->parent_instr;
++      nir_instr *user_instr = nir_src_parent_instr(src);
+       if (user_instr->type == nir_instr_type_alu) {
+          /* Check if user is found in the hashset */
+          struct set_entry *entry = _mesa_set_search(instr_set, user_instr);
+@@ -263,14 +263,14 @@ instr_try_combine(struct set *instr_set, nir_instr *instr1, nir_instr *instr2)
+    }
+ 
+    nir_foreach_use_safe(src, &alu2->def) {
+-      if (src->parent_instr->type == nir_instr_type_alu) {
++      if (nir_src_parent_instr(src)->type == nir_instr_type_alu) {
+          /* For ALU instructions, rewrite the source directly to avoid a
+           * round-trip through copy propagation.
+           */
+          nir_src_rewrite(src, &new_alu->def);
+ 
+          nir_alu_src *alu_src = container_of(src, nir_alu_src, src);
+-         nir_alu_instr *use = nir_instr_as_alu(src->parent_instr);
++         nir_alu_instr *use = nir_instr_as_alu(nir_src_parent_instr(src));
+          unsigned components = nir_ssa_alu_instr_src_components(use, alu_src - use->src);
+          for (unsigned i = 0; i < components; i++)
+             alu_src->swizzle[i] += alu1_components;
+diff --git a/src/compiler/nir/nir_range_analysis.c b/src/compiler/nir/nir_range_analysis.c
+index e38df3bd665..d982c9e602c 100644
+--- a/src/compiler/nir/nir_range_analysis.c
++++ b/src/compiler/nir/nir_range_analysis.c
+@@ -2027,9 +2027,9 @@ ssa_def_bits_used(const nir_def *def, int recur)
+       return all_bits;
+ 
+    nir_foreach_use(src, def) {
+-      switch (src->parent_instr->type) {
++      switch (nir_src_parent_instr(src)->type) {
+       case nir_instr_type_alu: {
+-         nir_alu_instr *use_alu = nir_instr_as_alu(src->parent_instr);
++         nir_alu_instr *use_alu = nir_instr_as_alu(nir_src_parent_instr(src));
+          unsigned src_idx = container_of(src, nir_alu_src, src) - use_alu->src;
+ 
+          /* If a user of the value produces a vector result, return the
+@@ -2127,7 +2127,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
+ 
+       case nir_instr_type_intrinsic: {
+          nir_intrinsic_instr *use_intrin =
+-            nir_instr_as_intrinsic(src->parent_instr);
++            nir_instr_as_intrinsic(nir_src_parent_instr(src));
+          unsigned src_idx = src - use_intrin->src;
+ 
+          switch (use_intrin->intrinsic) {
+@@ -2178,7 +2178,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
+       }
+ 
+       case nir_instr_type_phi: {
+-         nir_phi_instr *use_phi = nir_instr_as_phi(src->parent_instr);
++         nir_phi_instr *use_phi = nir_instr_as_phi(nir_src_parent_instr(src));
+          bits_used |= ssa_def_bits_used(&use_phi->def, recur);
+          break;
+       }
+diff --git a/src/compiler/nir/nir_remove_dead_variables.c b/src/compiler/nir/nir_remove_dead_variables.c
+index 599523f309c..533c7ce2b46 100644
+--- a/src/compiler/nir/nir_remove_dead_variables.c
++++ b/src/compiler/nir/nir_remove_dead_variables.c
+@@ -31,15 +31,15 @@ static bool
+ deref_used_for_not_store(nir_deref_instr *deref)
+ {
+    nir_foreach_use(src, &deref->def) {
+-      switch (src->parent_instr->type) {
++      switch (nir_src_parent_instr(src)->type) {
+       case nir_instr_type_deref:
+-         if (deref_used_for_not_store(nir_instr_as_deref(src->parent_instr)))
++         if (deref_used_for_not_store(nir_instr_as_deref(nir_src_parent_instr(src))))
+             return true;
+          break;
+ 
+       case nir_instr_type_intrinsic: {
+          nir_intrinsic_instr *intrin =
+-            nir_instr_as_intrinsic(src->parent_instr);
++            nir_instr_as_intrinsic(nir_src_parent_instr(src));
+          /* The first source of copy and store intrinsics is the deref to
+           * write.  Don't record those.
+           */
+diff --git a/src/compiler/nir/nir_repair_ssa.c b/src/compiler/nir/nir_repair_ssa.c
+index 8e219cd40a1..340cadb50b1 100644
+--- a/src/compiler/nir/nir_repair_ssa.c
++++ b/src/compiler/nir/nir_repair_ssa.c
+@@ -57,12 +57,12 @@ prep_build_phi(struct repair_ssa_state *state)
+ static nir_block *
+ get_src_block(nir_src *src)
+ {
+-   if (src->is_if) {
+-      return nir_cf_node_as_block(nir_cf_node_prev(&src->parent_if->cf_node));
+-   } else if (src->parent_instr->type == nir_instr_type_phi) {
++   if (nir_src_is_if(src)) {
++      return nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
++   } else if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
+       return exec_node_data(nir_phi_src, src, src)->pred;
+    } else {
+-      return src->parent_instr->block;
++      return nir_src_parent_instr(src)->block;
+    }
+ }
+ 
+@@ -112,10 +112,10 @@ repair_ssa_def(nir_def *def, void *void_state)
+        * isn't a cast, we need to wrap it in a cast so we don't loose any
+        * deref information.
+        */
+-      if (!src->is_if &&
++      if (!nir_src_is_if(src) &&
+           def->parent_instr->type == nir_instr_type_deref &&
+-          src->parent_instr->type == nir_instr_type_deref &&
+-          nir_instr_as_deref(src->parent_instr)->deref_type != nir_deref_type_cast) {
++          nir_src_parent_instr(src)->type == nir_instr_type_deref &&
++          nir_instr_as_deref(nir_src_parent_instr(src))->deref_type != nir_deref_type_cast) {
+          nir_deref_instr *cast =
+             nir_deref_instr_create(state->impl->function->shader,
+                                    nir_deref_type_cast);
+@@ -128,13 +128,13 @@ repair_ssa_def(nir_def *def, void *void_state)
+ 
+          nir_def_init(&cast->instr, &cast->def, def->num_components,
+                       def->bit_size);
+-         nir_instr_insert(nir_before_instr(src->parent_instr),
++         nir_instr_insert(nir_before_instr(nir_src_parent_instr(src)),
+                           &cast->instr);
+          block_def = &cast->def;
+       }
+ 
+-      if (src->is_if)
+-         nir_src_rewrite(&src->parent_if->condition, block_def);
++      if (nir_src_is_if(src))
++         nir_src_rewrite(&nir_src_parent_if(src)->condition, block_def);
+       else
+          nir_src_rewrite(src, block_def);
+    }
+diff --git a/src/compiler/nir/nir_schedule.c b/src/compiler/nir/nir_schedule.c
+index f89ec8f3f4e..61c4d2c4f27 100644
+--- a/src/compiler/nir/nir_schedule.c
++++ b/src/compiler/nir/nir_schedule.c
+@@ -277,7 +277,7 @@ nir_schedule_ssa_deps(nir_def *def, void *in_state)
+ 
+    nir_foreach_use(src, def) {
+       nir_schedule_node *use_n = nir_schedule_get_node(instr_map,
+-                                                       src->parent_instr);
++                                                       nir_src_parent_instr(src));
+ 
+       add_read_dep(state, def_n, use_n);
+    }
+@@ -530,7 +530,7 @@ nir_schedule_regs_freed_src_cb(nir_src *src, void *in_state)
+    struct set *remaining_uses = nir_schedule_scoreboard_get_src(scoreboard, src);
+ 
+    if (remaining_uses->entries == 1 &&
+-       _mesa_set_search(remaining_uses, src->parent_instr)) {
++       _mesa_set_search(remaining_uses, nir_src_parent_instr(src))) {
+       state->regs_freed += nir_schedule_src_pressure(src);
+    }
+ 
+@@ -889,7 +889,7 @@ nir_schedule_mark_src_scheduled(nir_src *src, void *state)
+    struct set *remaining_uses = nir_schedule_scoreboard_get_src(scoreboard, src);
+ 
+    struct set_entry *entry = _mesa_set_search(remaining_uses,
+-                                              src->parent_instr);
++                                              nir_src_parent_instr(src));
+    if (entry) {
+       /* Once we've used an SSA value in one instruction, bump the priority of
+        * the other uses so the SSA value can get fully consumed.
+@@ -901,12 +901,12 @@ nir_schedule_mark_src_scheduled(nir_src *src, void *state)
+        */
+       if (src->ssa->parent_instr->type != nir_instr_type_load_const) {
+          nir_foreach_use(other_src, src->ssa) {
+-            if (other_src->parent_instr == src->parent_instr)
++            if (nir_src_parent_instr(other_src) == nir_src_parent_instr(src))
+                continue;
+ 
+             nir_schedule_node *n =
+                nir_schedule_get_node(scoreboard->instr_map,
+-                                     other_src->parent_instr);
++                                     nir_src_parent_instr(other_src));
+ 
+             if (n && !n->partially_evaluated_path) {
+                if (debug) {
+@@ -923,7 +923,7 @@ nir_schedule_mark_src_scheduled(nir_src *src, void *state)
+ 
+    nir_schedule_mark_use(scoreboard,
+                          (void *)src->ssa,
+-                         src->parent_instr,
++                         nir_src_parent_instr(src),
+                          nir_schedule_src_pressure(src));
+ 
+    return true;
+@@ -1181,7 +1181,7 @@ nir_schedule_ssa_def_init_scoreboard(nir_def *def, void *state)
+       _mesa_set_add(def_uses, def->parent_instr);
+ 
+    nir_foreach_use(src, def) {
+-      _mesa_set_add(def_uses, src->parent_instr);
++      _mesa_set_add(def_uses, nir_src_parent_instr(src));
+    }
+ 
+    /* XXX: Handle if uses */
+diff --git a/src/compiler/nir/nir_search.c b/src/compiler/nir/nir_search.c
+index fe7a6d0e91e..cb024b2561f 100644
+--- a/src/compiler/nir/nir_search.c
++++ b/src/compiler/nir/nir_search.c
+@@ -622,8 +622,8 @@ add_uses_to_worklist(nir_instr *instr,
+    nir_def *def = nir_instr_def(instr);
+ 
+    nir_foreach_use_safe(use_src, def) {
+-      if (nir_algebraic_automaton(use_src->parent_instr, states, pass_op_table))
+-         nir_instr_worklist_push_tail(worklist, use_src->parent_instr);
++      if (nir_algebraic_automaton(nir_src_parent_instr(use_src), states, pass_op_table))
++         nir_instr_worklist_push_tail(worklist, nir_src_parent_instr(use_src));
+    }
+ }
+ 
+diff --git a/src/compiler/nir/nir_search_helpers.h b/src/compiler/nir/nir_search_helpers.h
+index 809c257ca36..eac527de632 100644
+--- a/src/compiler/nir/nir_search_helpers.h
++++ b/src/compiler/nir/nir_search_helpers.h
+@@ -453,7 +453,7 @@ static inline bool
+ is_used_by_non_fsat(const nir_alu_instr *instr)
+ {
+    nir_foreach_use(src, &instr->def) {
+-      const nir_instr *const user_instr = src->parent_instr;
++      const nir_instr *const user_instr = nir_src_parent_instr(src);
+ 
+       if (user_instr->type != nir_instr_type_alu)
+          return true;
+@@ -472,7 +472,7 @@ static inline bool
+ is_only_used_as_float(const nir_alu_instr *instr)
+ {
+    nir_foreach_use(src, &instr->def) {
+-      const nir_instr *const user_instr = src->parent_instr;
++      const nir_instr *const user_instr = nir_src_parent_instr(src);
+       if (user_instr->type != nir_instr_type_alu)
+          return false;
+ 
+@@ -492,7 +492,7 @@ static inline bool
+ is_only_used_by_fadd(const nir_alu_instr *instr)
+ {
+    nir_foreach_use(src, &instr->def) {
+-      const nir_instr *const user_instr = src->parent_instr;
++      const nir_instr *const user_instr = nir_src_parent_instr(src);
+       if (user_instr->type != nir_instr_type_alu)
+          return false;
+ 
+diff --git a/src/compiler/nir/nir_to_lcssa.c b/src/compiler/nir/nir_to_lcssa.c
+index e48df1a42d3..653033ec1d0 100644
+--- a/src/compiler/nir/nir_to_lcssa.c
++++ b/src/compiler/nir/nir_to_lcssa.c
+@@ -64,7 +64,7 @@ is_if_use_inside_loop(nir_src *use, nir_loop *loop)
+       nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
+ 
+    nir_block *prev_block =
+-      nir_cf_node_as_block(nir_cf_node_prev(&use->parent_if->cf_node));
++      nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(use)->cf_node));
+    if (prev_block->index <= block_before_loop->index ||
+        prev_block->index >= block_after_loop->index) {
+       return false;
+@@ -81,8 +81,8 @@ is_use_inside_loop(nir_src *use, nir_loop *loop)
+    nir_block *block_after_loop =
+       nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
+ 
+-   if (use->parent_instr->block->index <= block_before_loop->index ||
+-       use->parent_instr->block->index >= block_after_loop->index) {
++   if (nir_src_parent_instr(use)->block->index <= block_before_loop->index ||
++       nir_src_parent_instr(use)->block->index >= block_after_loop->index) {
+       return false;
+    }
+ 
+@@ -202,15 +202,15 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
+    }
+ 
+    nir_foreach_use_including_if(use, def) {
+-      if (use->is_if) {
++      if (nir_src_is_if(use)) {
+          if (!is_if_use_inside_loop(use, state->loop))
+             all_uses_inside_loop = false;
+ 
+          continue;
+       }
+ 
+-      if (use->parent_instr->type == nir_instr_type_phi &&
+-          use->parent_instr->block == state->block_after_loop) {
++      if (nir_src_parent_instr(use)->type == nir_instr_type_phi &&
++          nir_src_parent_instr(use)->block == state->block_after_loop) {
+          continue;
+       }
+ 
+@@ -248,15 +248,15 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
+     * the phi instead of pointing to the ssa-def.
+     */
+    nir_foreach_use_including_if_safe(use, def) {
+-      if (use->is_if) {
++      if (nir_src_is_if(use)) {
+          if (!is_if_use_inside_loop(use, state->loop))
+-            nir_src_rewrite(&use->parent_if->condition, dest);
++            nir_src_rewrite(&nir_src_parent_if(use)->condition, dest);
+ 
+          continue;
+       }
+ 
+-      if (use->parent_instr->type == nir_instr_type_phi &&
+-          state->block_after_loop == use->parent_instr->block) {
++      if (nir_src_parent_instr(use)->type == nir_instr_type_phi &&
++          state->block_after_loop == nir_src_parent_instr(use)->block) {
+          continue;
+       }
+ 
+diff --git a/src/compiler/nir/nir_trivialize_registers.c b/src/compiler/nir/nir_trivialize_registers.c
+index 147be5754b7..4551361491c 100644
+--- a/src/compiler/nir/nir_trivialize_registers.c
++++ b/src/compiler/nir/nir_trivialize_registers.c
+@@ -315,10 +315,10 @@ clear_def(nir_def *def, void *state)
+    struct hash_table *possibly_trivial_stores = state;
+ 
+    nir_foreach_use(src, def) {
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+          continue;
+ 
+-      nir_instr *parent = src->parent_instr;
++      nir_instr *parent = nir_src_parent_instr(src);
+       if (parent->type != nir_instr_type_intrinsic)
+          continue;
+ 
+diff --git a/src/compiler/nir/nir_validate.c b/src/compiler/nir/nir_validate.c
+index 1aa9c818827..3762b713ed9 100644
+--- a/src/compiler/nir/nir_validate.c
++++ b/src/compiler/nir/nir_validate.c
+@@ -156,9 +156,9 @@ validate_src(nir_src *src, validate_state *state,
+              unsigned bit_sizes, unsigned num_components)
+ {
+    if (state->instr)
+-      validate_assert(state, src->parent_instr == state->instr);
++      validate_assert(state, nir_src_parent_instr(src) == state->instr);
+    else
+-      validate_assert(state, src->parent_if == state->if_stmt);
++      validate_assert(state, nir_src_parent_if(src) == state->if_stmt);
+ 
+    validate_ssa_src(src, state, bit_sizes, num_components);
+ }
+@@ -393,10 +393,10 @@ validate_deref_instr(nir_deref_instr *instr, validate_state *state)
+        * conditions expect well-formed Booleans.  If you want to compare with
+        * NULL, an explicit comparison operation should be used.
+        */
+-      if (!validate_assert(state, !use->is_if))
++      if (!validate_assert(state, !nir_src_is_if(use)))
+          continue;
+ 
+-      if (use->parent_instr->type == nir_instr_type_phi) {
++      if (nir_src_parent_instr(use)->type == nir_instr_type_phi) {
+          validate_assert(state, !(instr->modes & (nir_var_shader_in |
+                                                   nir_var_shader_out |
+                                                   nir_var_shader_out |
+@@ -1257,7 +1257,7 @@ validate_if(nir_if *if_stmt, validate_state *state)
+    nir_cf_node *next_node = nir_cf_node_next(&if_stmt->cf_node);
+    validate_assert(state, next_node->type == nir_cf_node_block);
+ 
+-   validate_assert(state, if_stmt->condition.is_if);
++   validate_assert(state, nir_src_is_if(&if_stmt->condition));
+    validate_src(&if_stmt->condition, state, 0, 1);
+ 
+    validate_assert(state, !exec_list_is_empty(&if_stmt->then_list));
+@@ -1443,13 +1443,13 @@ validate_src_dominance(nir_src *src, void *_state)
+ {
+    validate_state *state = _state;
+ 
+-   if (src->ssa->parent_instr->block == src->parent_instr->block) {
++   if (src->ssa->parent_instr->block == nir_src_parent_instr(src)->block) {
+       validate_assert(state, src->ssa->index < state->impl->ssa_alloc);
+       validate_assert(state, BITSET_TEST(state->ssa_defs_found,
+                                          src->ssa->index));
+    } else {
+       validate_assert(state, nir_block_dominates(src->ssa->parent_instr->block,
+-                                                 src->parent_instr->block));
++                                                 nir_src_parent_instr(src)->block));
+    }
+    return true;
+ }
+diff --git a/src/freedreno/ir3/ir3_nir_opt_preamble.c b/src/freedreno/ir3/ir3_nir_opt_preamble.c
+index 32e73d43187..6ada9325cac 100644
+--- a/src/freedreno/ir3/ir3_nir_opt_preamble.c
++++ b/src/freedreno/ir3/ir3_nir_opt_preamble.c
+@@ -48,10 +48,10 @@ static bool
+ all_uses_float(nir_def *def, bool allow_src2)
+ {
+    nir_foreach_use_including_if (use, def) {
+-      if (use->is_if)
++      if (nir_src_is_if(use))
+          return false;
+ 
+-      nir_instr *use_instr = use->parent_instr;
++      nir_instr *use_instr = nir_src_parent_instr(use);
+       if (use_instr->type != nir_instr_type_alu)
+          return false;
+       nir_alu_instr *use_alu = nir_instr_as_alu(use_instr);
+@@ -78,10 +78,10 @@ static bool
+ all_uses_bit(nir_def *def)
+ {
+    nir_foreach_use_including_if (use, def) {
+-      if (use->is_if)
++      if (nir_src_is_if(use))
+          return false;
+ 
+-      nir_instr *use_instr = use->parent_instr;
++      nir_instr *use_instr = nir_src_parent_instr(use);
+       if (use_instr->type != nir_instr_type_alu)
+          return false;
+       nir_alu_instr *use_alu = nir_instr_as_alu(use_instr);
+@@ -223,7 +223,7 @@ rewrite_cost(nir_def *def, const void *data)
+ 
+    bool mov_needed = false;
+    nir_foreach_use (use, def) {
+-      nir_instr *parent_instr = use->parent_instr;
++      nir_instr *parent_instr = nir_src_parent_instr(use);
+       if (parent_instr->type != nir_instr_type_alu) {
+          mov_needed = true;
+          break;
+diff --git a/src/gallium/auxiliary/nir/nir_to_tgsi.c b/src/gallium/auxiliary/nir/nir_to_tgsi.c
+index 0cca381bc59..521a643d0fb 100644
+--- a/src/gallium/auxiliary/nir/nir_to_tgsi.c
++++ b/src/gallium/auxiliary/nir/nir_to_tgsi.c
+@@ -766,13 +766,13 @@ ntt_try_store_in_tgsi_output_with_use(struct ntt_compile *c,
+       return false;
+    }
+ 
+-   if (src->is_if)
++   if (nir_src_is_if(src))
+       return false;
+ 
+-   if (src->parent_instr->type != nir_instr_type_intrinsic)
++   if (nir_src_parent_instr(src)->type != nir_instr_type_intrinsic)
+       return false;
+ 
+-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(src->parent_instr);
++   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+    if (intr->intrinsic != nir_intrinsic_store_output ||
+        !nir_src_is_const(intr->src[1])) {
+       return false;
+@@ -800,7 +800,7 @@ ntt_try_store_reg_in_tgsi_output(struct ntt_compile *c, struct ureg_dst *dst,
+    /* Look for a single use for try_store_in_tgsi_output */
+    nir_src *use = NULL;
+    nir_foreach_reg_load(src, reg_decl) {
+-      nir_intrinsic_instr *load = nir_instr_as_intrinsic(src->parent_instr);
++      nir_intrinsic_instr *load = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+       nir_foreach_use_including_if(load_use, &load->def) {
+          /* We can only have one use */
+          if (use != NULL)
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.c b/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.c
+index a741b979a80..9c821625fe6 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.c
+@@ -425,7 +425,7 @@ vec_dest_has_swizzle(nir_alu_instr *vec, nir_def *ssa)
+ 
+    /* don't deal with possible bypassed vec/mov chain */
+    nir_foreach_use(use_src, ssa) {
+-      nir_instr *instr = use_src->parent_instr;
++      nir_instr *instr = nir_src_parent_instr(use_src);
+       if (instr->type != nir_instr_type_alu)
+          continue;
+ 
+@@ -900,7 +900,7 @@ lower_alu(struct etna_compile *c, nir_alu_instr *alu)
+       /* check that vecN instruction is only user of this */
+       bool need_mov = false;
+       nir_foreach_use_including_if(use_src, ssa) {
+-         if (use_src->is_if || use_src->parent_instr != &alu->instr)
++         if (nir_src_is_if(use_src) || nir_src_parent_instr(use_src) != &alu->instr)
+             need_mov = true;
+       }
+ 
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.h b/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.h
+index c8ff4489f73..dce8d3cdb40 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.h
++++ b/src/gallium/drivers/etnaviv/etnaviv_compiler_nir.h
+@@ -210,7 +210,7 @@ real_def(nir_def *def, unsigned *swiz, unsigned *mask)
+     * we can apply the same logic to movs in a some cases too
+     */
+    nir_foreach_use(use_src, def) {
+-      nir_instr *instr = use_src->parent_instr;
++      nir_instr *instr = nir_src_parent_instr(use_src);
+ 
+       /* src bypass check: for now only deal with tex src mov case
+        * note: for alu don't bypass mov for multiple uniform sources
+@@ -238,7 +238,7 @@ real_def(nir_def *def, unsigned *swiz, unsigned *mask)
+       case nir_op_vec4:
+          assert(!nir_def_used_by_if(def));
+          nir_foreach_use(use_src, def)
+-            assert(use_src->parent_instr == instr);
++            assert(nir_src_parent_instr(use_src) == instr);
+ 
+          update_swiz_mask(alu, def, swiz, mask);
+          break;
+diff --git a/src/gallium/drivers/lima/ir/gp/nir.c b/src/gallium/drivers/lima/ir/gp/nir.c
+index 05d1124e386..765da082ed0 100644
+--- a/src/gallium/drivers/lima/ir/gp/nir.c
++++ b/src/gallium/drivers/lima/ir/gp/nir.c
+@@ -53,7 +53,7 @@ static void register_node_ssa(gpir_block *block, gpir_node *node, nir_def *ssa)
+     */
+    bool needs_register = false;
+    nir_foreach_use(use, ssa) {
+-      if (use->parent_instr->block != ssa->parent_instr->block) {
++      if (nir_src_parent_instr(use)->block != ssa->parent_instr->block) {
+          needs_register = true;
+          break;
+       }
+@@ -61,7 +61,7 @@ static void register_node_ssa(gpir_block *block, gpir_node *node, nir_def *ssa)
+ 
+    if (!needs_register) {
+       nir_foreach_if_use(use, ssa) {
+-         if (nir_cf_node_prev(&use->parent_if->cf_node) !=
++         if (nir_cf_node_prev(&nir_src_parent_if(use)->cf_node) !=
+              &ssa->parent_instr->block->cf_node) {
+             needs_register = true;
+             break;
+diff --git a/src/gallium/drivers/lima/ir/lima_nir_duplicate_consts.c b/src/gallium/drivers/lima/ir/lima_nir_duplicate_consts.c
+index d6d6c44d72b..efe59fd9b50 100644
+--- a/src/gallium/drivers/lima/ir/lima_nir_duplicate_consts.c
++++ b/src/gallium/drivers/lima/ir/lima_nir_duplicate_consts.c
+@@ -34,9 +34,9 @@ lima_nir_duplicate_load_const(nir_builder *b, nir_load_const_instr *load)
+    nir_foreach_use_safe(use_src, &load->def) {
+       nir_load_const_instr *dupl;
+ 
+-      if (last_parent_instr != use_src->parent_instr) {
++      if (last_parent_instr != nir_src_parent_instr(use_src)) {
+          /* if ssa use, clone for the target block */
+-         b->cursor = nir_before_instr(use_src->parent_instr);
++         b->cursor = nir_before_instr(nir_src_parent_instr(use_src));
+ 
+          dupl = nir_load_const_instr_create(b->shader, load->def.num_components,
+                                             load->def.bit_size);
+@@ -50,7 +50,7 @@ lima_nir_duplicate_load_const(nir_builder *b, nir_load_const_instr *load)
+       }
+ 
+       nir_src_rewrite(use_src, &dupl->def);
+-      last_parent_instr = use_src->parent_instr;
++      last_parent_instr = nir_src_parent_instr(use_src);
+       last_dupl = dupl;
+    }
+ 
+@@ -59,7 +59,7 @@ lima_nir_duplicate_load_const(nir_builder *b, nir_load_const_instr *load)
+ 
+    nir_foreach_if_use_safe(use_src, &load->def) {
+       nir_load_const_instr *dupl;
+-      nir_if *nif = use_src->parent_if;
++      nir_if *nif = nir_src_parent_if(use_src);
+ 
+       if (last_parent_if != nif) {
+          /* if 'if use', clone where it is */
+@@ -76,7 +76,7 @@ lima_nir_duplicate_load_const(nir_builder *b, nir_load_const_instr *load)
+          dupl = last_dupl;
+       }
+ 
+-      nir_src_rewrite(&use_src->parent_if->condition, &dupl->def);
++      nir_src_rewrite(&nir_src_parent_if(use_src)->condition, &dupl->def);
+       last_parent_if = nif;
+       last_dupl = dupl;
+    }
+diff --git a/src/gallium/drivers/lima/ir/lima_nir_duplicate_intrinsic.c b/src/gallium/drivers/lima/ir/lima_nir_duplicate_intrinsic.c
+index e9440f95d15..358352b3245 100644
+--- a/src/gallium/drivers/lima/ir/lima_nir_duplicate_intrinsic.c
++++ b/src/gallium/drivers/lima/ir/lima_nir_duplicate_intrinsic.c
+@@ -35,9 +35,9 @@ lima_nir_duplicate_intrinsic(nir_builder *b, nir_intrinsic_instr *itr,
+    nir_foreach_use_safe(use_src, &itr->def) {
+       nir_intrinsic_instr *dupl;
+ 
+-      if (last_parent_instr != use_src->parent_instr) {
++      if (last_parent_instr != nir_src_parent_instr(use_src)) {
+          /* if ssa use, clone for the target block */
+-         b->cursor = nir_before_instr(use_src->parent_instr);
++         b->cursor = nir_before_instr(nir_src_parent_instr(use_src));
+          dupl = nir_intrinsic_instr_create(b->shader, op);
+          dupl->num_components = itr->num_components;
+          memcpy(dupl->const_index, itr->const_index, sizeof(itr->const_index));
+@@ -54,7 +54,7 @@ lima_nir_duplicate_intrinsic(nir_builder *b, nir_intrinsic_instr *itr,
+       }
+ 
+       nir_src_rewrite(use_src, &dupl->def);
+-      last_parent_instr = use_src->parent_instr;
++      last_parent_instr = nir_src_parent_instr(use_src);
+       last_dupl = dupl;
+    }
+ 
+@@ -63,7 +63,7 @@ lima_nir_duplicate_intrinsic(nir_builder *b, nir_intrinsic_instr *itr,
+ 
+    nir_foreach_if_use_safe(use_src, &itr->def) {
+       nir_intrinsic_instr *dupl;
+-      nir_if *nif = use_src->parent_if;
++      nir_if *nif = nir_src_parent_if(use_src);
+ 
+       if (last_parent_if != nif) {
+          /* if 'if use', clone where it is */
+@@ -83,7 +83,7 @@ lima_nir_duplicate_intrinsic(nir_builder *b, nir_intrinsic_instr *itr,
+          dupl = last_dupl;
+       }
+ 
+-      nir_src_rewrite(&use_src->parent_if->condition, &dupl->def);
++      nir_src_rewrite(&nir_src_parent_if(use_src)->condition, &dupl->def);
+       last_parent_if = nif;
+       last_dupl = dupl;
+    }
+diff --git a/src/gallium/drivers/lima/ir/lima_nir_split_loads.c b/src/gallium/drivers/lima/ir/lima_nir_split_loads.c
+index f39e0eef966..fb6e4451753 100644
+--- a/src/gallium/drivers/lima/ir/lima_nir_split_loads.c
++++ b/src/gallium/drivers/lima/ir/lima_nir_split_loads.c
+@@ -61,8 +61,8 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
+ 
+    nir_foreach_use_safe(src, &intrin->def) {
+       struct hash_entry *entry =
+-         _mesa_hash_table_search(visited_instrs, src->parent_instr);
+-      if (entry && (src->parent_instr->type != nir_instr_type_phi)) {
++         _mesa_hash_table_search(visited_instrs, nir_src_parent_instr(src));
++      if (entry && (nir_src_parent_instr(src)->type != nir_instr_type_phi)) {
+          nir_def *def = entry->data;
+          nir_src_rewrite(src, def);
+          continue;
+@@ -70,11 +70,11 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
+       b->cursor = nir_before_src(src);
+       nir_def *new = clone_intrinsic(b, intrin);
+       nir_src_rewrite(src, new);
+-      _mesa_hash_table_insert(visited_instrs, src->parent_instr, new);
++      _mesa_hash_table_insert(visited_instrs, nir_src_parent_instr(src), new);
+    }
+    nir_foreach_if_use_safe(src, &intrin->def) {
+       b->cursor = nir_before_src(src);
+-      nir_src_rewrite(&src->parent_if->condition, clone_intrinsic(b, intrin));
++      nir_src_rewrite(&nir_src_parent_if(src)->condition, clone_intrinsic(b, intrin));
+    }
+ 
+    nir_instr_remove(&intrin->instr);
+@@ -89,8 +89,8 @@ replace_load_const(nir_builder *b, nir_load_const_instr *load_const)
+ 
+    nir_foreach_use_safe(src, &load_const->def) {
+       struct hash_entry *entry =
+-         _mesa_hash_table_search(visited_instrs, src->parent_instr);
+-      if (entry && (src->parent_instr->type != nir_instr_type_phi)) {
++         _mesa_hash_table_search(visited_instrs, nir_src_parent_instr(src));
++      if (entry && (nir_src_parent_instr(src)->type != nir_instr_type_phi)) {
+          nir_def *def = entry->data;
+          nir_src_rewrite(src, def);
+          continue;
+@@ -100,7 +100,7 @@ replace_load_const(nir_builder *b, nir_load_const_instr *load_const)
+                                        load_const->def.bit_size,
+                                        load_const->value);
+       nir_src_rewrite(src, new);
+-      _mesa_hash_table_insert(visited_instrs, src->parent_instr, new);
++      _mesa_hash_table_insert(visited_instrs, nir_src_parent_instr(src), new);
+    }
+ 
+    nir_instr_remove(&load_const->instr);
+diff --git a/src/gallium/drivers/r300/compiler/nir_to_rc.c b/src/gallium/drivers/r300/compiler/nir_to_rc.c
+index 17f15946fc5..0fda015ced0 100644
+--- a/src/gallium/drivers/r300/compiler/nir_to_rc.c
++++ b/src/gallium/drivers/r300/compiler/nir_to_rc.c
+@@ -609,13 +609,13 @@ ntr_try_store_in_tgsi_output_with_use(struct ntr_compile *c,
+ {
+    *dst = ureg_dst_undef();
+ 
+-   if (src->is_if)
++   if (nir_src_is_if(src))
+       return false;
+ 
+-   if (src->parent_instr->type != nir_instr_type_intrinsic)
++   if (nir_src_parent_instr(src)->type != nir_instr_type_intrinsic)
+       return false;
+ 
+-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(src->parent_instr);
++   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+    if (intr->intrinsic != nir_intrinsic_store_output ||
+        !nir_src_is_const(intr->src[1])) {
+       return false;
+@@ -643,7 +643,7 @@ ntr_try_store_reg_in_tgsi_output(struct ntr_compile *c, struct ureg_dst *dst,
+    /* Look for a single use for try_store_in_tgsi_output */
+    nir_src *use = NULL;
+    nir_foreach_reg_load(src, reg_decl) {
+-      nir_intrinsic_instr *load = nir_instr_as_intrinsic(src->parent_instr);
++      nir_intrinsic_instr *load = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+       nir_foreach_use_including_if(load_use, &load->def) {
+          /* We can only have one use */
+          if (use != NULL)
+diff --git a/src/gallium/drivers/r600/sfn/sfn_nir_lower_tess_io.cpp b/src/gallium/drivers/r600/sfn/sfn_nir_lower_tess_io.cpp
+index f78ca4b8610..584ce2a9cb9 100644
+--- a/src/gallium/drivers/r600/sfn/sfn_nir_lower_tess_io.cpp
++++ b/src/gallium/drivers/r600/sfn/sfn_nir_lower_tess_io.cpp
+@@ -202,7 +202,7 @@ get_dest_usee_mask(nir_intrinsic_instr *op)
+ 
+    nir_foreach_use(use_src, &op->def)
+    {
+-      auto use_instr = use_src->parent_instr;
++      auto use_instr = nir_src_parent_instr(use_src);
+       mq.ssa_index = use_src->ssa->index;
+ 
+       switch (use_instr->type) {
+diff --git a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+index dc6018b8084..37059f45807 100644
+--- a/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
++++ b/src/gallium/drivers/zink/nir_to_spirv/nir_to_spirv.c
+@@ -163,7 +163,7 @@ infer_nir_alu_type_from_uses_ssa(nir_def *ssa);
+ static nir_alu_type
+ infer_nir_alu_type_from_use(nir_src *src)
+ {
+-   nir_instr *instr = src->parent_instr;
++   nir_instr *instr = nir_src_parent_instr(src);
+    nir_alu_type atype = nir_type_invalid;
+    switch (instr->type) {
+    case nir_instr_type_alu: {
+@@ -245,7 +245,7 @@ infer_nir_alu_type_from_uses_ssa(nir_def *ssa)
+    nir_alu_type atype = nir_type_invalid;
+    /* try to infer a type: if it's wrong then whatever, but at least we tried */
+    nir_foreach_use_including_if(src, ssa) {
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+          return nir_type_bool;
+       atype = infer_nir_alu_type_from_use(src);
+       if (atype)
+diff --git a/src/gallium/frontends/lavapipe/lvp_lower_exec_graph.c b/src/gallium/frontends/lavapipe/lvp_lower_exec_graph.c
+index 41c35598c9e..e702467a71f 100644
+--- a/src/gallium/frontends/lavapipe/lvp_lower_exec_graph.c
++++ b/src/gallium/frontends/lavapipe/lvp_lower_exec_graph.c
+@@ -6,6 +6,7 @@
+ 
+ #include "lvp_private.h"
+ 
++#include "nir.h"
+ #include "nir_builder.h"
+ 
+ #define lvp_load_internal_field(b, bit_size, field)                                                \
+@@ -47,7 +48,7 @@ lvp_lower_node_payload_deref(nir_builder *b, nir_instr *instr, void *data)
+       nir_def_rewrite_uses(&deref->def, &cast->def);
+    } else {
+       nir_foreach_use_safe(use, &deref->def) {
+-         b->cursor = nir_before_instr(use->parent_instr);
++         b->cursor = nir_before_instr(nir_src_parent_instr(use));
+          nir_def *payload = nir_load_var(b, deref->var);
+          nir_deref_instr *cast =
+             nir_build_deref_cast(b, payload, nir_var_mem_global, deref->type, 0);
+diff --git a/src/intel/compiler/brw_fs.cpp b/src/intel/compiler/brw_fs.cpp
+index 267bb6648a5..ba3404258bf 100644
+--- a/src/intel/compiler/brw_fs.cpp
++++ b/src/intel/compiler/brw_fs.cpp
+@@ -7477,13 +7477,13 @@ static bool
+ is_used_in_not_interp_frag_coord(nir_def *def)
+ {
+    nir_foreach_use_including_if(src, def) {
+-      if (src->is_if)
++      if (nir_src_is_if(src))
+          return true;
+ 
+-      if (src->parent_instr->type != nir_instr_type_intrinsic)
++      if (nir_src_parent_instr(src)->type != nir_instr_type_intrinsic)
+          return true;
+ 
+-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(src->parent_instr);
++      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+       if (intrin->intrinsic != nir_intrinsic_load_frag_coord)
+          return true;
+    }
+diff --git a/src/intel/compiler/brw_nir_lower_non_uniform_resource_intel.c b/src/intel/compiler/brw_nir_lower_non_uniform_resource_intel.c
+index c692a0bde7b..c4f0dc64662 100644
+--- a/src/intel/compiler/brw_nir_lower_non_uniform_resource_intel.c
++++ b/src/intel/compiler/brw_nir_lower_non_uniform_resource_intel.c
+@@ -288,7 +288,7 @@ brw_nir_cleanup_resource_intel_instr(nir_builder *b,
+ 
+    bool progress = false;
+    nir_foreach_use_safe(src, &intrin->def) {
+-      if (!src->is_if && skip_resource_intel_cleanup(src->parent_instr))
++      if (!nir_src_is_if(src) && skip_resource_intel_cleanup(nir_src_parent_instr(src)))
+          continue;
+ 
+       progress = true;
+diff --git a/src/intel/compiler/brw_nir_opt_peephole_ffma.c b/src/intel/compiler/brw_nir_opt_peephole_ffma.c
+index 66b887e8fe4..01838dbc5c0 100644
+--- a/src/intel/compiler/brw_nir_opt_peephole_ffma.c
++++ b/src/intel/compiler/brw_nir_opt_peephole_ffma.c
+@@ -33,10 +33,10 @@ static inline bool
+ are_all_uses_fadd(nir_def *def)
+ {
+    nir_foreach_use_including_if(use_src, def) {
+-      if (use_src->is_if)
++      if (nir_src_is_if(use_src))
+          return false;
+ 
+-      nir_instr *use_instr = use_src->parent_instr;
++      nir_instr *use_instr = nir_src_parent_instr(use_src);
+       if (use_instr->type != nir_instr_type_alu)
+          return false;
+ 
+diff --git a/src/microsoft/clc/clc_compiler.c b/src/microsoft/clc/clc_compiler.c
+index 2815ab42491..bc21f26dfb4 100644
+--- a/src/microsoft/clc/clc_compiler.c
++++ b/src/microsoft/clc/clc_compiler.c
+@@ -148,8 +148,8 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
+       nir_foreach_use_safe(src, &context->deref->def) {
+          enum image_type type;
+ 
+-         if (src->parent_instr->type == nir_instr_type_intrinsic) {
+-            nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(src->parent_instr);
++         if (nir_src_parent_instr(src)->type == nir_instr_type_intrinsic) {
++            nir_intrinsic_instr *intrinsic = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+             nir_alu_type dest_type;
+ 
+             b->cursor = nir_before_instr(&intrinsic->instr);
+@@ -226,9 +226,9 @@ clc_lower_input_image_deref(nir_builder *b, struct clc_image_lower_context *cont
+             default:
+                unreachable("Unsupported image intrinsic");
+             }
+-         } else if (src->parent_instr->type == nir_instr_type_tex) {
++         } else if (nir_src_parent_instr(src)->type == nir_instr_type_tex) {
+             assert(in_var->data.access & ACCESS_NON_WRITEABLE);
+-            nir_tex_instr *tex = nir_instr_as_tex(src->parent_instr);
++            nir_tex_instr *tex = nir_instr_as_tex(nir_src_parent_instr(src));
+ 
+             switch (nir_alu_type_get_base_type(tex->dest_type)) {
+             case nir_type_float: type = FLOAT4; break;
+diff --git a/src/microsoft/compiler/dxil_nir.c b/src/microsoft/compiler/dxil_nir.c
+index e1a9d9d4717..ed89ce27441 100644
+--- a/src/microsoft/compiler/dxil_nir.c
++++ b/src/microsoft/compiler/dxil_nir.c
+@@ -2284,14 +2284,14 @@ static bool
+ add_def_to_worklist(nir_def *def, void *state)
+ {
+    nir_foreach_use_including_if(src, def) {
+-      if (src->is_if) {
+-         nir_if *nif = src->parent_if;
++      if (nir_src_is_if(src)) {
++         nir_if *nif = nir_src_parent_if(src);
+          nir_foreach_block_in_cf_node(block, &nif->cf_node) {
+             nir_foreach_instr(instr, block)
+                nir_instr_worklist_push_tail(state, instr);
+          }
+       } else
+-         nir_instr_worklist_push_tail(state, src->parent_instr);
++         nir_instr_worklist_push_tail(state, nir_src_parent_instr(src));
+    }
+    return true;
+ }
+diff --git a/src/microsoft/compiler/nir_to_dxil.c b/src/microsoft/compiler/nir_to_dxil.c
+index d173c60b29f..97537fea534 100644
+--- a/src/microsoft/compiler/nir_to_dxil.c
++++ b/src/microsoft/compiler/nir_to_dxil.c
+@@ -2126,7 +2126,7 @@ static bool
+ is_phi_src(nir_def *ssa)
+ {
+    nir_foreach_use(src, ssa)
+-      if (src->parent_instr->type == nir_instr_type_phi)
++      if (nir_src_parent_instr(src)->type == nir_instr_type_phi)
+          return true;
+    return false;
+ }
+diff --git a/src/panfrost/midgard/nir_fuse_io_16.c b/src/panfrost/midgard/nir_fuse_io_16.c
+index c4fe2f5c38b..a2928f8d8e9 100644
+--- a/src/panfrost/midgard/nir_fuse_io_16.c
++++ b/src/panfrost/midgard/nir_fuse_io_16.c
+@@ -35,7 +35,7 @@ bool nir_fuse_io_16(nir_shader *shader);
+ static bool
+ nir_src_is_f2fmp(nir_src *use)
+ {
+-   nir_instr *parent = use->parent_instr;
++   nir_instr *parent = nir_src_parent_instr(use);
+ 
+    if (parent->type != nir_instr_type_alu)
+       return false;
+@@ -71,7 +71,7 @@ nir_fuse_io_16(nir_shader *shader)
+             bool valid = true;
+ 
+             nir_foreach_use_including_if(src, &intr->def)
+-               valid &= !src->is_if && nir_src_is_f2fmp(src);
++               valid &= !nir_src_is_if(src) && nir_src_is_f2fmp(src);
+ 
+             if (!valid)
+                continue;
+-- 
+2.42.0
+

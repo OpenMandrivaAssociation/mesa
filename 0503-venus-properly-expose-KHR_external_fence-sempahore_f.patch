@@ -1,0 +1,67 @@
+From 3fdea1567db862852ad5f5f6916927f16676adf9 Mon Sep 17 00:00:00 2001
+From: Yiwei Zhang <zzyiwei@chromium.org>
+Date: Mon, 16 Oct 2023 17:18:46 -0700
+Subject: [PATCH 503/834] venus: properly expose
+ KHR_external_fence/sempahore_fd
+
+Summary:
+1. hide those extensions for vtest since there's no export support
+2. do block waiting upon export without implicit fencing support
+
+Fixes: 68a478870d2 ("venus: expose KHR_external_fence/sempahore_fd extensions")
+Signed-off-by: Yiwei Zhang <zzyiwei@chromium.org>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25633>
+---
+ src/virtio/vulkan/vn_physical_device.c | 6 ++++--
+ src/virtio/vulkan/vn_queue.c           | 9 +++++++++
+ 2 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/src/virtio/vulkan/vn_physical_device.c b/src/virtio/vulkan/vn_physical_device.c
+index a67c238d354..bdf4813f711 100644
+--- a/src/virtio/vulkan/vn_physical_device.c
++++ b/src/virtio/vulkan/vn_physical_device.c
+@@ -925,10 +925,12 @@ vn_physical_device_get_native_extensions(
+ {
+    memset(exts, 0, sizeof(*exts));
+ 
+-   if (physical_dev->renderer_sync_fd.fence_exportable)
++   if (physical_dev->instance->renderer->info.has_external_sync &&
++       physical_dev->renderer_sync_fd.fence_exportable)
+       exts->KHR_external_fence_fd = true;
+ 
+-   if (physical_dev->renderer_sync_fd.semaphore_importable &&
++   if (physical_dev->instance->renderer->info.has_external_sync &&
++       physical_dev->renderer_sync_fd.semaphore_importable &&
+        physical_dev->renderer_sync_fd.semaphore_exportable)
+       exts->KHR_external_semaphore_fd = true;
+ 
+diff --git a/src/virtio/vulkan/vn_queue.c b/src/virtio/vulkan/vn_queue.c
+index 0b9a06774f9..4848f96b5a7 100644
+--- a/src/virtio/vulkan/vn_queue.c
++++ b/src/virtio/vulkan/vn_queue.c
+@@ -1669,6 +1669,11 @@ vn_GetFenceFdKHR(VkDevice device,
+ 
+       vn_sync_payload_release(dev, &fence->temporary);
+       fence->payload = &fence->permanent;
++
++#ifdef VN_USE_WSI_PLATFORM
++      if (!dev->renderer->info.has_implicit_fencing)
++         sync_wait(fd, -1);
++#endif
+    } else {
+       assert(payload->type == VN_SYNC_TYPE_IMPORTED_SYNC_FD);
+ 
+@@ -2126,6 +2131,10 @@ vn_GetSemaphoreFdKHR(VkDevice device,
+       if (result != VK_SUCCESS)
+          return vn_error(dev->instance, result);
+ 
++#ifdef VN_USE_WSI_PLATFORM
++      if (!dev->renderer->info.has_implicit_fencing)
++         sync_wait(fd, -1);
++#endif
+    } else {
+       assert(payload->type == VN_SYNC_TYPE_IMPORTED_SYNC_FD);
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,89 @@
+From 567c32b55cfebfdca07743caf9976af21e14b5de Mon Sep 17 00:00:00 2001
+From: Chia-I Wu <olvaffe@gmail.com>
+Date: Mon, 25 Sep 2023 09:54:11 -0700
+Subject: [PATCH 389/834] radv, drirc: rename radv_require_{etc2,astc}
+
+Rename them to vk_require_{etc2,astc}.
+
+Signed-off-by: Chia-I Wu <olvaffe@gmail.com>
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25467>
+---
+ src/amd/vulkan/radv_instance.c        |  4 ++--
+ src/amd/vulkan/radv_physical_device.c |  4 ++--
+ src/util/driconf.h                    | 16 ++++++++--------
+ 3 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/src/amd/vulkan/radv_instance.c b/src/amd/vulkan/radv_instance.c
+index f8be41c8362..0e04afa3b9e 100644
+--- a/src/amd/vulkan/radv_instance.c
++++ b/src/amd/vulkan/radv_instance.c
+@@ -135,14 +135,14 @@ static const driOptionDescription radv_dri_options[] = {
+       DRI_CONF_OVERRIDE_VRAM_SIZE()
+       DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(false)
+       DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
++      DRI_CONF_VK_REQUIRE_ETC2(false)
++      DRI_CONF_VK_REQUIRE_ASTC(false)
+       DRI_CONF_RADV_ZERO_VRAM(false)
+       DRI_CONF_RADV_LOWER_DISCARD_TO_DEMOTE(false)
+       DRI_CONF_RADV_INVARIANT_GEOM(false)
+       DRI_CONF_RADV_SPLIT_FMA(false)
+       DRI_CONF_RADV_DISABLE_TC_COMPAT_HTILE_GENERAL(false)
+       DRI_CONF_RADV_DISABLE_DCC(false)
+-      DRI_CONF_RADV_REQUIRE_ETC2(false)
+-      DRI_CONF_RADV_REQUIRE_ASTC(false)
+       DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(false)
+       DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(false)
+       DRI_CONF_RADV_DGC(false)
+diff --git a/src/amd/vulkan/radv_physical_device.c b/src/amd/vulkan/radv_physical_device.c
+index bef564fb53e..ff897fd1518 100644
+--- a/src/amd/vulkan/radv_physical_device.c
++++ b/src/amd/vulkan/radv_physical_device.c
+@@ -1827,8 +1827,8 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
+    device->emulate_astc = true;
+ #else
+    device->emulate_etc2 =
+-      !radv_device_supports_etc(device) && driQueryOptionb(&device->instance->dri_options, "radv_require_etc2");
+-   device->emulate_astc = driQueryOptionb(&device->instance->dri_options, "radv_require_astc");
++      !radv_device_supports_etc(device) && driQueryOptionb(&device->instance->dri_options, "vk_require_etc2");
++   device->emulate_astc = driQueryOptionb(&device->instance->dri_options, "vk_require_astc");
+ #endif
+ 
+    snprintf(device->name, sizeof(device->name), "AMD RADV %s%s", device->rad_info.name,
+diff --git a/src/util/driconf.h b/src/util/driconf.h
+index 1a2e6840271..6c589bbe9f1 100644
+--- a/src/util/driconf.h
++++ b/src/util/driconf.h
+@@ -328,6 +328,14 @@
+    DRI_CONF_OPT_B(intel_enable_wa_14018912822, def, \
+                   "Intel workaround for using zero blend constants")
+ 
++#define DRI_CONF_VK_REQUIRE_ETC2(def) \
++  DRI_CONF_OPT_B(vk_require_etc2, def, \
++                 "Implement emulated ETC2 on HW that does not support it")
++
++#define DRI_CONF_VK_REQUIRE_ASTC(def) \
++   DRI_CONF_OPT_B(vk_require_astc, def, \
++                  "Implement emulated ASTC on HW that does not support it")
++
+ /**
+  * \brief Image quality-related options
+  */
+@@ -637,14 +645,6 @@
+    DRI_CONF_OPT_B(radv_disable_dcc, def, \
+                   "Disable DCC for color images")
+ 
+-#define DRI_CONF_RADV_REQUIRE_ETC2(def)                                        \
+-  DRI_CONF_OPT_B(radv_require_etc2, def,                                       \
+-                 "Implement emulated ETC2 on HW that does not support it")
+-
+-#define DRI_CONF_RADV_REQUIRE_ASTC(def)                                      \
+-   DRI_CONF_OPT_B(radv_require_astc, def,                                    \
+-                  "Implement emulated ASTC on HW that does not support it")
+-
+ #define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
+   DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
+                  "Disable anisotropic filtering for single level images")
+-- 
+2.42.0
+

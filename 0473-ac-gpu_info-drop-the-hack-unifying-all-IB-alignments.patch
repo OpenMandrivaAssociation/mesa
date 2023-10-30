@@ -1,0 +1,46 @@
+From 42aedd627ee798faa0e19a6828f621b69798d562 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Thu, 5 Oct 2023 06:06:15 -0400
+Subject: [PATCH 473/834] ac/gpu_info: drop the hack unifying all IB alignments
+
+We overalign it anyway, so there is no change in behavior.
+
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Reviewed-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25578>
+---
+ src/amd/common/ac_gpu_info.c | 11 ++---------
+ 1 file changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/src/amd/common/ac_gpu_info.c b/src/amd/common/ac_gpu_info.c
+index b1383fd3505..310df8145cd 100644
+--- a/src/amd/common/ac_gpu_info.c
++++ b/src/amd/common/ac_gpu_info.c
+@@ -647,8 +647,6 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+       return false;
+    }
+ 
+-   unsigned max_ib_alignment = 0;
+-
+    for (unsigned ip_type = 0; ip_type < AMD_NUM_IP_TYPES; ip_type++) {
+       struct drm_amdgpu_info_hw_ip ip_info = {0};
+ 
+@@ -679,13 +677,8 @@ bool ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
+             info->ip[AMD_IP_GFX].ver_minor = info->ip[AMD_IP_COMPUTE].ver_minor = 3;
+       }
+       info->ip[ip_type].num_queues = util_bitcount(ip_info.available_rings);
+-      info->ip[ip_type].ib_alignment = MAX2(ip_info.ib_start_alignment, ip_info.ib_size_alignment);
+-      max_ib_alignment = MAX2(max_ib_alignment, info->ip[ip_type].ib_alignment);
+-   }
+-
+-   /* TODO: Remove this. This hack mimics the previous behavior of global ib_alignment. */
+-   for (unsigned ip_type = 0; ip_type < AMD_NUM_IP_TYPES; ip_type++) {
+-      info->ip[ip_type].ib_alignment = MAX2(max_ib_alignment, 1024);
++      info->ip[ip_type].ib_alignment = MAX3(ip_info.ib_start_alignment,
++                                            ip_info.ib_size_alignment, 1024);
+    }
+ 
+    /* This is "align_mask" copied from the kernel, maximums of all IP versions. */
+-- 
+2.42.0
+

@@ -1,0 +1,41 @@
+From a2e07014282d0fb6d32fe8f568e578a99049b3fb Mon Sep 17 00:00:00 2001
+From: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Date: Tue, 29 Aug 2023 10:56:27 +0100
+Subject: [PATCH 544/834] pvr: Enable KHR_image_format_list
+
+Signed-off-by: Vlad Schiller <vlad-radu.schiller@imgtec.com>
+Reviewed-by: Matt Coster <matt.coster@imgtec.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25707>
+---
+ docs/features.txt                   | 2 +-
+ src/imagination/vulkan/pvr_device.c | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index 508ebe25ea7..5b4e2b70970 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -454,7 +454,7 @@ Vulkan 1.2 -- all DONE: anv, tu, vn
+   VK_KHR_depth_stencil_resolve                          DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+   VK_KHR_draw_indirect_count                            DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, vn)
+   VK_KHR_driver_properties                              DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+-  VK_KHR_image_format_list                              DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
++  VK_KHR_image_format_list                              DONE (anv, dzn, hasvk, lvp, nvk, pvr, radv, tu, v3dv, vn)
+   VK_KHR_imageless_framebuffer                          DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+   VK_KHR_sampler_mirror_clamp_to_edge                   DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+   VK_KHR_separate_depth_stencil_layouts                 DONE (anv, dzn, hasvk, lvp, nvk, radv, tu, v3dv, vn)
+diff --git a/src/imagination/vulkan/pvr_device.c b/src/imagination/vulkan/pvr_device.c
+index eec0db595ec..880479bd94f 100644
+--- a/src/imagination/vulkan/pvr_device.c
++++ b/src/imagination/vulkan/pvr_device.c
+@@ -172,6 +172,7 @@ static void pvr_physical_device_get_supported_extensions(
+       .KHR_external_memory_fd = true,
+       .KHR_format_feature_flags2 = true,
+       .KHR_get_memory_requirements2 = true,
++      .KHR_image_format_list = true,
+       .KHR_swapchain = PVR_USE_WSI_PLATFORM,
+       .KHR_timeline_semaphore = true,
+       .EXT_external_memory_dma_buf = true,
+-- 
+2.42.0
+

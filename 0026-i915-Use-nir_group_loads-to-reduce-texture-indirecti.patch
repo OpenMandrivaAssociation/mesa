@@ -1,0 +1,41 @@
+From e9e6a6760055e17699b8bcf14b94e7e5196f2a2d Mon Sep 17 00:00:00 2001
+From: Emma Anholt <emma@anholt.net>
+Date: Tue, 3 Oct 2023 12:56:28 -0700
+Subject: [PATCH 026/834] i915: Use nir_group_loads() to reduce texture
+ indirection phases.
+
+total instructions in shared programs: 467049 -> 467040 (<.01%)
+instructions in affected programs: 573 -> 564 (-1.57%)
+
+total tex_indirect in shared programs: 14133 -> 14019 (-0.81%)
+tex_indirect in affected programs: 491 -> 377 (-23.22%)
+
+total temps in shared programs: 28543 -> 29178 (2.22%)
+temps in affected programs: 3307 -> 3942 (19.20%)
+
+LOST:   0
+GAINED: 65
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25533>
+---
+ src/gallium/drivers/i915/i915_screen.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/gallium/drivers/i915/i915_screen.c b/src/gallium/drivers/i915/i915_screen.c
+index 8c81bd7c588..ac0e6adf6c8 100644
+--- a/src/gallium/drivers/i915/i915_screen.c
++++ b/src/gallium/drivers/i915/i915_screen.c
+@@ -222,6 +222,11 @@ i915_optimize_nir(struct nir_shader *s)
+ 
+    NIR_PASS(progress, s, nir_remove_dead_variables, nir_var_function_temp,
+             NULL);
++
++   /* Group texture loads together to try to avoid hitting the
++    * texture indirection phase limit.
++    */
++   NIR_PASS_V(s, nir_group_loads, nir_group_all, ~0);
+ }
+ 
+ static char *
+-- 
+2.42.0
+

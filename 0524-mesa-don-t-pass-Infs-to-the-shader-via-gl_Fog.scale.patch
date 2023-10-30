@@ -1,0 +1,76 @@
+From 35ae5dce39cddb71f217b3f73c8e1244ff0c5b1e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marek=20Ol=C5=A1=C3=A1k?= <marek.olsak@amd.com>
+Date: Wed, 20 Sep 2023 09:57:03 -0400
+Subject: [PATCH 524/834] mesa: don't pass Infs to the shader via gl_Fog.scale
+
+This is for GLSL versions where Infs are undefined.
+
+It also helps piglit/glsl-fs-fogscale that breaks when we move the fragment
+shader code into the vertex shader across interpolation.
+
+Acked-by: Pierre-Eric Pelloux-Prayer <pierre-eric.pelloux-prayer@amd.com>
+Acked-by: Jesse Natalie on IRC
+Acked-by: Erico Nunes on Gitlab
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25391>
+---
+ src/gallium/drivers/d3d12/ci/d3d12-quick_gl.txt |  4 ++++
+ src/gallium/drivers/lima/ci/lima-fails.txt      |  4 ++++
+ src/mesa/program/prog_statevars.c               | 14 ++++++++++++--
+ 3 files changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/d3d12/ci/d3d12-quick_gl.txt b/src/gallium/drivers/d3d12/ci/d3d12-quick_gl.txt
+index 57e2231a4af..fe9b49e482c 100644
+--- a/src/gallium/drivers/d3d12/ci/d3d12-quick_gl.txt
++++ b/src/gallium/drivers/d3d12/ci/d3d12-quick_gl.txt
+@@ -410,3 +410,7 @@ spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x223344ff,Fail
+ spec@nv_copy_depth_to_color@nv_copy_depth_to_color 1 0x76356278,Fail
+ spec@nv_copy_image@nv_copy_image-formats,Crash
+ wgl@wgl-multi-context-single-window,Fail
++
++# remove this after https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/843
++# is merged and piglit is updated
++spec@arb_vertex_program@arb_vertex_program-property-bindings,Fail
+diff --git a/src/gallium/drivers/lima/ci/lima-fails.txt b/src/gallium/drivers/lima/ci/lima-fails.txt
+index 67384b7d709..50f91c11400 100644
+--- a/src/gallium/drivers/lima/ci/lima-fails.txt
++++ b/src/gallium/drivers/lima/ci/lima-fails.txt
+@@ -672,3 +672,7 @@ spec@ext_framebuffer_multisample@renderbufferstorage-samples,Fail
+ # New CTS failures in 1.3.6.3
+ wayland-dEQP-EGL.functional.fence_sync.valid.egl_fence_persistent_buffer,Crash
+ x11-dEQP-EGL.functional.fence_sync.valid.egl_fence_persistent_buffer,Crash
++
++# remove this after https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/843
++# is merged and piglit is updated
++spec@glsl-1.10@execution@glsl-1.10-built-in-uniform-state,Fail
+diff --git a/src/mesa/program/prog_statevars.c b/src/mesa/program/prog_statevars.c
+index 84e95f737c4..62d8a23d20d 100644
+--- a/src/mesa/program/prog_statevars.c
++++ b/src/mesa/program/prog_statevars.c
+@@ -308,12 +308,22 @@ fetch_state(struct gl_context *ctx, const gl_state_index16 state[],
+       else
+          COPY_4V(value, ctx->Fog.ColorUnclamped);
+       return;
+-   case STATE_FOG_PARAMS:
++   case STATE_FOG_PARAMS: {
++      float scale = 1.0f / (ctx->Fog.End - ctx->Fog.Start);
++      /* Pass +-FLT_MAX/2 to the shader instead of +-Inf because Infs have
++       * undefined behavior without GLSL 4.10 or GL_ARB_shader_precision
++       * enabled. Infs also have undefined behavior with Shader Model 3.
++       *
++       * The division by 2 makes it less likely that ALU ops will generate
++       * Inf.
++       */
++      scale = CLAMP(scale, FLT_MIN / 2, FLT_MAX / 2);
+       value[0] = ctx->Fog.Density;
+       value[1] = ctx->Fog.Start;
+       value[2] = ctx->Fog.End;
+-      value[3] = 1.0f / (ctx->Fog.End - ctx->Fog.Start);
++      value[3] = scale;
+       return;
++   }
+    case STATE_CLIPPLANE:
+       {
+          const GLuint plane = (GLuint) state[1];
+-- 
+2.42.0
+

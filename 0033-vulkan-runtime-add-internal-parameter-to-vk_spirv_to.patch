@@ -1,0 +1,88 @@
+From 919f5468eb612dac088c9b605455dd3306547b0f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Iv=C3=A1n=20Briano?= <ivan.briano@intel.com>
+Date: Fri, 15 Sep 2023 14:34:31 -0700
+Subject: [PATCH 033/834] vulkan/runtime: add internal parameter to
+ vk_spirv_to_nir
+
+If used to compile internal shaders, it will lack the flag while running
+through all the optimization passes it does.
+
+Reviewed-by: Ian Romanick <ian.d.romanick@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25281>
+---
+ src/intel/vulkan/anv_internal_kernels.c | 5 ++---
+ src/vulkan/runtime/vk_nir.c             | 3 +++
+ src/vulkan/runtime/vk_nir.h             | 1 +
+ src/vulkan/runtime/vk_pipeline.c        | 4 +++-
+ 4 files changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/src/intel/vulkan/anv_internal_kernels.c b/src/intel/vulkan/anv_internal_kernels.c
+index 51b02ae5d4b..0a5d65e5d47 100644
+--- a/src/intel/vulkan/anv_internal_kernels.c
++++ b/src/intel/vulkan/anv_internal_kernels.c
+@@ -165,12 +165,11 @@ compile_upload_spirv(struct anv_device *device,
+    nir_shader* nir =
+       vk_spirv_to_nir(&device->vk, spirv_source, spirv_source_size * 4,
+                       stage, "main", 0, NULL, &spirv_options,
+-                      nir_options, NULL);
++                      nir_options, true /* internal */,
++                      NULL);
+ 
+    assert(nir != NULL);
+ 
+-   nir->info.internal = true;
+-
+    NIR_PASS_V(nir, nir_lower_vars_to_ssa);
+    NIR_PASS_V(nir, nir_opt_cse);
+    NIR_PASS_V(nir, nir_opt_gcm, true);
+diff --git a/src/vulkan/runtime/vk_nir.c b/src/vulkan/runtime/vk_nir.c
+index 7d48dc70f1f..c36d38b9634 100644
+--- a/src/vulkan/runtime/vk_nir.c
++++ b/src/vulkan/runtime/vk_nir.c
+@@ -120,6 +120,7 @@ vk_spirv_to_nir(struct vk_device *device,
+                 const VkSpecializationInfo *spec_info,
+                 const struct spirv_to_nir_options *spirv_options,
+                 const struct nir_shader_compiler_options *nir_options,
++                bool internal,
+                 void *mem_ctx)
+ {
+    assert(spirv_size_B >= 4 && spirv_size_B % 4 == 0);
+@@ -149,6 +150,8 @@ vk_spirv_to_nir(struct vk_device *device,
+    if (mem_ctx != NULL)
+       ralloc_steal(mem_ctx, nir);
+ 
++   nir->info.internal = internal;
++
+    /* We have to lower away local constant initializers right before we
+     * inline functions.  That way they get properly initialized at the top
+     * of the function and not at the top of its caller.
+diff --git a/src/vulkan/runtime/vk_nir.h b/src/vulkan/runtime/vk_nir.h
+index 7f8faf68c49..48b1ba8915e 100644
+--- a/src/vulkan/runtime/vk_nir.h
++++ b/src/vulkan/runtime/vk_nir.h
+@@ -47,6 +47,7 @@ vk_spirv_to_nir(struct vk_device *device,
+                 const VkSpecializationInfo *spec_info,
+                 const struct spirv_to_nir_options *spirv_options,
+                 const struct nir_shader_compiler_options *nir_options,
++                bool internal,
+                 void *mem_ctx);
+ 
+ #ifdef __cplusplus
+diff --git a/src/vulkan/runtime/vk_pipeline.c b/src/vulkan/runtime/vk_pipeline.c
+index 9d3d6d4d654..50a87e13a3c 100644
+--- a/src/vulkan/runtime/vk_pipeline.c
++++ b/src/vulkan/runtime/vk_pipeline.c
+@@ -147,7 +147,9 @@ vk_pipeline_shader_stage_to_nir(struct vk_device *device,
+    nir_shader *nir = vk_spirv_to_nir(device, spirv_data, spirv_size, stage,
+                                      info->pName, subgroup_size,
+                                      info->pSpecializationInfo,
+-                                     spirv_options, nir_options, mem_ctx);
++                                     spirv_options, nir_options,
++                                     false /* internal */,
++                                     mem_ctx);
+    if (nir == NULL)
+       return vk_errorf(device, VK_ERROR_UNKNOWN, "spirv_to_nir failed");
+ 
+-- 
+2.42.0
+

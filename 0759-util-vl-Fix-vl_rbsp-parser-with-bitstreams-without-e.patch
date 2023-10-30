@@ -1,0 +1,184 @@
+From 081f972ebaff9dda837249e441b22c58d9e331bb Mon Sep 17 00:00:00 2001
+From: David Rosca <nowrep@gmail.com>
+Date: Thu, 5 Oct 2023 16:41:33 +0200
+Subject: [PATCH 759/834] util/vl: Fix vl_rbsp parser with bitstreams without
+ emulation bytes
+
+This is used for parsing VA packed headers and those can be without
+emulation prevention bytes.
+Add emulation_bytes argument to vl_rbsp_init and skip all emulation
+bytes handling when set.
+
+Reviewed-by: Ruijing Dong <ruijing.dong@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25565>
+---
+ .../frontends/omx/bellagio/vid_dec_h265.c     |  6 +++---
+ .../frontends/omx/vid_dec_h264_common.c       |  6 +++---
+ src/gallium/frontends/va/picture_h264_enc.c   |  2 +-
+ src/gallium/frontends/va/picture_hevc_enc.c   |  2 +-
+ src/util/vl_rbsp.h                            | 19 ++++++++++++++-----
+ src/vulkan/runtime/vk_video.c                 |  2 +-
+ 6 files changed, 23 insertions(+), 14 deletions(-)
+
+diff --git a/src/gallium/frontends/omx/bellagio/vid_dec_h265.c b/src/gallium/frontends/omx/bellagio/vid_dec_h265.c
+index 68ee619b546..322c1aaafa2 100644
+--- a/src/gallium/frontends/omx/bellagio/vid_dec_h265.c
++++ b/src/gallium/frontends/omx/bellagio/vid_dec_h265.c
+@@ -958,13 +958,13 @@ static void vid_dec_h265_Decode(vid_dec_PrivateType *priv,
+    if (nal_unit_type == NAL_UNIT_TYPE_SPS) {
+       struct vl_rbsp rbsp;
+ 
+-      vl_rbsp_init(&rbsp, vlc, ~0);
++      vl_rbsp_init(&rbsp, vlc, ~0, /* emulation_bytes */ true);
+       seq_parameter_set(priv, &rbsp);
+ 
+    } else if (nal_unit_type == NAL_UNIT_TYPE_PPS) {
+       struct vl_rbsp rbsp;
+ 
+-      vl_rbsp_init(&rbsp, vlc, ~0);
++      vl_rbsp_init(&rbsp, vlc, ~0, /* emulation_bytes */ true);
+       picture_parameter_set(priv, &rbsp);
+ 
+    } else if (is_slice_picture(nal_unit_type)) {
+@@ -986,7 +986,7 @@ static void vid_dec_h265_Decode(vid_dec_PrivateType *priv,
+       priv->bytes_left = (vl_vlc_bits_left(vlc) - bits) / 8;
+       priv->slice = vlc->data;
+ 
+-      vl_rbsp_init(&rbsp, vlc, 128);
++      vl_rbsp_init(&rbsp, vlc, 128, /* emulation_bytes */ true);
+       slice_header(priv, &rbsp, nal_unit_type);
+ 
+       vid_dec_h265_BeginFrame(priv);
+diff --git a/src/gallium/frontends/omx/vid_dec_h264_common.c b/src/gallium/frontends/omx/vid_dec_h264_common.c
+index 1412ef560b5..fcf5c99d644 100644
+--- a/src/gallium/frontends/omx/vid_dec_h264_common.c
++++ b/src/gallium/frontends/omx/vid_dec_h264_common.c
+@@ -1002,7 +1002,7 @@ void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, unsigned
+ 
+    if (nal_unit_type == 7) {
+       struct vl_rbsp rbsp;
+-      vl_rbsp_init(&rbsp, vlc, ~0);
++      vl_rbsp_init(&rbsp, vlc, ~0, /* emulation_bytes */ true);
+       seq_parameter_set(priv, &rbsp);
+ #if ENABLE_ST_OMX_TIZONIA
+       update_port_parameters(priv);
+@@ -1010,7 +1010,7 @@ void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, unsigned
+ 
+    } else if (nal_unit_type == 8) {
+       struct vl_rbsp rbsp;
+-      vl_rbsp_init(&rbsp, vlc, ~0);
++      vl_rbsp_init(&rbsp, vlc, ~0, /* emulation_bytes */ true);
+       picture_parameter_set(priv, &rbsp);
+ 
+    } else if (nal_unit_type == 1 || nal_unit_type == 5) {
+@@ -1032,7 +1032,7 @@ void vid_dec_h264_Decode(vid_dec_PrivateType *priv, struct vl_vlc *vlc, unsigned
+       priv->bytes_left = (vl_vlc_bits_left(vlc) - bits) / 8;
+       priv->slice = vlc->data;
+ 
+-      vl_rbsp_init(&rbsp, vlc, 128);
++      vl_rbsp_init(&rbsp, vlc, 128, /* emulation_bytes */ true);
+       slice_header(priv, &rbsp, nal_ref_idc, nal_unit_type);
+ 
+       vid_dec_h264_BeginFrame(priv);
+diff --git a/src/gallium/frontends/va/picture_h264_enc.c b/src/gallium/frontends/va/picture_h264_enc.c
+index 87b427b0ec5..c12ee99a369 100644
+--- a/src/gallium/frontends/va/picture_h264_enc.c
++++ b/src/gallium/frontends/va/picture_h264_enc.c
+@@ -486,7 +486,7 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeH264(vlVaContext *context, vlVaBuffer *
+       unsigned nal_unit_type = vl_vlc_get_uimsbf(&vlc, 5);
+ 
+       struct vl_rbsp rbsp;
+-      vl_rbsp_init(&rbsp, &vlc, ~0);
++      vl_rbsp_init(&rbsp, &vlc, ~0, true);
+ 
+       switch(nal_unit_type) {
+       case H264_NAL_SPS:
+diff --git a/src/gallium/frontends/va/picture_hevc_enc.c b/src/gallium/frontends/va/picture_hevc_enc.c
+index ae9a74715a7..860404c925b 100644
+--- a/src/gallium/frontends/va/picture_hevc_enc.c
++++ b/src/gallium/frontends/va/picture_hevc_enc.c
+@@ -465,7 +465,7 @@ vlVaHandleVAEncPackedHeaderDataBufferTypeHEVC(vlVaContext *context, vlVaBuffer *
+       vl_vlc_eatbits(&vlc, 3);
+ 
+       struct vl_rbsp rbsp;
+-      vl_rbsp_init(&rbsp, &vlc, ~0);
++      vl_rbsp_init(&rbsp, &vlc, ~0, true);
+ 
+       switch(nal_unit_type) {
+       case HEVC_NAL_SPS:
+diff --git a/src/util/vl_rbsp.h b/src/util/vl_rbsp.h
+index c2d9b2b5c33..0842b0f1490 100644
+--- a/src/util/vl_rbsp.h
++++ b/src/util/vl_rbsp.h
+@@ -44,12 +44,14 @@ struct vl_rbsp {
+    struct vl_vlc nal;
+    unsigned escaped;
+    unsigned removed;
++   bool emulation_bytes;
+ };
+ 
+ /**
+  * Initialize the RBSP object
+  */
+-static inline void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsigned num_bits)
++static inline void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsigned num_bits,
++                                bool emulation_bytes)
+ {
+    unsigned valid, bits_left = vl_vlc_bits_left(nal);
+    int i;
+@@ -57,6 +59,13 @@ static inline void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsign
+    /* copy the position */
+    rbsp->nal = *nal;
+ 
++   rbsp->escaped = 0;
++   rbsp->removed = 0;
++   rbsp->emulation_bytes = emulation_bytes;
++
++   if (!rbsp->emulation_bytes)
++      return;
++
+    /* search for the end of the NAL unit */
+    while (vl_vlc_search_byte(nal, num_bits, 0x00)) {
+       if (vl_vlc_peekbits(nal, 24) == 0x000001 ||
+@@ -79,7 +88,6 @@ static inline void vl_rbsp_init(struct vl_rbsp *rbsp, struct vl_vlc *nal, unsign
+    valid = vl_vlc_valid_bits(&rbsp->nal);
+ 
+    rbsp->escaped = (valid >= 16) ? 16 : ((valid >= 8) ? 8 : 0);
+-   rbsp->removed = 0;
+ }
+ 
+ /**
+@@ -96,13 +104,14 @@ static inline void vl_rbsp_fillbits(struct vl_rbsp *rbsp)
+ 
+    vl_vlc_fillbits(&rbsp->nal);
+ 
++   /* nothing to do if no emulation prevention bytes in bitstream */
++   if (!rbsp->emulation_bytes)
++      return;
++
+    /* abort if we have less than 24 bits left in this nal */
+    if (vl_vlc_bits_left(&rbsp->nal) < 24)
+       return;
+ 
+-   /* check that we have enough bits left from the last fillbits */
+-   assert(valid >= rbsp->escaped);
+-
+    /* handle the already escaped bits */
+    valid -= rbsp->escaped;
+ 
+diff --git a/src/vulkan/runtime/vk_video.c b/src/vulkan/runtime/vk_video.c
+index 0e90f18ae90..16a684bfcd5 100644
+--- a/src/vulkan/runtime/vk_video.c
++++ b/src/vulkan/runtime/vk_video.c
+@@ -723,7 +723,7 @@ vk_video_parse_h265_slice_header(const struct VkVideoDecodeInfoKHR *frame_info,
+    vl_vlc_get_uimsbf(&vlc, 3); /* nuh_temporal_id_plus1 */
+ 
+    struct vl_rbsp rbsp;
+-   vl_rbsp_init(&rbsp, &vlc, 128);
++   vl_rbsp_init(&rbsp, &vlc, 128, /* emulation_bytes */ true);
+ 
+    memset(params, 0, sizeof(*params));
+ 
+-- 
+2.42.0
+

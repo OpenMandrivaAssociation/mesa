@@ -1,0 +1,96 @@
+From c4643477cda66f59780469385f50aabb303a3822 Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Sun, 6 Aug 2023 17:19:46 +0800
+Subject: [PATCH 063/834] radeonsi: init spi_ps_input_addr for part mode ps
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24989>
+---
+ src/gallium/drivers/radeonsi/si_shader.c        | 17 +++++++++++++----
+ .../drivers/radeonsi/si_shader_internal.h       | 12 ++++++++++++
+ src/gallium/drivers/radeonsi/si_shader_llvm.c   |  7 +------
+ 3 files changed, 26 insertions(+), 10 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_shader.c b/src/gallium/drivers/radeonsi/si_shader.c
+index 71f101d5ecc..5d53a6b3cd3 100644
+--- a/src/gallium/drivers/radeonsi/si_shader.c
++++ b/src/gallium/drivers/radeonsi/si_shader.c
+@@ -2662,8 +2662,6 @@ static void si_fixup_spi_ps_input_config(struct si_shader *shader)
+ static void
+ si_set_spi_ps_input_config(struct si_shader *shader)
+ {
+-   assert(shader->is_monolithic);
+-
+    const struct si_shader_selector *sel = shader->selector;
+    const struct si_shader_info *info = &sel->info;
+    const union si_shader_key *key = &shader->key;
+@@ -2705,8 +2703,19 @@ si_set_spi_ps_input_config(struct si_shader *shader)
+    if (key->ps.mono.point_smoothing)
+       shader->config.spi_ps_input_ena |= S_0286CC_PERSP_CENTER_ENA(1);
+ 
+-   si_fixup_spi_ps_input_config(shader);
+-   shader->config.spi_ps_input_addr = shader->config.spi_ps_input_ena;
++   if (shader->is_monolithic) {
++      si_fixup_spi_ps_input_config(shader);
++      shader->config.spi_ps_input_addr = shader->config.spi_ps_input_ena;
++   } else {
++      /* Part mode will call si_fixup_spi_ps_input_config() when combining multi
++       * shader part in si_shader_select_ps_parts().
++       *
++       * Reserve register locations for VGPR inputs the PS prolog may need.
++       */
++      shader->config.spi_ps_input_addr =
++         shader->config.spi_ps_input_ena |
++         SI_SPI_PS_INPUT_ADDR_FOR_PROLOG;
++   }
+ }
+ 
+ static void
+diff --git a/src/gallium/drivers/radeonsi/si_shader_internal.h b/src/gallium/drivers/radeonsi/si_shader_internal.h
+index d4d201092c5..8f5a9422341 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_internal.h
++++ b/src/gallium/drivers/radeonsi/si_shader_internal.h
+@@ -12,6 +12,18 @@
+ #include "ac_llvm_build.h"
+ #include "si_shader.h"
+ 
++#define SI_SPI_PS_INPUT_ADDR_FOR_PROLOG (       \
++   S_0286D0_PERSP_SAMPLE_ENA(1) |               \
++   S_0286D0_PERSP_CENTER_ENA(1) |               \
++   S_0286D0_PERSP_CENTROID_ENA(1) |             \
++   S_0286D0_LINEAR_SAMPLE_ENA(1) |              \
++   S_0286D0_LINEAR_CENTER_ENA(1) |              \
++   S_0286D0_LINEAR_CENTROID_ENA(1) |            \
++   S_0286D0_FRONT_FACE_ENA(1) |                 \
++   S_0286D0_ANCILLARY_ENA(1) |                  \
++   S_0286D0_SAMPLE_COVERAGE_ENA(1) |            \
++   S_0286D0_POS_FIXED_PT_ENA(1))
++
+ struct util_debug_callback;
+ 
+ struct si_shader_args {
+diff --git a/src/gallium/drivers/radeonsi/si_shader_llvm.c b/src/gallium/drivers/radeonsi/si_shader_llvm.c
+index 83a106cfb9f..d6b72a066ce 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_llvm.c
++++ b/src/gallium/drivers/radeonsi/si_shader_llvm.c
+@@ -197,12 +197,7 @@ void si_llvm_create_main_func(struct si_shader_context *ctx)
+    /* Reserve register locations for VGPR inputs the PS prolog may need. */
+    if (ctx->stage == MESA_SHADER_FRAGMENT && !ctx->shader->is_monolithic) {
+       ac_llvm_add_target_dep_function_attr(
+-         ctx->main_fn.value, "InitialPSInputAddr",
+-         S_0286D0_PERSP_SAMPLE_ENA(1) | S_0286D0_PERSP_CENTER_ENA(1) |
+-            S_0286D0_PERSP_CENTROID_ENA(1) | S_0286D0_LINEAR_SAMPLE_ENA(1) |
+-            S_0286D0_LINEAR_CENTER_ENA(1) | S_0286D0_LINEAR_CENTROID_ENA(1) |
+-            S_0286D0_FRONT_FACE_ENA(1) | S_0286D0_ANCILLARY_ENA(1) |
+-            S_0286D0_SAMPLE_COVERAGE_ENA(1) | S_0286D0_POS_FIXED_PT_ENA(1));
++         ctx->main_fn.value, "InitialPSInputAddr", SI_SPI_PS_INPUT_ADDR_FOR_PROLOG);
+    }
+ 
+ 
+-- 
+2.42.0
+

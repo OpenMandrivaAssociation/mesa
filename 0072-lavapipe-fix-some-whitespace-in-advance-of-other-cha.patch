@@ -1,0 +1,95 @@
+From 05047ceced4a6910611fc2c181afffa23db054c3 Mon Sep 17 00:00:00 2001
+From: Dave Airlie <airlied@redhat.com>
+Date: Mon, 9 Oct 2023 15:56:20 +1000
+Subject: [PATCH 072/834] lavapipe: fix some whitespace in advance of other
+ changes.
+
+This is just some tab and trailing whitespace removal.
+
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Roland Scheidegger <sroland@vmware.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25609>
+---
+ src/gallium/frontends/lavapipe/lvp_descriptor_set.c | 6 +++---
+ src/gallium/frontends/lavapipe/lvp_execute.c        | 2 +-
+ src/gallium/frontends/lavapipe/lvp_image.c          | 6 +++---
+ src/gallium/frontends/lavapipe/lvp_private.h        | 2 +-
+ 4 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/gallium/frontends/lavapipe/lvp_descriptor_set.c b/src/gallium/frontends/lavapipe/lvp_descriptor_set.c
+index c9f591ccd1d..5d3c6013d0e 100644
+--- a/src/gallium/frontends/lavapipe/lvp_descriptor_set.c
++++ b/src/gallium/frontends/lavapipe/lvp_descriptor_set.c
+@@ -274,7 +274,7 @@ get_texture_handle_bda(struct lvp_device *device, const VkDescriptorAddressInfoE
+ 
+    ctx->sampler_view_destroy(ctx, view);
+    pipe_resource_reference(&pres, NULL);
+-   
++
+    return *handle;
+ }
+ 
+@@ -297,7 +297,7 @@ get_image_handle_bda(struct lvp_device *device, const VkDescriptorAddressInfoEXT
+    simple_mtx_unlock(&device->queue.lock);
+ 
+    pipe_resource_reference(&pres, NULL);
+-   
++
+    return *handle;
+ }
+ 
+@@ -345,7 +345,7 @@ lvp_descriptor_set_create(struct lvp_device *device,
+       const struct lvp_descriptor_set_binding_layout *bind_layout = &set->layout->binding[binding_index];
+       if (!bind_layout->immutable_samplers)
+          continue;
+-   
++
+       struct lp_descriptor *desc = set->map;
+       desc += bind_layout->descriptor_index;
+ 
+diff --git a/src/gallium/frontends/lavapipe/lvp_execute.c b/src/gallium/frontends/lavapipe/lvp_execute.c
+index 38246c52d3d..8e9da13716b 100644
+--- a/src/gallium/frontends/lavapipe/lvp_execute.c
++++ b/src/gallium/frontends/lavapipe/lvp_execute.c
+@@ -3783,7 +3783,7 @@ process_sequence(struct rendering_state *state,
+       struct vk_cmd_queue_entry *cmd = (struct vk_cmd_queue_entry*)(pbuf + size);
+       size_t cmd_size = vk_cmd_queue_type_sizes[lvp_nv_dgc_token_to_cmd_type(token)];
+       uint8_t *cmdptr = (void*)(pbuf + size + cmd_size);
+- 
++
+       if (max_size < size + cmd_size)
+          abort();
+       cmd->type = lvp_nv_dgc_token_to_cmd_type(token);
+diff --git a/src/gallium/frontends/lavapipe/lvp_image.c b/src/gallium/frontends/lavapipe/lvp_image.c
+index 09ca0cf5c4c..e737159775e 100644
+--- a/src/gallium/frontends/lavapipe/lvp_image.c
++++ b/src/gallium/frontends/lavapipe/lvp_image.c
+@@ -563,9 +563,9 @@ lvp_CreateBufferView(VkDevice _device,
+    struct lvp_buffer_view *view;
+ 
+    view = vk_buffer_view_create(&device->vk,
+-				pCreateInfo,
+-				pAllocator,
+-				sizeof(*view));
++                                pCreateInfo,
++                                pAllocator,
++                                sizeof(*view));
+    if (!view)
+       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+ 
+diff --git a/src/gallium/frontends/lavapipe/lvp_private.h b/src/gallium/frontends/lavapipe/lvp_private.h
+index b41a2a76d39..089908fee31 100644
+--- a/src/gallium/frontends/lavapipe/lvp_private.h
++++ b/src/gallium/frontends/lavapipe/lvp_private.h
+@@ -650,7 +650,7 @@ VkResult lvp_execute_cmds(struct lvp_device *device,
+ size_t
+ lvp_get_rendering_state_size(void);
+ struct lvp_image *lvp_swapchain_get_image(VkSwapchainKHR swapchain,
+-					  uint32_t index);
++                                          uint32_t index);
+ 
+ static inline enum pipe_format
+ lvp_vk_format_to_pipe_format(VkFormat format)
+-- 
+2.42.0
+

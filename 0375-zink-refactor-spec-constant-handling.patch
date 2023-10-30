@@ -1,0 +1,64 @@
+From 566112fdf8109d7364f3db5a602f36c4dec48adf Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 375/834] zink: refactor spec constant handling
+
+This makes it simpler to add more spec constants
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/drivers/zink/zink_pipeline.c | 35 ++++++++++++++++--------
+ 1 file changed, 24 insertions(+), 11 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_pipeline.c b/src/gallium/drivers/zink/zink_pipeline.c
+index 7e962176798..cceb54c4a2c 100644
+--- a/src/gallium/drivers/zink/zink_pipeline.c
++++ b/src/gallium/drivers/zink/zink_pipeline.c
+@@ -458,18 +458,31 @@ zink_create_compute_pipeline(struct zink_screen *screen, struct zink_compute_pro
+ 
+    VkSpecializationInfo sinfo = {0};
+    VkSpecializationMapEntry me[3];
+-   if (comp->use_local_size) {
+-      stage.pSpecializationInfo = &sinfo;
+-      sinfo.mapEntryCount = 3;
+-      sinfo.pMapEntries = &me[0];
+-      sinfo.dataSize = sizeof(state->local_size);
+-      sinfo.pData = &state->local_size[0];
+-      uint32_t ids[] = {ZINK_WORKGROUP_SIZE_X, ZINK_WORKGROUP_SIZE_Y, ZINK_WORKGROUP_SIZE_Z};
+-      for (int i = 0; i < 3; i++) {
+-         me[i].size = sizeof(uint32_t);
+-         me[i].constantID = ids[i];
+-         me[i].offset = i * sizeof(uint32_t);
++   uint32_t data[3];
++   if (state)  {
++      int i = 0;
++
++      if (comp->use_local_size) {
++         sinfo.mapEntryCount += 3;
++         sinfo.dataSize += sizeof(state->local_size);
++
++         uint32_t ids[] = {ZINK_WORKGROUP_SIZE_X, ZINK_WORKGROUP_SIZE_Y, ZINK_WORKGROUP_SIZE_Z};
++         for (int l = 0; l < 3; l++, i++) {
++            data[i] = state->local_size[l];
++            me[i].size = sizeof(uint32_t);
++            me[i].constantID = ids[l];
++            me[i].offset = i * sizeof(uint32_t);
++         }
++      }
++
++      if (sinfo.dataSize) {
++         stage.pSpecializationInfo = &sinfo;
++         sinfo.pData = data;
++         sinfo.pMapEntries = me;
+       }
++
++      assert(i <= ARRAY_SIZE(data));
++      STATIC_ASSERT(ARRAY_SIZE(data) == ARRAY_SIZE(me));
+    }
+ 
+    pci.stage = stage;
+-- 
+2.42.0
+

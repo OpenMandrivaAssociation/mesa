@@ -1,0 +1,47 @@
+From 20284af29b511bc5a4266baa9fdb102ad4c5c866 Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 15:44:28 +0200
+Subject: [PATCH 572/834] ci/iris: Drop parallel on kbl piglit to 2.
+
+We have only 6 of these boards since one died in May, and 7 jobs allocated
+to them.  So you ended up with a 5 minute delay on each pipeline with an
+otherwise-idle farm while you waited for the first batch of jobs to
+complete so you could get the last one started.  It turns out that piglit
+was taking 3 minutes of runtime each, so we can just shard piglit 2 ways,
+stay under runtime, and not over-allocate the farm
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25790>
+---
+ src/intel/ci/gitlab-ci-inc.yml | 2 +-
+ src/intel/ci/gitlab-ci.yml     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/intel/ci/gitlab-ci-inc.yml b/src/intel/ci/gitlab-ci-inc.yml
+index 0dbde9aebc6..928740a15ab 100644
+--- a/src/intel/ci/gitlab-ci-inc.yml
++++ b/src/intel/ci/gitlab-ci-inc.yml
+@@ -216,7 +216,7 @@
+     RUNNER_TAG: mesa-ci-x86-64-lava-asus-C433TA-AJ0005-rammus
+     FDO_CI_CONCURRENT: 5
+ 
+-# 7 boards
++# 6 boards
+ .iris-kbl-test:
+   extends:
+     - .iris-test
+diff --git a/src/intel/ci/gitlab-ci.yml b/src/intel/ci/gitlab-ci.yml
+index 7c558b6277e..bf6face9640 100644
+--- a/src/intel/ci/gitlab-ci.yml
++++ b/src/intel/ci/gitlab-ci.yml
+@@ -169,7 +169,7 @@ iris-kbl-piglit:
+   extends:
+     - .iris-kbl-test
+     - .lava-piglit
+-  parallel: 3
++  parallel: 2
+   variables:
+     HWCI_START_XORG: 1
+     PIGLIT_NO_WINDOW: 0
+-- 
+2.42.0
+

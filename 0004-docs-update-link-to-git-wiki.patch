@@ -1,0 +1,40 @@
+From d4416216c6b76e1a1c2eb04575875d86a97020df Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 10:45:02 +0200
+Subject: [PATCH 004/834] docs: update link to git-wiki
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The Git Wiki has been long deprecated, and is now partially removed. The
+article we pointed to here seems to not have been backed up.
+
+However, there's a new place that documents installing on Windows in the
+Git Docs instead. So let's send users there instead.
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/repository.rst | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/docs/repository.rst b/docs/repository.rst
+index 5c450c1e915..a3de1346ed6 100644
+--- a/docs/repository.rst
++++ b/docs/repository.rst
+@@ -85,9 +85,9 @@ Windows Users
+ -------------
+ 
+ If you're `using Git on
+-Windows <https://git.wiki.kernel.org/index.php/WindowsInstall>`__ you'll
+-want to enable automatic CR/LF conversion in your local copy of the
+-repository:
++Windows <https://git-scm.com/book/en/v2/Getting-Started-Installing-Git#_installing_on_windows>`__
++you'll want to enable automatic CR/LF conversion in your local copy of
++the repository:
+ 
+ .. code-block:: console
+ 
+-- 
+2.42.0
+

@@ -1,0 +1,104 @@
+From b7a4e7807141770e9fb4172a9ab0d31ed852d29b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Corentin=20No=C3=ABl?= <corentin.noel@collabora.com>
+Date: Wed, 20 Sep 2023 17:25:09 +0200
+Subject: [PATCH 667/834] util: Avoid the use of MESA_TRACE_BEGIN/END
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Switch the last occurrences of it to the MESA_TRACE_SCOPE macro which is
+easier to use.
+
+Signed-off-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25308>
+---
+ src/util/compress.c   |  3 +++
+ src/util/disk_cache.c | 22 +++++++++++-----------
+ 2 files changed, 14 insertions(+), 11 deletions(-)
+
+diff --git a/src/util/compress.c b/src/util/compress.c
+index aef0b7ef866..1f4b429a770 100644
+--- a/src/util/compress.c
++++ b/src/util/compress.c
+@@ -39,6 +39,7 @@
+ #endif
+ 
+ #include "util/compress.h"
++#include "util/perf/cpu_trace.h"
+ #include "macros.h"
+ 
+ /* 3 is the recomended level, with 22 as the absolute maximum */
+@@ -74,6 +75,7 @@ size_t
+ util_compress_deflate(const uint8_t *in_data, size_t in_data_size,
+                       uint8_t *out_data, size_t out_buff_size)
+ {
++   MESA_TRACE_FUNC();
+ #ifdef HAVE_ZSTD
+    size_t ret = ZSTD_compress(out_data, out_buff_size, in_data, in_data_size,
+                               ZSTD_COMPRESSION_LEVEL);
+@@ -124,6 +126,7 @@ bool
+ util_compress_inflate(const uint8_t *in_data, size_t in_data_size,
+                       uint8_t *out_data, size_t out_data_size)
+ {
++   MESA_TRACE_FUNC();
+ #ifdef HAVE_ZSTD
+    size_t ret = ZSTD_decompress(out_data, out_data_size, in_data, in_data_size);
+    return !ZSTD_isError(ret);
+diff --git a/src/util/disk_cache.c b/src/util/disk_cache.c
+index 034c7bae5c7..1d23b92af7e 100644
+--- a/src/util/disk_cache.c
++++ b/src/util/disk_cache.c
+@@ -473,17 +473,17 @@ blob_put_compressed(struct disk_cache *cache, const cache_key key,
+ 
+    entry->uncompressed_size = size;
+ 
+-   MESA_TRACE_BEGIN("deflate");
+    size_t compressed_size =
+          util_compress_deflate(data, size, entry->compressed_data, max_buf);
+-   MESA_TRACE_END();
+    if (!compressed_size)
+       goto out;
+ 
+    unsigned entry_size = compressed_size + sizeof(*entry);
+-   MESA_TRACE_BEGIN("blob_put");
+-   cache->blob_put_cb(key, CACHE_KEY_SIZE, entry, entry_size);
+-   MESA_TRACE_END();
++   // The curly brackets are here to only trace the blob_put_cb call
++   {
++      MESA_TRACE_SCOPE("blob_put");
++      cache->blob_put_cb(key, CACHE_KEY_SIZE, entry, entry_size);
++   }
+ 
+ out:
+    free(entry);
+@@ -503,10 +503,12 @@ blob_get_compressed(struct disk_cache *cache, const cache_key key,
+    if (!entry)
+       return NULL;
+ 
+-   MESA_TRACE_BEGIN("blob_get");
+-   signed long entry_size =
+-      cache->blob_get_cb(key, CACHE_KEY_SIZE, entry, max_blob_size);
+-   MESA_TRACE_END();
++   signed long entry_size;
++   // The curly brackets are here to only trace the blob_get_cb call
++   {
++      MESA_TRACE_SCOPE("blob_get");
++      entry_size = cache->blob_get_cb(key, CACHE_KEY_SIZE, entry, max_blob_size);
++   }
+ 
+    if (!entry_size) {
+       free(entry);
+@@ -520,10 +522,8 @@ blob_get_compressed(struct disk_cache *cache, const cache_key key,
+    }
+ 
+    unsigned compressed_size = entry_size - sizeof(*entry);
+-   MESA_TRACE_BEGIN("inflate");
+    bool ret = util_compress_inflate(entry->compressed_data, compressed_size,
+                                     data, entry->uncompressed_size);
+-   MESA_TRACE_END();
+    if (!ret) {
+       free(data);
+       free(entry);
+-- 
+2.42.0
+

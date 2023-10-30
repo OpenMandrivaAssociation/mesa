@@ -1,0 +1,39 @@
+From 320e20db6834cf793e7019a862bf1a9d622da4d0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Tue, 26 Sep 2023 11:34:42 +0200
+Subject: [PATCH 585/834] radv: Rename SDMA file to radv_sdma.c
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It already contains more than just the buffer image copies.
+
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25770>
+---
+ src/amd/vulkan/meson.build                             | 2 +-
+ src/amd/vulkan/{radv_sdma_copy_image.c => radv_sdma.c} | 0
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ rename src/amd/vulkan/{radv_sdma_copy_image.c => radv_sdma.c} (100%)
+
+diff --git a/src/amd/vulkan/meson.build b/src/amd/vulkan/meson.build
+index d1c41726693..8de1ccc9d74 100644
+--- a/src/amd/vulkan/meson.build
++++ b/src/amd/vulkan/meson.build
+@@ -124,7 +124,7 @@ libradv_files = files(
+   'radv_rt_common.c',
+   'radv_rt_shader.c',
+   'radv_sampler.c',
+-  'radv_sdma_copy_image.c',
++  'radv_sdma.c',
+   'radv_shader.c',
+   'radv_shader.h',
+   'radv_shader_args.c',
+diff --git a/src/amd/vulkan/radv_sdma_copy_image.c b/src/amd/vulkan/radv_sdma.c
+similarity index 100%
+rename from src/amd/vulkan/radv_sdma_copy_image.c
+rename to src/amd/vulkan/radv_sdma.c
+-- 
+2.42.0
+

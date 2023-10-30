@@ -1,0 +1,38 @@
+From 5fe5c3e2231b58da7c3ce92d4f3cf0fd0d5f216b Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Thu, 12 Oct 2023 15:17:53 +0200
+Subject: [PATCH 236/834] meson: add wayland-protocols from meson wrapdb
+
+Sometimes, users don't have a recent enough version of wayland-protocols
+to build Mesa. But these days, Meson's WrapDB has a wrap that's more
+than new enough for our needs.
+
+If we add the wrap-file to the subprojects folder, we'll download a more
+recent wrap if the installed version is too old (or doesn't exist at
+all).
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25683>
+---
+ subprojects/wayland-protocols.wrap | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+ create mode 100644 subprojects/wayland-protocols.wrap
+
+diff --git a/subprojects/wayland-protocols.wrap b/subprojects/wayland-protocols.wrap
+new file mode 100644
+index 00000000000..ee9ee733734
+--- /dev/null
++++ b/subprojects/wayland-protocols.wrap
+@@ -0,0 +1,10 @@
++[wrap-file]
++directory = wayland-protocols-1.32
++source_url = https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.32/downloads/wayland-protocols-1.32.tar.xz
++source_filename = wayland-protocols-1.32.tar.xz
++source_hash = 7459799d340c8296b695ef857c07ddef24c5a09b09ab6a74f7b92640d2b1ba11
++source_fallback_url = https://github.com/mesonbuild/wrapdb/releases/download/wayland-protocols_1.32-1/wayland-protocols-1.32.tar.xz
++wrapdb_version = 1.32-1
++
++[provide]
++wayland-protocols = wayland_protocols
+-- 
+2.42.0
+

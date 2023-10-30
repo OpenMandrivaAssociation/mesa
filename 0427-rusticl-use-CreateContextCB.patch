@@ -1,0 +1,46 @@
+From f34ff1daa5130317994a7801940f1ade11ab0d4b Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Fri, 13 Oct 2023 22:54:57 +0200
+Subject: [PATCH 427/834] rusticl: use CreateContextCB
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/context.rs | 5 ++++-
+ src/gallium/frontends/rusticl/api/types.rs   | 4 ++++
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/context.rs b/src/gallium/frontends/rusticl/api/context.rs
+index 776cf0f7dde..e318644dbfc 100644
+--- a/src/gallium/frontends/rusticl/api/context.rs
++++ b/src/gallium/frontends/rusticl/api/context.rs
+@@ -44,7 +44,10 @@ fn create_context(
+     pfn_notify: Option<FuncCreateContextCB>,
+     user_data: *mut ::std::os::raw::c_void,
+ ) -> CLResult<cl_context> {
+-    check_cb(&pfn_notify, user_data)?;
++    // TODO: Actually hook this callback up so it gets called when appropriate.
++    // SAFETY: The requirements on `CreateContextCB::try_new` match the requirements
++    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
++    let _cb_opt = unsafe { CreateContextCB::try_new(pfn_notify, user_data)? };
+ 
+     // CL_INVALID_VALUE if devices is NULL.
+     if devices.is_null() {
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index b5486a7e522..3e7c6c83d08 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -43,6 +43,10 @@ macro_rules! cl_callback {
+             ///
+             /// - `func` must be a thread-safe fn.
+             /// - Passing `data` as the last parameter to `func` must not cause unsoundness.
++            /// - CreateContextCB: `func` must be soundly callable as documented on
++            ///   [`clCreateContext`] in the OpenCL specification.
++            ///
++            /// [`clCreateContext`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clCreateContext
+             pub unsafe fn new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Self> {
+                 let Some(func) = func else {
+                     return Err(CL_INVALID_VALUE);
+-- 
+2.42.0
+

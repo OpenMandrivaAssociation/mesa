@@ -1,0 +1,140 @@
+From b1a14fe9231e62d5b65e47bbf934e9b14f47f722 Mon Sep 17 00:00:00 2001
+From: Nanley Chery <nanley.g.chery@intel.com>
+Date: Tue, 10 Oct 2023 15:14:28 -0400
+Subject: [PATCH 674/834] intel: Return a bool from intel_aux_map_add_mapping
+
+Make intel_aux_map_add_mapping return false if a mapping is attempted
+that would conflict with an existing one. If this function doesn't
+return false, it will either fail to return or return true.
+
+The Vulkan driver will make use of this feature to opportunistically
+enable CCS if a BO's VMA range has not been already mapped.
+
+Reviewed-by: Jianxun Zhang <jianxun.zhang@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25003>
+---
+ src/gallium/drivers/iris/iris_resource.c |  9 ++++++---
+ src/intel/common/intel_aux_map.c         | 23 +++++++++++++++++++----
+ src/intel/common/intel_aux_map.h         |  4 +++-
+ src/intel/vulkan/anv_allocator.c         |  8 +++++---
+ 4 files changed, 33 insertions(+), 11 deletions(-)
+
+diff --git a/src/gallium/drivers/iris/iris_resource.c b/src/gallium/drivers/iris/iris_resource.c
+index 1580701fce8..876ddf5dfbc 100644
+--- a/src/gallium/drivers/iris/iris_resource.c
++++ b/src/gallium/drivers/iris/iris_resource.c
+@@ -646,9 +646,12 @@ map_aux_addresses(struct iris_screen *screen, struct iris_resource *res,
+          iris_format_for_usage(screen->devinfo, pfmt, res->surf.usage).fmt;
+       const uint64_t format_bits =
+          intel_aux_map_format_bits(res->surf.tiling, format, plane);
+-      intel_aux_map_add_mapping(aux_map_ctx, res->bo->address + res->offset,
+-                                res->aux.bo->address + aux_offset,
+-                                res->surf.size_B, format_bits);
++      const bool mapped =
++         intel_aux_map_add_mapping(aux_map_ctx,
++                                   res->bo->address + res->offset,
++                                   res->aux.bo->address + aux_offset,
++                                   res->surf.size_B, format_bits);
++      assert(mapped);
+       res->bo->aux_map_address = res->aux.bo->address;
+    }
+ }
+diff --git a/src/intel/common/intel_aux_map.c b/src/intel/common/intel_aux_map.c
+index c76e693106c..5fddd995502 100644
+--- a/src/intel/common/intel_aux_map.c
++++ b/src/intel/common/intel_aux_map.c
+@@ -559,7 +559,7 @@ get_aux_entry(struct intel_aux_map_context *ctx, uint64_t main_address,
+       *l1_entry_map_out = &l1_map[l1_index];
+ }
+ 
+-static void
++static bool
+ add_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
+             uint64_t aux_address, uint64_t format_bits,
+             bool *state_changed)
+@@ -597,8 +597,18 @@ add_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
+       if (aux_map_debug)
+          fprintf(stderr, "AUX-MAP L1[0x%x] is already marked valid!\n",
+                  l1_index);
+-      assert(*l1_entry == l1_data);
++
++      if (*l1_entry != l1_data) {
++         if (aux_map_debug)
++            fprintf(stderr,
++                    "AUX-MAP L1[0x%x] overwrite 0x%"PRIx64" != 0x%"PRIx64"\n",
++                    l1_index, current_l1_data, l1_data);
++
++         return false;
++      }
+    }
++
++   return true;
+ }
+ 
+ uint64_t *
+@@ -614,7 +624,7 @@ intel_aux_map_get_entry(struct intel_aux_map_context *ctx,
+    return l1_entry_map;
+ }
+ 
+-void
++bool
+ intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
+                           uint64_t aux_address, uint64_t main_size_B,
+                           uint64_t format_bits)
+@@ -628,13 +638,18 @@ intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_addre
+    const uint64_t aux_page_size = get_meta_page_size(ctx->format);
+    assert((aux_address & get_page_mask(aux_page_size)) == 0);
+    while (main_inc_addr - main_address < main_size_B) {
+-      add_mapping(ctx, main_inc_addr, aux_inc_addr, format_bits, &state_changed);
++      if (!add_mapping(ctx, main_inc_addr, aux_inc_addr, format_bits,
++                       &state_changed)) {
++         break;
++      }
+       main_inc_addr = main_inc_addr + main_page_size;
+       aux_inc_addr = aux_inc_addr + aux_page_size;
+    }
+    pthread_mutex_unlock(&ctx->mutex);
+    if (state_changed)
+       p_atomic_inc(&ctx->state_num);
++
++   return main_inc_addr - main_address >= main_size_B;
+ }
+ 
+ /**
+diff --git a/src/intel/common/intel_aux_map.h b/src/intel/common/intel_aux_map.h
+index 47e4e18b7be..7593cdd4705 100644
+--- a/src/intel/common/intel_aux_map.h
++++ b/src/intel/common/intel_aux_map.h
+@@ -109,7 +109,9 @@ intel_aux_map_get_entry(struct intel_aux_map_context *ctx,
+                         uint64_t main_address,
+                         uint64_t *aux_entry_address);
+ 
+-void
++/* Fails if a mapping is attempted that would conflict with an existing one.
++ */
++bool
+ intel_aux_map_add_mapping(struct intel_aux_map_context *ctx, uint64_t main_address,
+                           uint64_t aux_address, uint64_t main_size_B,
+                           uint64_t format_bits);
+diff --git a/src/intel/vulkan/anv_allocator.c b/src/intel/vulkan/anv_allocator.c
+index f01e20916b9..662407647df 100644
+--- a/src/intel/vulkan/anv_allocator.c
++++ b/src/intel/vulkan/anv_allocator.c
+@@ -1510,9 +1510,11 @@ anv_device_alloc_bo(struct anv_device *device,
+ 
+    if (new_bo._ccs_size > 0) {
+       assert(device->info->has_aux_map);
+-      intel_aux_map_add_mapping(device->aux_map_ctx, new_bo.offset,
+-                                intel_canonical_address(new_bo.offset + new_bo.size),
+-                                new_bo.size, 0 /* format_bits */);
++      const bool mapped =
++         intel_aux_map_add_mapping(device->aux_map_ctx, new_bo.offset,
++                                   intel_canonical_address(new_bo.offset + new_bo.size),
++                                   new_bo.size, 0 /* format_bits */);
++      assert(mapped);
+    }
+ 
+    assert(new_bo.gem_handle);
+-- 
+2.42.0
+

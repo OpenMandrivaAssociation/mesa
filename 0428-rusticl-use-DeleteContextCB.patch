@@ -1,0 +1,90 @@
+From 250f6e9b2e27078368eba0fb0d7a216e5b81aa40 Mon Sep 17 00:00:00 2001
+From: LingMan <18294-LingMan@users.noreply.gitlab.freedesktop.org>
+Date: Wed, 11 Oct 2023 21:35:23 +0200
+Subject: [PATCH 428/834] rusticl: use DeleteContextCB
+
+Reviewed-by: Karol Herbst <kherbst@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25669>
+---
+ src/gallium/frontends/rusticl/api/context.rs  | 13 ++++---------
+ src/gallium/frontends/rusticl/api/types.rs    |  3 +++
+ src/gallium/frontends/rusticl/core/context.rs |  5 +++--
+ 3 files changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/src/gallium/frontends/rusticl/api/context.rs b/src/gallium/frontends/rusticl/api/context.rs
+index e318644dbfc..d04a81fa71c 100644
+--- a/src/gallium/frontends/rusticl/api/context.rs
++++ b/src/gallium/frontends/rusticl/api/context.rs
+@@ -1,7 +1,6 @@
+ use crate::api::icd::*;
+ use crate::api::types::*;
+ use crate::api::util::*;
+-use crate::cl_closure;
+ use crate::core::context::*;
+ use crate::core::device::get_devs_for_type;
+ use crate::core::platform::*;
+@@ -132,14 +131,10 @@ fn set_context_destructor_callback(
+ ) -> CLResult<()> {
+     let c = context.get_ref()?;
+ 
+-    // CL_INVALID_VALUE if pfn_notify is NULL.
+-    if pfn_notify.is_none() {
+-        return Err(CL_INVALID_VALUE);
+-    }
++    // SAFETY: The requirements on `DeleteContextCB::new` match the requirements
++    // imposed by the OpenCL specification. It is the caller's duty to uphold them.
++    let cb = unsafe { DeleteContextCB::new(pfn_notify, user_data)? };
+ 
+-    c.dtors
+-        .lock()
+-        .unwrap()
+-        .push(cl_closure!(|c| pfn_notify(c, user_data)));
++    c.dtors.lock().unwrap().push(cb);
+     Ok(())
+ }
+diff --git a/src/gallium/frontends/rusticl/api/types.rs b/src/gallium/frontends/rusticl/api/types.rs
+index 3e7c6c83d08..9f4f0c35ef8 100644
+--- a/src/gallium/frontends/rusticl/api/types.rs
++++ b/src/gallium/frontends/rusticl/api/types.rs
+@@ -45,8 +45,11 @@ macro_rules! cl_callback {
+             /// - Passing `data` as the last parameter to `func` must not cause unsoundness.
+             /// - CreateContextCB: `func` must be soundly callable as documented on
+             ///   [`clCreateContext`] in the OpenCL specification.
++            /// - DeleteContextCB: `func` must be soundly callable as documented on
++            ///   [`clSetContextDestructorCallback`] in the OpenCL specification.
+             ///
+             /// [`clCreateContext`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clCreateContext
++            /// [`clSetContextDestructorCallback`]: https://registry.khronos.org/OpenCL/specs/3.0-unified/html/OpenCL_API.html#clSetContextDestructorCallback
+             pub unsafe fn new(func: Option<$fn_alias>, data: *mut c_void) -> CLResult<Self> {
+                 let Some(func) = func else {
+                     return Err(CL_INVALID_VALUE);
+diff --git a/src/gallium/frontends/rusticl/core/context.rs b/src/gallium/frontends/rusticl/core/context.rs
+index 623ec065a88..5cc0ec82cf1 100644
+--- a/src/gallium/frontends/rusticl/core/context.rs
++++ b/src/gallium/frontends/rusticl/core/context.rs
+@@ -1,4 +1,5 @@
+ use crate::api::icd::*;
++use crate::api::types::DeleteContextCB;
+ use crate::core::device::*;
+ use crate::core::format::*;
+ use crate::core::memory::*;
+@@ -22,7 +23,7 @@ pub struct Context {
+     pub base: CLObjectBase<CL_INVALID_CONTEXT>,
+     pub devs: Vec<&'static Device>,
+     pub properties: Properties<cl_context_properties>,
+-    pub dtors: Mutex<Vec<Box<dyn Fn(cl_context)>>>,
++    pub dtors: Mutex<Vec<DeleteContextCB>>,
+     pub svm_ptrs: Mutex<BTreeMap<*const c_void, Layout>>,
+ }
+ 
+@@ -208,6 +209,6 @@ impl Drop for Context {
+             .unwrap()
+             .iter()
+             .rev()
+-            .for_each(|cb| cb(cl));
++            .for_each(|cb| unsafe { (cb.func)(cl, cb.data) });
+     }
+ }
+-- 
+2.42.0
+

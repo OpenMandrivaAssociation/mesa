@@ -1,0 +1,77 @@
+From dacaaa0b90db173ef213d5909b6c99013509967f Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Fri, 6 Oct 2023 11:43:28 +0200
+Subject: [PATCH 008/834] docs: keep up with intels ever-moving documentation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+No location is ever good enough for Intel. Let's catch up with their
+latests churns in documentation URLs...
+
+Reviewed-by: Corentin Noël <corentin.noel@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25585>
+---
+ docs/drivers/llvmpipe.rst | 2 +-
+ docs/faq.rst              | 4 ++--
+ docs/perfetto.rst         | 2 +-
+ docs/systems.rst          | 2 +-
+ 4 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/docs/drivers/llvmpipe.rst b/docs/drivers/llvmpipe.rst
+index b6595afc012..bad2953b0b0 100644
+--- a/docs/drivers/llvmpipe.rst
++++ b/docs/drivers/llvmpipe.rst
+@@ -258,7 +258,7 @@ Recommended Reading
+    -  `Optimizing Pixomatic For Modern x86
+       Processors <https://www.drdobbs.com/optimizing-pixomatic-for-modern-x86-proc/184405807>`__
+    -  `Intel 64 and IA-32 Architectures Optimization Reference
+-      Manual <https://www.intel.com/content/www/us/en/content-details/671488/intel-64-and-ia-32-architectures-optimization-reference-manual.html>`__
++      Manual <https://www.intel.com/content/www/us/en/content-details/779559/intel-64-and-ia-32-architectures-optimization-reference-manual.html>`__
+    -  `Software optimization
+       resources <https://www.agner.org/optimize/>`__
+    -  `Intel Intrinsics
+diff --git a/docs/faq.rst b/docs/faq.rst
+index 42e826d8ff2..0fee120e2d9 100644
+--- a/docs/faq.rst
++++ b/docs/faq.rst
+@@ -24,8 +24,8 @@ DRI drivers for X.org.
+ 
+ -  See the `DRI website <https://dri.freedesktop.org/>`__ for more
+    information.
+--  See `01.org <https://01.org/linuxgraphics>`__ for more information
+-   about Intel drivers.
++-  See `01.org <https://www.intel.com/content/www/us/en/developer/topic-technology/open/overview.html>`__
++   for more information about Intel drivers.
+ -  See `nouveau.freedesktop.org <https://nouveau.freedesktop.org>`__ for
+    more information about Nouveau drivers.
+ -  See
+diff --git a/docs/perfetto.rst b/docs/perfetto.rst
+index 8c7575cdc43..a94f5decbd2 100644
+--- a/docs/perfetto.rst
++++ b/docs/perfetto.rst
+@@ -147,7 +147,7 @@ Intel
+ ^^^^^
+ 
+ The Intel PPS driver needs root access to read system-wide
+-`RenderBasic <https://www.intel.com/content/www/us/en/develop/documentation/vtune-help/top/reference/gpu-metrics-reference.html>`__
++`RenderBasic <https://www.intel.com/content/www/us/en/docs/vtune-profiler/user-guide/2023-0/gpu-metrics-reference.html>`__
+ performance counters, so you can simply run it with sudo:
+ 
+ .. code-block:: console
+diff --git a/docs/systems.rst b/docs/systems.rst
+index 93359cc208d..aa798337b04 100644
+--- a/docs/systems.rst
++++ b/docs/systems.rst
+@@ -12,7 +12,7 @@ EGL, OpenMAX, OpenCL, VDPAU and VA-API.
+ Hardware drivers include:
+ 
+ -  Intel GMA, HD Graphics, Iris. See `Intel's
+-   Website <https://01.org/linuxgraphics>`__
++   Website <https://www.intel.com/content/www/us/en/developer/topic-technology/open/overview.html>`__
+ -  AMD Radeon series. See
+    `RadeonFeature <https://www.x.org/wiki/RadeonFeature>`__
+ -  NVIDIA GPUs (GeForce 5 / FX and later). See `Nouveau
+-- 
+2.42.0
+

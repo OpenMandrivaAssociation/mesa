@@ -1,0 +1,82 @@
+From 9594a579b2b667afa5aa6a51e8f365ae56e50e6a Mon Sep 17 00:00:00 2001
+From: Qiang Yu <yuq825@gmail.com>
+Date: Mon, 7 Aug 2023 14:25:14 +0800
+Subject: [PATCH 064/834] radeonsi: extract si_prolog_get_internal_binding_slot
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+To be shared with ps prolog.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Signed-off-by: Qiang Yu <yuq825@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24989>
+---
+ src/gallium/drivers/radeonsi/si_shader_internal.h |  1 +
+ src/gallium/drivers/radeonsi/si_shader_llvm.c     | 12 ++++++++++++
+ src/gallium/drivers/radeonsi/si_shader_llvm_vs.c  | 14 +++-----------
+ 3 files changed, 16 insertions(+), 11 deletions(-)
+
+diff --git a/src/gallium/drivers/radeonsi/si_shader_internal.h b/src/gallium/drivers/radeonsi/si_shader_internal.h
+index 8f5a9422341..d5bf2915fbd 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_internal.h
++++ b/src/gallium/drivers/radeonsi/si_shader_internal.h
+@@ -200,6 +200,7 @@ LLVMValueRef si_insert_input_ret_float(struct si_shader_context *ctx, LLVMValueR
+ LLVMValueRef si_insert_input_ptr(struct si_shader_context *ctx, LLVMValueRef ret,
+                                  struct ac_arg param, unsigned return_index);
+ LLVMValueRef si_prolog_get_internal_bindings(struct si_shader_context *ctx);
++LLVMValueRef si_prolog_get_internal_binding_slot(struct si_shader_context *ctx, unsigned slot);
+ LLVMValueRef si_unpack_param(struct si_shader_context *ctx, struct ac_arg param, unsigned rshift,
+                              unsigned bitwidth);
+ bool si_llvm_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compiler,
+diff --git a/src/gallium/drivers/radeonsi/si_shader_llvm.c b/src/gallium/drivers/radeonsi/si_shader_llvm.c
+index d6b72a066ce..2e8f389a66e 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_llvm.c
++++ b/src/gallium/drivers/radeonsi/si_shader_llvm.c
+@@ -301,6 +301,18 @@ LLVMValueRef si_prolog_get_internal_bindings(struct si_shader_context *ctx)
+    return list;
+ }
+ 
++LLVMValueRef si_prolog_get_internal_binding_slot(struct si_shader_context *ctx, unsigned slot)
++{
++   LLVMValueRef list = LLVMBuildIntToPtr(
++      ctx->ac.builder, ac_get_arg(&ctx->ac, ctx->args->internal_bindings),
++      ac_array_in_const32_addr_space(ctx->ac.v4i32), "");
++   LLVMValueRef index = LLVMConstInt(ctx->ac.i32, slot, 0);
++
++   return ac_build_load_to_sgpr(&ctx->ac,
++                                (struct ac_llvm_pointer) { .t = ctx->ac.v4i32, .v = list },
++                                index);
++}
++
+ /* Ensure that the esgs ring is declared.
+  *
+  * We declare it with 64KB alignment as a hint that the
+diff --git a/src/gallium/drivers/radeonsi/si_shader_llvm_vs.c b/src/gallium/drivers/radeonsi/si_shader_llvm_vs.c
+index 6023d78c435..8550e2449fa 100644
+--- a/src/gallium/drivers/radeonsi/si_shader_llvm_vs.c
++++ b/src/gallium/drivers/radeonsi/si_shader_llvm_vs.c
+@@ -141,17 +141,9 @@ void si_llvm_build_vs_prolog(struct si_shader_context *ctx, union si_shader_part
+    }
+ 
+    /* Compute vertex load indices from instance divisors. */
+-   LLVMValueRef instance_divisor_constbuf = NULL;
+-
+-   if (key->vs_prolog.states.instance_divisor_is_fetched) {
+-      LLVMValueRef list = ac_get_arg(&ctx->ac, args->internal_bindings);
+-      list = LLVMBuildIntToPtr(ctx->ac.builder, list,
+-                               ac_array_in_const32_addr_space(ctx->ac.v4i32), "");
+-
+-      LLVMValueRef buf_index = LLVMConstInt(ctx->ac.i32, SI_VS_CONST_INSTANCE_DIVISORS, 0);
+-      instance_divisor_constbuf = ac_build_load_to_sgpr(&ctx->ac,
+-         (struct ac_llvm_pointer) { .v = list, .t = ctx->ac.v4i32 }, buf_index);
+-   }
++   LLVMValueRef instance_divisor_constbuf =
++      key->vs_prolog.states.instance_divisor_is_fetched ?
++      si_prolog_get_internal_binding_slot(ctx, SI_VS_CONST_INSTANCE_DIVISORS) : NULL;
+ 
+    for (int i = 0; i < key->vs_prolog.num_inputs; i++) {
+       LLVMValueRef index = get_vertex_index(ctx, &key->vs_prolog.states, i,
+-- 
+2.42.0
+

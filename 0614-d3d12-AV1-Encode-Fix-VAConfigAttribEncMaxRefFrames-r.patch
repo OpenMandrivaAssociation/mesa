@@ -1,0 +1,29 @@
+From 1d5b5bb9e18055f1d87f3171e21b814661d3a4d9 Mon Sep 17 00:00:00 2001
+From: Sil Vilerino <sivileri@microsoft.com>
+Date: Mon, 18 Sep 2023 20:38:35 -0400
+Subject: [PATCH 614/834] d3d12: AV1 Encode - Fix VAConfigAttribEncMaxRefFrames
+ reporting
+
+Reviewed-by: Giancarlo Devich <gdevich@microsoft.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25819>
+---
+ src/gallium/drivers/d3d12/d3d12_video_screen.cpp | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/gallium/drivers/d3d12/d3d12_video_screen.cpp b/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
+index 21e44c0a843..a674a8c1d7a 100644
+--- a/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
++++ b/src/gallium/drivers/d3d12/d3d12_video_screen.cpp
+@@ -314,7 +314,8 @@ d3d12_video_encode_supported_references_per_frame_structures(const D3D12_VIDEO_E
+          * frames supported for encoding.
+          */
+          supportedMaxRefFrames = capPictureControlData.PictureSupport.pAV1Support->MaxUniqueReferencesPerFrame;
+-         supportedMaxRefFrames = (supportedMaxRefFrames & 0xffff) | ((supportedMaxRefFrames & 0xffff) << 16);
++         if (capPictureControlData.PictureSupport.pAV1Support->PredictionMode)
++            supportedMaxRefFrames = (supportedMaxRefFrames & 0xffff) | ((supportedMaxRefFrames & 0xffff) << 16);
+       }
+    }
+ #endif
+-- 
+2.42.0
+

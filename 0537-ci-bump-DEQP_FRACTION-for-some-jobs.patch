@@ -1,0 +1,73 @@
+From 6cfb40a33850b9ea7bd74921f945a50b2831b678 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Mon, 16 Oct 2023 09:49:49 +0200
+Subject: [PATCH 537/834] ci: bump DEQP_FRACTION for some jobs
+
+Otherwise it can't complete in a reasonable amount of time.
+
+Signed-off-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25476>
+---
+ src/freedreno/ci/gitlab-ci.yml                  | 3 ++-
+ src/gallium/frontends/lavapipe/ci/gitlab-ci.yml | 2 +-
+ src/intel/ci/gitlab-ci.yml                      | 3 ++-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/src/freedreno/ci/gitlab-ci.yml b/src/freedreno/ci/gitlab-ci.yml
+index b99441db38f..8b78ed1085a 100644
+--- a/src/freedreno/ci/gitlab-ci.yml
++++ b/src/freedreno/ci/gitlab-ci.yml
+@@ -52,6 +52,7 @@ a618_vk:
+   variables:
+     DEQP_SUITE: freedreno-a618-vk
+     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
++    DEQP_FRACTION: 2
+ 
+ a618_vk_full:
+   extends:
+@@ -162,7 +163,7 @@ a660_vk:
+   parallel: 5
+   variables:
+     DEQP_SUITE: freedreno-a660-vk
+-    DEQP_FRACTION: 2
++    DEQP_FRACTION: 4
+ 
+ a660_vk_full:
+   extends:
+diff --git a/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml b/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml
+index b2eee763e01..7caad9b352c 100644
+--- a/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml
++++ b/src/gallium/frontends/lavapipe/ci/gitlab-ci.yml
+@@ -5,7 +5,7 @@ lavapipe:
+   variables:
+     DEQP_SUITE: lvp
+     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
+-    DEQP_FRACTION: 10
++    DEQP_FRACTION: 18
+   stage: software-renderer
+   extends:
+     - .deqp-test-vk
+diff --git a/src/intel/ci/gitlab-ci.yml b/src/intel/ci/gitlab-ci.yml
+index 05a33fa3440..7c558b6277e 100644
+--- a/src/intel/ci/gitlab-ci.yml
++++ b/src/intel/ci/gitlab-ci.yml
+@@ -8,6 +8,7 @@ anv-jsl:
+   variables:
+     DEQP_SUITE: anv-jsl
+     VK_DRIVER: intel
++    DEQP_FRACTION: 2
+   parallel: 4
+ 
+ # We don't enable a full run of anv-jsl nightly because it's about 8 hours of
+@@ -26,7 +27,7 @@ anv-tgl:
+     - .anv-tgl-test
+   variables:
+     DEQP_SUITE: anv-tgl
+-    DEQP_FRACTION: 2 # temporarily drop network load
++    DEQP_FRACTION: 5 # temporarily drop network load
+     VK_DRIVER: intel
+   parallel: 6 # 15 - 3 zink - 3 post-merge perf + headroom
+ 
+-- 
+2.42.0
+

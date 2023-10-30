@@ -1,0 +1,101 @@
+From 78f3db760d0c510374c708f4898a91571c87d4a8 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Tue, 3 Oct 2023 08:09:02 -0400
+Subject: [PATCH 028/834] egl: don't set ForceSoftware for all zink loading
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+sometimes this is desired, other times it isn't
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Acked-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25526>
+---
+ src/egl/drivers/dri2/platform_surfaceless.c | 7 ++++---
+ src/egl/drivers/dri2/platform_wayland.c     | 2 +-
+ src/egl/drivers/dri2/platform_x11.c         | 2 +-
+ src/egl/main/eglapi.c                       | 2 +-
+ 4 files changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/platform_surfaceless.c b/src/egl/drivers/dri2/platform_surfaceless.c
+index 0321025f91e..bf23b1ec901 100644
+--- a/src/egl/drivers/dri2/platform_surfaceless.c
++++ b/src/egl/drivers/dri2/platform_surfaceless.c
+@@ -220,7 +220,7 @@ static const __DRIextension *swrast_loader_extensions[] = {
+ };
+ 
+ static bool
+-surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
++surfaceless_probe_device(_EGLDisplay *disp, bool swrast, bool zink)
+ {
+    const unsigned node_type = swrast ? DRM_NODE_PRIMARY : DRM_NODE_RENDER;
+    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+@@ -260,7 +260,7 @@ surfaceless_probe_device(_EGLDisplay *disp, bool swrast)
+       }
+ 
+       if (dri2_dpy->driver_name && dri2_load_driver_dri3(disp)) {
+-         if (swrast)
++         if (swrast || zink)
+             dri2_dpy->loader_extensions = swrast_loader_extensions;
+          else
+             dri2_dpy->loader_extensions = image_loader_extensions;
+@@ -323,7 +323,8 @@ dri2_initialize_surfaceless(_EGLDisplay *disp)
+    /* When ForceSoftware is false, we try the HW driver.  When ForceSoftware
+     * is true, we try kms_swrast and swrast in order.
+     */
+-   driver_loaded = surfaceless_probe_device(disp, disp->Options.ForceSoftware);
++   driver_loaded = surfaceless_probe_device(disp, disp->Options.ForceSoftware,
++                                            disp->Options.Zink);
+    if (!driver_loaded && disp->Options.ForceSoftware) {
+       _eglLog(_EGL_DEBUG, "Falling back to surfaceless swrast without DRM.");
+       driver_loaded = surfaceless_probe_device_sw(disp);
+diff --git a/src/egl/drivers/dri2/platform_wayland.c b/src/egl/drivers/dri2/platform_wayland.c
+index 6507e635299..0ec48da3094 100644
+--- a/src/egl/drivers/dri2/platform_wayland.c
++++ b/src/egl/drivers/dri2/platform_wayland.c
+@@ -2830,7 +2830,7 @@ cleanup:
+ EGLBoolean
+ dri2_initialize_wayland(_EGLDisplay *disp)
+ {
+-   if (disp->Options.ForceSoftware)
++   if (disp->Options.ForceSoftware || disp->Options.Zink)
+       return dri2_initialize_wayland_swrast(disp);
+    else
+       return dri2_initialize_wayland_drm(disp);
+diff --git a/src/egl/drivers/dri2/platform_x11.c b/src/egl/drivers/dri2/platform_x11.c
+index 31f6d493f46..71d828a4053 100644
+--- a/src/egl/drivers/dri2/platform_x11.c
++++ b/src/egl/drivers/dri2/platform_x11.c
+@@ -1785,7 +1785,7 @@ cleanup:
+ EGLBoolean
+ dri2_initialize_x11(_EGLDisplay *disp)
+ {
+-   if (disp->Options.ForceSoftware)
++   if (disp->Options.ForceSoftware || disp->Options.Zink)
+       return dri2_initialize_x11_swrast(disp);
+ 
+ #ifdef HAVE_DRI3
+diff --git a/src/egl/main/eglapi.c b/src/egl/main/eglapi.c
+index d3dee4a35ee..b1a48668b76 100644
+--- a/src/egl/main/eglapi.c
++++ b/src/egl/main/eglapi.c
+@@ -682,7 +682,6 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
+ 
+       const char *env = getenv("MESA_LOADER_DRIVER_OVERRIDE");
+       disp->Options.Zink = env && !strcmp(env, "zink");
+-      disp->Options.ForceSoftware |= disp->Options.Zink;
+ 
+       const char *gallium_hud_env = getenv("GALLIUM_HUD");
+       disp->Options.GalliumHudWarn =
+@@ -696,6 +695,7 @@ eglInitialize(EGLDisplay dpy, EGLint *major, EGLint *minor)
+          if (disp->Options.ForceSoftware)
+             RETURN_EGL_ERROR(disp, EGL_NOT_INITIALIZED, EGL_FALSE);
+          else {
++            disp->Options.Zink = EGL_FALSE;
+             disp->Options.ForceSoftware = EGL_TRUE;
+             if (!_eglDriver.Initialize(disp))
+                RETURN_EGL_ERROR(disp, EGL_NOT_INITIALIZED, EGL_FALSE);
+-- 
+2.42.0
+

@@ -1,0 +1,33 @@
+From 2ac2268ce74c51680b2e1c7053344b0a6aac86e0 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Tue, 10 Oct 2023 12:10:08 +0200
+Subject: [PATCH 097/834] ci/etnaviv: allow failure on failing test
+
+This test has been failing every nightly pipeline on the CI for a long,
+long time. It seems nobody is currently interested in fixing it, so
+let's just allow the failure for now.
+
+See https://gitlab.freedesktop.org/mesa/mesa/-/issues/9967
+
+Reviewed-by: Alyssa Rosenzweig <alyssa@rosenzweig.io>
+Reviewed-by: Christian Gmeiner <cgmeiner@igalia.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25635>
+---
+ src/etnaviv/ci/gitlab-ci.yml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/etnaviv/ci/gitlab-ci.yml b/src/etnaviv/ci/gitlab-ci.yml
+index 924f4a300f0..963bb8cfc24 100644
+--- a/src/etnaviv/ci/gitlab-ci.yml
++++ b/src/etnaviv/ci/gitlab-ci.yml
+@@ -76,6 +76,7 @@ gc2000_gles2_asan:
+   extends:
+     - gc2000_gles2
+     - .baremetal-arm32-asan-test
++  allow_failure: true # FIXME: https://gitlab.freedesktop.org/mesa/mesa/-/issues/9967
+   variables:
+     DEQP_FRACTION: 100
+     FDO_CI_CONCURRENT: 1
+-- 
+2.42.0
+

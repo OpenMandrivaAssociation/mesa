@@ -1,0 +1,28 @@
+From 471942e06b102073a1b46e8ffbc5530cf4c13008 Mon Sep 17 00:00:00 2001
+From: Christian Gmeiner <cgmeiner@igalia.com>
+Date: Wed, 25 Oct 2023 10:10:41 +0200
+Subject: [PATCH 798/834] etnaviv: Don't leak disk_cache
+
+Fixes: 77af1ca690f ("etnaviv: add disk cache")
+Signed-off-by: Christian Gmeiner <cgmeiner@igalia.com>
+Reviewed-by: Tomeu Vizoso <tomeu@tomeuvizoso.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25877>
+---
+ src/gallium/drivers/etnaviv/etnaviv_compiler.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gallium/drivers/etnaviv/etnaviv_compiler.c b/src/gallium/drivers/etnaviv/etnaviv_compiler.c
+index 35b1ef45dbb..f25250c12a8 100644
+--- a/src/gallium/drivers/etnaviv/etnaviv_compiler.c
++++ b/src/gallium/drivers/etnaviv/etnaviv_compiler.c
+@@ -94,6 +94,7 @@ etna_compiler_create(const char *renderer, const struct etna_specs *specs)
+ void
+ etna_compiler_destroy(const struct etna_compiler *compiler)
+ {
++   disk_cache_destroy(compiler->disk_cache);
+    ralloc_free((void *)compiler);
+ }
+ 
+-- 
+2.42.0
+

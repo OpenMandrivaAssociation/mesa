@@ -1,0 +1,42 @@
+From f9289dfd0242cf0a05887d70a1a1e79c615a86f0 Mon Sep 17 00:00:00 2001
+From: Rhys Perry <pendingchaos02@gmail.com>
+Date: Wed, 27 Sep 2023 14:01:21 +0100
+Subject: [PATCH 825/834] nir/serialize: fix signed integer overflow
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes UBSan error:
+src/compiler/nir/nir_serialize.c:1277:70: runtime error: left shift of 524287 by 13 places cannot be represented in type 'int'
+
+Signed-off-by: Rhys Perry <pendingchaos02@gmail.com>
+Reviewed-by: Timur Kristóf <timur.kristof@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25853>
+---
+ src/compiler/nir/nir_serialize.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/compiler/nir/nir_serialize.c b/src/compiler/nir/nir_serialize.c
+index 5f6cec0b119..96c2ce49e1f 100644
+--- a/src/compiler/nir/nir_serialize.c
++++ b/src/compiler/nir/nir_serialize.c
+@@ -1271,10 +1271,14 @@ read_load_const(read_ctx *ctx, union packed_instr header)
+    case load_const_scalar_lo_19bits_sext:
+       switch (lc->def.bit_size) {
+       case 64:
+-         lc->value[0].i64 = ((int64_t)header.load_const.packed_value << 45) >> 45;
++         lc->value[0].u64 = header.load_const.packed_value;
++         if (lc->value[0].u64 >> 18)
++            lc->value[0].u64 |= UINT64_C(0xfffffffffff80000);
+          break;
+       case 32:
+-         lc->value[0].i32 = ((int32_t)header.load_const.packed_value << 13) >> 13;
++         lc->value[0].u32 = header.load_const.packed_value;
++         if (lc->value[0].u32 >> 18)
++            lc->value[0].u32 |= 0xfff80000;
+          break;
+       case 16:
+          lc->value[0].u16 = header.load_const.packed_value;
+-- 
+2.42.0
+

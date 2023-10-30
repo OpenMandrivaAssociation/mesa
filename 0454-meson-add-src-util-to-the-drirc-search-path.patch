@@ -1,0 +1,32 @@
+From 128c2bdf738eeff5b4d2a28c2385d7d409240d77 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Thu, 9 Mar 2023 08:52:33 +0100
+Subject: [PATCH 454/834] meson: add src/util to the drirc search path
+
+With this, we pick up new in-tree defaults for driconfig variables
+when using meson devenv. This is useful for testing new config
+variables.
+
+Reviewed-by: Eric Engestrom <eric@igalia.com>
+Reviewed-by: Adam Jackson <ajax@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/21808>
+---
+ src/util/meson.build | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/util/meson.build b/src/util/meson.build
+index 2dec0261caa..eb88f235c47 100644
+--- a/src/util/meson.build
++++ b/src/util/meson.build
+@@ -336,6 +336,8 @@ idep_xmlconfig = declare_dependency(
+ files_xxd = files('xxd.py')
+ glsl2spirv = files('glsl2spirv.py')
+ 
++devenv.set('DRIRC_CONFIGDIR', meson.current_source_dir())
++
+ if with_tests
+   # DRI_CONF macros use designated initializers (required for union
+   # initializaiton), so we need c++2a since gtest forces us to use c++
+-- 
+2.42.0
+

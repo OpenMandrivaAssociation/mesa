@@ -1,0 +1,86 @@
+From b416248cb5f598c5a60211514af9d75cc34ea6dd Mon Sep 17 00:00:00 2001
+From: Eric Anholt <eric@anholt.net>
+Date: Wed, 18 Oct 2023 09:49:32 +0200
+Subject: [PATCH 695/834] nir: Add nir_lower_dsign as 64-bit fsign lowering.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Right now some drivers are doing dsign lowering in GLSL and haven't had to
+have a NIR path due to there not being a corresponding vulkan driver.  We
+want this in NIR now so that we can retire that batch of GLSL lowering
+code.
+
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Acked-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25777>
+---
+ src/compiler/nir/nir.h                 | 3 ++-
+ src/compiler/nir/nir_opt_algebraic.py  | 9 +++++++--
+ src/gallium/drivers/svga/svga_screen.c | 2 +-
+ 3 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/src/compiler/nir/nir.h b/src/compiler/nir/nir.h
+index 5c4c4ada70c..db1e26405e9 100644
+--- a/src/compiler/nir/nir.h
++++ b/src/compiler/nir/nir.h
+@@ -3471,7 +3471,8 @@ typedef enum {
+    nir_lower_dmod = (1 << 8),
+    nir_lower_dsub = (1 << 9),
+    nir_lower_ddiv = (1 << 10),
+-   nir_lower_fp64_full_software = (1 << 11),
++   nir_lower_dsign = (1 << 11),
++   nir_lower_fp64_full_software = (1 << 12),
+ } nir_lower_doubles_options;
+ 
+ typedef enum {
+diff --git a/src/compiler/nir/nir_opt_algebraic.py b/src/compiler/nir/nir_opt_algebraic.py
+index da422a75e8f..08f4099d98f 100644
+--- a/src/compiler/nir/nir_opt_algebraic.py
++++ b/src/compiler/nir/nir_opt_algebraic.py
+@@ -921,6 +921,10 @@ optimizations.extend([
+ 
+ # Float sizes
+ for s in [16, 32, 64]:
++    if s == 64:
++        match_fsign_cond = "!options->lower_fsign & !(options->lower_doubles_options & nir_lower_dsign)"
++    else:
++        match_fsign_cond = "!options->lower_fsign"
+     optimizations.extend([
+        # These derive from the previous patterns with the application of b < 0 <=>
+        # 0 < -b.  The transformation should be applied if either comparison is
+@@ -979,8 +983,8 @@ for s in [16, 32, 64]:
+        (('~f2u{}'.format(s), ('i2f', 'a@{}'.format(s))), a),
+        (('~f2u{}'.format(s), ('u2f', 'a@{}'.format(s))), a),
+ 
+-       (('fadd', ('b2f{}'.format(s), ('flt', 0.0, 'a@{}'.format(s))), ('fneg', ('b2f{}'.format(s), ('flt', 'a@{}'.format(s), 0.0)))), ('fsign', a), '!options->lower_fsign'),
+-       (('iadd', ('b2i{}'.format(s), ('flt', 0, 'a@{}'.format(s))), ('ineg', ('b2i{}'.format(s), ('flt', 'a@{}'.format(s), 0)))), ('f2i{}'.format(s), ('fsign', a)), '!options->lower_fsign'),
++       (('fadd', ('b2f{}'.format(s), ('flt', 0.0, 'a@{}'.format(s))), ('fneg', ('b2f{}'.format(s), ('flt', 'a@{}'.format(s), 0.0)))), ('fsign', a), match_fsign_cond),
++       (('iadd', ('b2i{}'.format(s), ('flt', 0, 'a@{}'.format(s))), ('ineg', ('b2i{}'.format(s), ('flt', 'a@{}'.format(s), 0)))), ('f2i{}'.format(s), ('fsign', a)), match_fsign_cond),
+ 
+        # float? -> float? -> floatS ==> float? -> floatS
+        (('~f2f{}'.format(s), ('f2f', a)), ('f2f{}'.format(s), a)),
+@@ -2217,6 +2221,7 @@ optimizations.extend([
+    # Mark the new comparisons precise to prevent them being changed to 'a !=
+    # 0' or 'a == 0'.
+    (('fsign', a), ('fsub', ('b2f', ('!flt', 0.0, a)), ('b2f', ('!flt', a, 0.0))), 'options->lower_fsign'),
++   (('fsign', 'a@64'), ('fsub', ('b2f', ('!flt', 0.0, a)), ('b2f', ('!flt', a, 0.0))), 'options->lower_doubles_options & nir_lower_dsign'),
+ 
+    # Address/offset calculations:
+    # Drivers supporting imul24 should use the nir_lower_amul() pass, this
+diff --git a/src/gallium/drivers/svga/svga_screen.c b/src/gallium/drivers/svga/svga_screen.c
+index 10b82fec18a..26e26bc151d 100644
+--- a/src/gallium/drivers/svga/svga_screen.c
++++ b/src/gallium/drivers/svga/svga_screen.c
+@@ -752,7 +752,7 @@ vgpu10_get_shader_param(struct pipe_screen *screen,
+    .use_interpolated_input_intrinsics = true
+ 
+ #define VGPU10_OPTIONS                                                        \
+-   .lower_doubles_options = nir_lower_dfloor,                                 \
++   .lower_doubles_options = nir_lower_dfloor | nir_lower_dsign,               \
+    .lower_fmod = true,                                                        \
+    .lower_fpow = true
+ 
+-- 
+2.42.0
+

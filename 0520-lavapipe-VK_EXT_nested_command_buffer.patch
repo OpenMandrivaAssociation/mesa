@@ -1,0 +1,61 @@
+From 9a8956bb7711e572d0eba83761488a57e0305ca8 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Mon, 2 Oct 2023 08:14:27 -0400
+Subject: [PATCH 520/834] lavapipe: VK_EXT_nested_command_buffer
+
+Reviewed-by: Dave Airlie <airlied@redhat.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25615>
+---
+ docs/features.txt                           | 1 +
+ src/gallium/frontends/lavapipe/lvp_device.c | 9 +++++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/docs/features.txt b/docs/features.txt
+index cb0d56caf3f..4cd7c05f28f 100644
+--- a/docs/features.txt
++++ b/docs/features.txt
+@@ -584,6 +584,7 @@ Khronos extensions that are not part of any Vulkan version:
+   VK_EXT_mesh_shader                                    DONE (anv/gfx12.5+, lvp, radv)
+   VK_EXT_multi_draw                                     DONE (anv, hasvk, lvp, radv, tu, vn)
+   VK_EXT_multisampled_render_to_single_sampled          DONE (lvp)
++  VK_EXT_nested_command_buffer                          DONE (lvp)
+   VK_EXT_non_seamless_cube_map                          DONE (anv, hasvk, lvp, nvk, radv, tu, vn)
+   VK_EXT_pageable_device_local_memory                   DONE (lvp)
+   VK_EXT_pci_bus_info                                   DONE (anv, hasvk, nvk, radv, vn)
+diff --git a/src/gallium/frontends/lavapipe/lvp_device.c b/src/gallium/frontends/lavapipe/lvp_device.c
+index 62056942492..978cc16cc43 100644
+--- a/src/gallium/frontends/lavapipe/lvp_device.c
++++ b/src/gallium/frontends/lavapipe/lvp_device.c
+@@ -186,6 +186,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported =
+    .EXT_multisampled_render_to_single_sampled = true,
+    .EXT_multi_draw                        = true,
+    .EXT_mutable_descriptor_type           = true,
++   .EXT_nested_command_buffer             = true,
+    .EXT_non_seamless_cube_map             = true,
+ #if DETECT_OS_LINUX
+    .EXT_pageable_device_local_memory      = true,
+@@ -578,6 +579,11 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
+       /* VK_EXT_pageable_device_local_memory */
+       .pageableDeviceLocalMemory = true,
+ 
++      /* VK_EXT_nested_command_buffer */
++      .nestedCommandBuffer = true,
++      .nestedCommandBufferRendering = true,
++      .nestedCommandBufferSimultaneousUse = true,
++
+       /* VK_EXT_mesh_shader */
+       .taskShader = true,
+       .meshShader = true,
+@@ -1042,6 +1048,9 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
+ #endif
+            );
+ 
++   /* VK_EXT_nested_command_buffer */
++   p->maxCommandBufferNestingLevel = UINT32_MAX;
++
+    /* VK_EXT_host_image_copy */
+    lvp_device_get_cache_uuid(p->optimalTilingLayoutUUID);
+ 
+-- 
+2.42.0
+

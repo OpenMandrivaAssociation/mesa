@@ -1,0 +1,65 @@
+From 6e0bb0811632d0df67ae2d501f47d66aa56e75b7 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <git@karolherbst.de>
+Date: Tue, 19 Sep 2023 14:44:26 +0200
+Subject: [PATCH 374/834] zink: pass entire pipe_grid_info into
+ zink_program_update_compute_pipeline_state
+
+Signed-off-by: Karol Herbst <kherbst@redhat.com>
+Reviewed-by: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24839>
+---
+ src/gallium/drivers/zink/zink_draw.cpp  | 2 +-
+ src/gallium/drivers/zink/zink_program.c | 6 +++---
+ src/gallium/drivers/zink/zink_program.h | 2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_draw.cpp b/src/gallium/drivers/zink/zink_draw.cpp
+index 2946e26c802..11e7295fe82 100644
+--- a/src/gallium/drivers/zink/zink_draw.cpp
++++ b/src/gallium/drivers/zink/zink_draw.cpp
+@@ -1261,7 +1261,7 @@ zink_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
+                                 0, 1, &mb, 0, NULL, 0, NULL);
+    }
+ 
+-   zink_program_update_compute_pipeline_state(ctx, ctx->curr_compute, info->block);
++   zink_program_update_compute_pipeline_state(ctx, ctx->curr_compute, info);
+    VkPipeline prev_pipeline = ctx->compute_pipeline_state.pipeline;
+ 
+    if (BATCH_CHANGED) {
+diff --git a/src/gallium/drivers/zink/zink_program.c b/src/gallium/drivers/zink/zink_program.c
+index 25790ac60cf..96835868502 100644
+--- a/src/gallium/drivers/zink/zink_program.c
++++ b/src/gallium/drivers/zink/zink_program.c
+@@ -1295,13 +1295,13 @@ hash_compute_pipeline_state(const void *key)
+ }
+ 
+ void
+-zink_program_update_compute_pipeline_state(struct zink_context *ctx, struct zink_compute_program *comp, const uint block[3])
++zink_program_update_compute_pipeline_state(struct zink_context *ctx, struct zink_compute_program *comp, const struct pipe_grid_info *info)
+ {
+    if (comp->use_local_size) {
+       for (int i = 0; i < ARRAY_SIZE(ctx->compute_pipeline_state.local_size); i++) {
+-         if (ctx->compute_pipeline_state.local_size[i] != block[i])
++         if (ctx->compute_pipeline_state.local_size[i] != info->block[i])
+             ctx->compute_pipeline_state.dirty = true;
+-         ctx->compute_pipeline_state.local_size[i] = block[i];
++         ctx->compute_pipeline_state.local_size[i] = info->block[i];
+       }
+    }
+ }
+diff --git a/src/gallium/drivers/zink/zink_program.h b/src/gallium/drivers/zink/zink_program.h
+index 8df5e3388ab..432dcb0a9e4 100644
+--- a/src/gallium/drivers/zink/zink_program.h
++++ b/src/gallium/drivers/zink/zink_program.h
+@@ -231,7 +231,7 @@ VkPipelineLayout
+ zink_pipeline_layout_create(struct zink_screen *screen, VkDescriptorSetLayout *dsl, unsigned num_dsl, bool is_compute, VkPipelineLayoutCreateFlags flags);
+ 
+ void
+-zink_program_update_compute_pipeline_state(struct zink_context *ctx, struct zink_compute_program *comp, const uint block[3]);
++zink_program_update_compute_pipeline_state(struct zink_context *ctx, struct zink_compute_program *comp, const struct pipe_grid_info *info);
+ void
+ zink_update_compute_program(struct zink_context *ctx);
+ VkPipeline
+-- 
+2.42.0
+

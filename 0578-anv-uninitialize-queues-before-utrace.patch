@@ -1,0 +1,71 @@
+From 5d76b03a3e4adc785d3eef2e0fb1864e0befffac Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Thu, 19 Oct 2023 11:00:49 +0300
+Subject: [PATCH 578/834] anv: uninitialize queues before utrace
+
+We need to shut down the runtime queue threads before tearing down
+anything else.
+
+Gets rid of helgrind errors like this :
+
+==212772== Possible data race during write of size 4 at 0xADCBFB0 by thread #1
+==212772== Locks held: 1, at address 0x6B8F260
+==212772==    at 0x8AC3EFF: simple_mtx_destroy (simple_mtx.h:97)
+==212772==    by 0x8ACB24D: intel_ds_device_fini (intel_driver_ds.cc:603)
+==212772==    by 0x6CBD4D4: anv_device_utrace_finish (anv_utrace.c:471)
+==212772==    by 0x6C71577: anv_DestroyDevice (anv_device.c:3679)
+==212772==    by 0x6B2F1E2: loader_layer_destroy_device (loader.c:4358)
+==212772==    by 0x6B3F10B: vkDestroyDevice (trampoline.c:983)
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Fixes: cc5843a573 ("anv: implement u_trace support")
+Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/10010
+Reviewed-by: Emma Anholt <emma@anholt.net>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25805>
+---
+ src/intel/ci/anv-jsl-flakes.txt | 8 --------
+ src/intel/vulkan/anv_device.c   | 8 ++++----
+ 2 files changed, 4 insertions(+), 12 deletions(-)
+
+diff --git a/src/intel/ci/anv-jsl-flakes.txt b/src/intel/ci/anv-jsl-flakes.txt
+index 51ceb3c5ca3..e69de29bb2d 100644
+--- a/src/intel/ci/anv-jsl-flakes.txt
++++ b/src/intel/ci/anv-jsl-flakes.txt
+@@ -1,8 +0,0 @@
+-# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49442241
+-dEQP-VK.synchronization2.timeline_semaphore.one_to_n.write_copy_buffer_read_ssbo_vertex.buffer_16384
+-# ci-collate: Issue found in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49442242
+-dEQP-VK.synchronization.timeline_semaphore.wait_before_signal.write_image_compute_read_copy_image_to_buffer.image_128_r32_uint
+-
+-# Found crashing https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49649616 and
+-# passing in https://gitlab.freedesktop.org/mesa/mesa/-/jobs/49668558
+-dEQP-VK.synchronization.timeline_semaphore.wait_before_signal.write_blit_image_read_image_geometry.image_128_r32_uint,Crash
+diff --git a/src/intel/vulkan/anv_device.c b/src/intel/vulkan/anv_device.c
+index b85d5a5cdfb..b1444977190 100644
+--- a/src/intel/vulkan/anv_device.c
++++ b/src/intel/vulkan/anv_device.c
+@@ -3677,6 +3677,10 @@ void anv_DestroyDevice(
+ 
+    struct anv_physical_device *pdevice = device->physical;
+ 
++   for (uint32_t i = 0; i < device->queue_count; i++)
++      anv_queue_finish(&device->queues[i]);
++   vk_free(&device->vk.alloc, device->queues);
++
+    anv_device_utrace_finish(device);
+ 
+    anv_device_finish_blorp(device);
+@@ -3756,10 +3760,6 @@ void anv_DestroyDevice(
+    pthread_cond_destroy(&device->queue_submit);
+    pthread_mutex_destroy(&device->mutex);
+ 
+-   for (uint32_t i = 0; i < device->queue_count; i++)
+-      anv_queue_finish(&device->queues[i]);
+-   vk_free(&device->vk.alloc, device->queues);
+-
+    ralloc_free(device->fp64_nir);
+ 
+    anv_device_destroy_context_or_vm(device);
+-- 
+2.42.0
+

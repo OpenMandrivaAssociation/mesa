@@ -1,0 +1,33 @@
+From 80d837cf40435cf1d04943167dac0a4f70d542b6 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Thu, 12 Oct 2023 11:38:03 -0400
+Subject: [PATCH 203/834] ci: add a630 trace flakes
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25684>
+---
+ src/freedreno/ci/traces-freedreno.yml | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/freedreno/ci/traces-freedreno.yml b/src/freedreno/ci/traces-freedreno.yml
+index 562b2925537..81b5cbe98b6 100644
+--- a/src/freedreno/ci/traces-freedreno.yml
++++ b/src/freedreno/ci/traces-freedreno.yml
+@@ -257,6 +257,7 @@ traces:
+     freedreno-a618:
+       checksum: e9b5d984b49f888ff1a4787fe2baea71
+     freedreno-a630:
++      label: [skip, flakes]
+       checksum: 1db3e8a057748109bd06734860396abf
+     zink-a618:
+       checksum: f534d68a62934453325f11ff19e2241a
+@@ -781,6 +782,7 @@ traces:
+     freedreno-a618:
+       checksum: a71d1ad391162acef60cbb2804d0cf64
+     freedreno-a630:
++      label: [skip, flakes]
+       checksum: a71d1ad391162acef60cbb2804d0cf64
+     zink-a618:
+       checksum: 7d084f2cd05644b717cc591bd8e9dcce
+-- 
+2.42.0
+

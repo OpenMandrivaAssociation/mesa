@@ -1,0 +1,28 @@
+From fcf3f7d28f852db5ef463c90fab187f81bb63882 Mon Sep 17 00:00:00 2001
+From: Mike Blumenkrantz <michael.blumenkrantz@gmail.com>
+Date: Wed, 11 Oct 2023 12:15:35 -0400
+Subject: [PATCH 515/834] zink: don't destroy uninitialized disk cache thread
+
+cc: mesa-stable
+
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/25663>
+---
+ src/gallium/drivers/zink/zink_screen.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/gallium/drivers/zink/zink_screen.c b/src/gallium/drivers/zink/zink_screen.c
+index 2d06e829064..54127045dd9 100644
+--- a/src/gallium/drivers/zink/zink_screen.c
++++ b/src/gallium/drivers/zink/zink_screen.c
+@@ -317,8 +317,6 @@ disk_cache_init(struct zink_screen *screen)
+       disk_cache_destroy(screen->disk_cache);
+       screen->disk_cache = NULL;
+ 
+-      util_queue_destroy(&screen->cache_put_thread);
+-
+       return false;
+    }
+ #endif
+-- 
+2.42.0
+

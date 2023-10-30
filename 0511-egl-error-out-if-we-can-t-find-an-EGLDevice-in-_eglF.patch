@@ -1,0 +1,45 @@
+From 2be404f5571ada32d3b2e9cfe9b769846f27d68f Mon Sep 17 00:00:00 2001
+From: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Date: Mon, 4 Sep 2023 13:34:27 -0300
+Subject: [PATCH 511/834] egl: error out if we can't find an EGLDevice in
+ _eglFindDevice()
+
+Follow up of "egl/drm: get compatible render-only device fd for kms-only
+device". Now we can properly error out when we don't find the EGLDevice
+in _eglFindDevice().
+
+Signed-off-by: Leandro Ribeiro <leandro.ribeiro@collabora.com>
+Reviewed-by: Simon Ser <contact@emersion.fr>
+Reviewed-by: Daniel Stone <daniels@collabora.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/24825>
+---
+ src/egl/main/egldevice.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/egl/main/egldevice.c b/src/egl/main/egldevice.c
+index d4cc3d995d8..f8b7e94de76 100644
+--- a/src/egl/main/egldevice.c
++++ b/src/egl/main/egldevice.c
+@@ -152,6 +152,9 @@ _eglAddDRMDevice(drmDevicePtr device)
+ #endif
+ 
+ /* Finds a device in DeviceList, for the given fd.
++ *
++ * The fd must be of a render-capable device, as there are only render-capable
++ * devices in DeviceList.
+  *
+  * If a software device, the fd is ignored.
+  */
+@@ -186,6 +189,9 @@ _eglFindDevice(int fd, bool software)
+       }
+    }
+ 
++   /* Couldn't find an EGLDevice for the device. */
++   dev = NULL;
++
+ #else
+    _eglLog(_EGL_FATAL,
+            "Driver bug: Built without libdrm, yet looking for HW device");
+-- 
+2.42.0
+
