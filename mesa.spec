@@ -151,25 +151,12 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	23.2.1
-%if ! 0%{?relc:1}%{?git:1}
-Release:	2
-%else
-%if "%{?relc:1}" != ""
-%if 0%{?git:1}
-Release:	%{?relc:0.rc%{relc}.}0.%{git}.1
-%else
-Release:	%{?relc:0.rc%{relc}.}1
-%endif
-%else
-Release:	%{?git:0.%{git}.}1
-%endif
-%endif
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
 Url:		http://www.mesa3d.org
 %if 0%{?git:1}
-Source0:	https://gitlab.freedesktop.org/mesa/mesa/-/archive/main/mesa-main.tar.bz2#/mesa-%{git }.tar.bz2
-#Source0:	https://gitlab.freedesktop.org/panfrost/mesa/-/archive/%{git}/mesa-%{git}.tar.bz2
+Source0:	https://gitlab.freedesktop.org/mesa/mesa/-/archive/%{git}/mesa-%{git}.tar.bz2
 %else
 Source0:	https://mesa.freedesktop.org/archive/mesa-%{version}%{vsuffix}.tar.xz
 %endif
@@ -992,7 +979,7 @@ Group:		Development/Tools
 Tools for debugging Mesa drivers.
 
 %prep
-%autosetup -p1 -n mesa-%{?git:main}%{!?git:%{version}%{vsuffix}}
+%autosetup -p1 -n mesa-%{?git:%{git}}%{!?git:%{version}%{vsuffix}}
 chmod +x %{SOURCE5}
 
 %build
