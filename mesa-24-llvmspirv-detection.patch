@@ -1,0 +1,12 @@
+diff -up mesa-24.0.0-rc3/meson.build.omv~ mesa-24.0.0-rc3/meson.build
+--- mesa-24.0.0-rc3/meson.build.omv~	2024-01-27 18:09:38.093727414 +0100
++++ mesa-24.0.0-rc3/meson.build	2024-01-27 18:10:04.953994095 +0100
+@@ -1840,7 +1840,7 @@ with_opencl_spirv = (_opencl != 'disable
+ if with_opencl_spirv
+   chosen_llvm_version_array = dep_llvm.version().split('.')
+   chosen_llvm_version_major = chosen_llvm_version_array[0].to_int()
+-  chosen_llvm_version_minor = chosen_llvm_version_array[1].to_int()
++  chosen_llvm_version_minor = 0
+
+   # Require an SPIRV-LLVM-Translator version compatible with the chosen LLVM
+   # one.
