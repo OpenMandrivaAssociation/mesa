@@ -233,6 +233,8 @@ Patch100:	mesa-23.3-panthor.patch
 # Upstream fix for crashes in virtual machines.
 Patch200:	0001-zink-allow-software-rendering-only-if-selected.patch
 
+Patch201:	mesa-24-llvmspirv-detection.patch
+
 BuildRequires:	flex
 BuildRequires:	bison
 BuildRequires:	libxml2-python
