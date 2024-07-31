@@ -308,7 +308,7 @@ BuildRequires:	glslang
 
 %if %{with rusticl}
 BuildRequires:	rust
-BuildRequires:	bindgen
+BuildRequires:  rust-bindgen-cli
 BuildRequires:	cbindgen
 %endif
 
