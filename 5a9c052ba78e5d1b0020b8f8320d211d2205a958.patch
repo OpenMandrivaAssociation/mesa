@@ -1,0 +1,39 @@
+commit 5a9c052ba78e5d1b0020b8f8320d211d2205a958
+Author: Khem Raj <raj.khem@gmail.com>
+Date:   Mon Jul 1 23:09:29 2024 -0700
+
+    amd: Include missing llvm IR header Module.h
+    
+    With LLVM-19, Module.h header is not being pulled, which results in
+    compile errors e.g.
+    
+    src/amd/llvm/ac_llvm_helper.cpp:102:10: error: no matching function for call to ‘unwrap(LLVMOpaqueModule*&)’
+      102 |    unwrap(module)->setTargetTriple(TM->getTargetTriple().getTriple());
+          |    ~~~~~~^~~~~~~~
+    In file included from /mnt/b/yoe/master/build/tmp/work/x86_64-linux/mesa-native/24.0.7/recipe-sysroot-native/usr/include/llvm/IR/Type.h:18,
+                     from /mnt/b/yoe/master/build/tmp/work/x86_64-linux/mesa-native/24.0.7/recipe-sysroot-native/usr/include/llvm/IR/DerivedTypes.h:23,
+                     from /mnt/b/yoe/master/build/tmp/work/x86_64-linux/mesa-native/24.0.7/recipe-sysroot-native/usr/include/llvm/IR/InstrTypes.h:26,
+                     from /mnt/b/yoe/master/build/tmp/work/x86_64-linux/mesa-native/24.0.7/recipe-sysroot-native/usr/include/llvm/Analysis/TargetLibraryInfo.h:14,
+                     from ../mesa-24.0.7/src/amd/llvm/ac_llvm_helper.cpp:8:
+    
+    Its getting the definition from llvm/IR/Type.h instead of Module.h and caused
+    confusion to compiler
+    
+    Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/11424
+    
+    Signed-off-by: Khem Raj <raj.khem@gmail.com>
+    Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+    Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/29993>
+
+diff --git a/src/amd/llvm/ac_llvm_helper.cpp b/src/amd/llvm/ac_llvm_helper.cpp
+index 5d065279ad1..af4a50f8409 100644
+--- a/src/amd/llvm/ac_llvm_helper.cpp
++++ b/src/amd/llvm/ac_llvm_helper.cpp
+@@ -8,6 +8,7 @@
+ #include <llvm/Analysis/TargetLibraryInfo.h>
+ #include <llvm/IR/IRBuilder.h>
+ #include <llvm/IR/LegacyPassManager.h>
++#include <llvm/IR/Module.h>
+ #include <llvm/IR/Verifier.h>
+ #include <llvm/Target/TargetMachine.h>
+ #include <llvm/MC/MCSubtargetInfo.h>
