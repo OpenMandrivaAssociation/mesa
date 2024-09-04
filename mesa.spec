@@ -11,7 +11,7 @@
 
 # Mesa is used by wine and steam
 %ifarch %{x86_64}
-%bcond_without compat32
+%bcond_with compat32
 %else
 %bcond_with compat32
 %endif
@@ -28,7 +28,7 @@
 %endif
 %global build_ldflags %{build_ldflags} -fno-strict-aliasing -flto=thin -Wl,--undefined-version
 
-#define git 20240114
+%define git 20240903
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
 #define relc 4
@@ -157,7 +157,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	24.2.1
+Version:	24.3.0
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}4
 Group:		System/Libraries
 License:	MIT
@@ -166,7 +166,7 @@ Url:		http://www.mesa3d.org
 %if "%{git_branch}" == "panthor" || "%{git_branch}" == "panfrost"
 Source0:	https://gitlab.freedesktop.org/panfrost/mesa/-/archive/%{git}/mesa-%{git}.tar.bz2
 %else
-Source0:	https://gitlab.freedesktop.org/mesa/mesa/-/archive/%{git_branch}/mesa-%{git_branch}.tar.bz2#/mesa-%{git }.tar.bz2
+Source0:	https://gitlab.freedesktop.org/mesa/mesa/-/archive/%{git_branch}/mesa-%{git_branch}.tar.bz2#/mesa-%{git}.tar.bz2
 %endif
 %else
 Source0:	https://mesa.freedesktop.org/archive/mesa-%{version}%{vsuffix}.tar.xz
@@ -211,20 +211,21 @@ Patch5:		mesa-20.3.0-meson-radeon-arm-riscv-ppc.patch
 
 # FIXME is there a better way to teach meson about
 # rust cruft?
-Patch6:		mesa-rustdeps.patch
+#Patch6:		mesa-rustdeps.patch
 
 Patch7:		mesa-24-llvmspirv-detection.patch
 Patch8:		mesa-buildsystem-improvements.patch
-Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
+#Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 Patch10:	mesa-24.2-llvm-19.0.patch
 #Patch10:	mesa-24.0.2-buildfix32.patch
-Patch11:	enable-vulkan-video-decode.patch
+# SEEMS to be enabled in 24.3, need to double-check
+#Patch11:	enable-vulkan-video-decode.patch
 # Without this, llvmpipe can't create a context
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/11818
-Patch12:	revert-06020b2ad8c9f1a07cee3e0cd453db09bad19277.patch
+#Patch12:	revert-06020b2ad8c9f1a07cee3e0cd453db09bad19277.patch
 # Wrong colors in llvmpipe
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/11827
-Patch13:	revert-20b34007014953f5bce7c0073879320c706273a7.patch
+#Patch13:	revert-20b34007014953f5bce7c0073879320c706273a7.patch
 
 # Fix https://bugs.winehq.org/show_bug.cgi?id=41930
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/5094
@@ -321,6 +322,7 @@ BuildRequires:	cbindgen
 
 %if %{with rust}
 BuildRequires:	rust
+BuildRequires:	rustfmt
 BuildRequires:	crate(proc-macro2)
 BuildRequires:	crate(quote)
 BuildRequires:	crate(syn)
@@ -1233,7 +1235,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_datadir}/drirc.d
 
 %files -n %{dridrivers}
-%{_libdir}/libgallium-*.so
 %{_libdir}/dri/*.so
 %ifarch %{armx}
 %{_libdir}/libpowervr_rogue.so
@@ -1381,14 +1382,12 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_bindir}/brw_disasm
 %{_bindir}/elk_asm
 %{_bindir}/elk_disasm
+%{_bindir}/executor
 %{_bindir}/nv_mme_dump
 %{_libexecdir}/libintel_dump_gpu.so
 %{_libexecdir}/libintel_sanitize_gpu.so
 %endif
 %{_bindir}/nv_push_dump
-%ifarch %{x86_64}
-%{_bindir}/nvfuzz
-%endif
 %ifarch %{armx}
 %{_bindir}/generate_rd
 %{_bindir}/panfrostdump
@@ -1460,7 +1459,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_prefix}/lib/libglapi.so
 
 %files -n %{dridrivers32}
-%{_prefix}/lib/libgallium-*.so
 %{_prefix}/lib/dri/*.so
 %{_prefix}/lib/gallium-pipe/*.so
 %{_prefix}/lib/libVkLayer_*.so
