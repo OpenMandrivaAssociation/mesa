@@ -28,7 +28,7 @@
 %endif
 %global build_ldflags %{build_ldflags} -fno-strict-aliasing -flto=thin -Wl,--undefined-version
 
-%define git 20240903
+%define git 20240909
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
 #define relc 4
@@ -158,7 +158,7 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	24.3.0
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}4
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
 Url:		http://www.mesa3d.org
@@ -226,6 +226,9 @@ Patch10:	mesa-24.2-llvm-19.0.patch
 # Wrong colors in llvmpipe
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/11827
 #Patch13:	revert-20b34007014953f5bce7c0073879320c706273a7.patch
+
+Patch20:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31019.patch
+Patch22:	fix-pegl-returntypes.patch
 
 # Fix https://bugs.winehq.org/show_bug.cgi?id=41930
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/5094
@@ -1051,7 +1054,6 @@ if ! %meson32 \
 	-Dgallium-xa=enabled \
 	-Dgallium-nine=true \
 	-Dgallium-drivers=auto,crocus \
-	-Ddri3=enabled \
 	-Degl=enabled \
 	-Dgbm=enabled \
 	-Dgles1=disabled \
@@ -1160,7 +1162,6 @@ if ! %meson \
 	-Dxlib-lease=auto \
 	-Dosmesa=true \
 	-Dglvnd=enabled \
-	-Ddri3=enabled \
 	-Degl=enabled \
 	-Dgbm=enabled \
 	-Dgles1=disabled \
@@ -1235,6 +1236,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_datadir}/drirc.d
 
 %files -n %{dridrivers}
+%{_libdir}/libgallium*.so
 %{_libdir}/dri/*.so
 %ifarch %{armx}
 %{_libdir}/libpowervr_rogue.so

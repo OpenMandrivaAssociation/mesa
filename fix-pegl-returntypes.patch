@@ -1,0 +1,23 @@
+commit 95d1d394f6c710b6abd65a3a86dcafcd62829ba8
+Author: Bernhard Rosenkränzer <bero@lindev.ch>
+Date:   Tue Sep 10 02:44:58 2024 +0200
+
+    dril: Fix return types of peglInitialize and peglTerminate
+    
+    Fix return types of peglInitialize and peglTerminate to match
+    eglInitialize and eglTerminate
+
+diff --git a/src/gallium/targets/dril/dril_target.c b/src/gallium/targets/dril/dril_target.c
+index a94ab09858f..672d50a4182 100644
+--- a/src/gallium/targets/dril/dril_target.c
++++ b/src/gallium/targets/dril/dril_target.c
+@@ -338,7 +338,7 @@ init_dri2_configs(int fd)
+    void * (*peglGetProcAddress)(const char *) = dlsym(egl, "eglGetProcAddress");
+    EGLDisplay (*peglGetPlatformDisplayEXT)(EGLenum, void *, const EGLint *) = peglGetProcAddress("eglGetPlatformDisplayEXT");
+-   EGLDisplay (*peglInitialize)(EGLDisplay, int*, int*) = peglGetProcAddress("eglInitialize");
+-   void (*peglTerminate)(EGLDisplay) = peglGetProcAddress("eglTerminate");
++   EGLBoolean (*peglInitialize)(EGLDisplay, int*, int*) = peglGetProcAddress("eglInitialize");
++   EGLBoolean (*peglTerminate)(EGLDisplay) = peglGetProcAddress("eglTerminate");
+    EGLBoolean (*peglGetConfigs)(EGLDisplay, EGLConfig*, EGLint, EGLint*) = peglGetProcAddress("eglGetConfigs");
+    EGLBoolean (*peglGetConfigAttrib)(EGLDisplay, EGLConfig, EGLint, EGLint *) = peglGetProcAddress("eglGetConfigAttrib");
+    const char *(*peglQueryString)(EGLDisplay, EGLint) = peglGetProcAddress("eglQueryString");
