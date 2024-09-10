@@ -66,15 +66,25 @@
 %define lib32osmesa libosmesa%{osmesamajor}
 %define dev32osmesa libosmesa-devel
 
+%if %{with glvnd}
 %define eglmajor 0
 %define eglname EGL_mesa
+%else
+%define eglmajor 1
+%define eglname EGL
+%endif
 %define libegl %mklibname %{eglname} %{eglmajor}
 %define devegl %mklibname %{eglname} -d
 %define lib32egl lib%{eglname}%{eglmajor}
 %define dev32egl lib%{eglname}-devel
 
+%if %{with glvnd}
 %define glmajor 0
 %define glname GLX_mesa
+%else
+%define glmajor 1
+%define glname GL
+%endif
 %define libgl %mklibname %{glname} %{glmajor}
 %define devgl %mklibname GL -d
 %define lib32gl lib%{glname}%{glmajor}
@@ -154,6 +164,8 @@
 %define driver_dir %{_libdir}/dri
 
 %define short_ver %(if [ $(echo %{version} |cut -d. -f3) = "0" ]; then echo %{version} |cut -d. -f1-2; else echo %{version}; fi)
+
+%bcond_with glvnd
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
@@ -262,7 +274,9 @@ BuildRequires:	python%{pyver}dist(pycparser)
 %endif
 BuildRequires:	pkgconfig(libdrm) >= 2.4.56
 BuildRequires:	pkgconfig(libudev) >= 186
+%if %{with glvnd}
 BuildRequires:	pkgconfig(libglvnd)
+%endif
 %ifnarch %{armx} %{riscv}
 %if %{with aubinatorviewer}
 # needed only for intel binaries
@@ -475,7 +489,22 @@ Requires:	%{_lib}udev1
 Requires:	%{_lib}GL1%{?_isa}
 Provides:	mesa-libGL%{?_isa} = %{EVRD}
 Requires:	%mklibname GL 1
+%if %{with glvnd}
 Requires:	libglvnd-GL%{?_isa}
+%else
+Obsoletes:	libglvnd
+Obsoletes:	%mklibname GLX 0
+Obsoletes:	%mklibname GLdispatch 0
+Obsoletes:	%mklibname OpenGL 0
+Obsoletes:	%mklibname GLX_mesa0
+%if "%{_lib}" == "lib64"
+Provides:	libGLX.so.0()(64bit)
+Provides:	libOpenGL.so.0()(64bit)
+%else
+Provides:	libGLX.so.0
+Provides:	libOpenGL.so.0
+%endif
+%endif
 %define oldglname %mklibname gl 1
 %rename %oldglname
 
@@ -494,7 +523,9 @@ Conflicts:	%{libgl} < %{EVRD}
 %else
 Requires:	%{libgl} = %{EVRD}
 %endif
+%if %{with glvnd}
 Requires:	pkgconfig(libglvnd)
+%endif
 # GL/glext.h uses KHR/khrplatform.h
 Requires:	%{devegl}  = %{EVRD}
 Obsoletes:	%{_lib}mesagl1-devel < 8.0
@@ -521,7 +552,11 @@ Summary:	Files for Mesa (EGL libs)
 Group:		System/Libraries
 Obsoletes:	%{_lib}mesaegl1 < 8.0
 Provides:	mesa-libEGL%{?_isa} = %{EVRD}
+%if %{with glvnd}
 Requires:	libglvnd-egl%{?_isa}
+%else
+Obsoletes:	%mklibname EGL_mesa 0
+%endif
 %define oldegl %mklibname egl 1
 %rename %oldegl
 
@@ -606,9 +641,11 @@ This package provides the OpenGL ES library version 1.
 Summary:	Development files for glesv1 libs
 Group:		Development/C
 Requires:	%{libglesv1}
+%if %{with glvnd}
 Requires:	libglvnd-GLESv1_CM%{?_isa}
 # For libGLESv1_CM.so symlink
 Requires:	pkgconfig(libglvnd)
+%endif
 Obsoletes:	%{_lib}mesaglesv1_1-devel < 8.0
 Obsoletes:	%{_lib}glesv1_1-devel < %{EVRD}
 
@@ -619,8 +656,10 @@ This package contains the headers needed to compile OpenGL ES 1 programs.
 Summary:	Files for Mesa (glesv2 libs)
 Group:		System/Libraries
 Obsoletes:	%{_lib}mesaglesv2_2 < 8.0
+%if %{with glvnd}
 # For libGLESv2.so symlink
 Requires:	pkgconfig(libglvnd)
+%endif
 
 %description -n %{libglesv2}
 OpenGL ES is a low-level, lightweight API for advanced embedded graphics using
@@ -632,7 +671,9 @@ This package provides the OpenGL ES library version 2.
 Summary:	Development files for glesv2 libs
 Group:		Development/C
 Requires:	%{libglesv2}
+%if %{with glvnd}
 Requires:	libglvnd-GLESv2%{?_isa}
+%endif
 Obsoletes:	%{_lib}mesaglesv2_2-devel < 8.0
 Obsoletes:	%{_lib}glesv2_2-devel < %{EVRD}
 
@@ -800,7 +841,9 @@ This package contains the headers needed to compile Direct3D 9 programs.
 %package -n %{lib32egl}
 Summary:	Files for Mesa (EGL libs) (32-bit)
 Group:		System/Libraries
+%if %{with glvnd}
 Requires:	libglvnd-egl%{?_isa}
+%endif
 
 %description -n %{lib32egl}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
@@ -948,7 +991,9 @@ Requires:	%{devgl} = %{EVRD}
 Requires:	%{devegl} = %{EVRD}
 Requires:	%{devglapi} = %{EVRD}
 Suggests:	%{devd3d} = %{EVRD}
+%if %{with glvnd}
 Requires:	pkgconfig(libglvnd)
+%endif
 Requires:	pkgconfig(glesv1_cm)
 Requires:	pkgconfig(glesv2)
 
@@ -1042,7 +1087,11 @@ if ! %meson32 \
 	-Dosmesa=true \
 	-Dandroid-libbacktrace=disabled \
 	-Dvalgrind=disabled \
+%if %{with glvnd}
 	-Dglvnd=enabled \
+%else
+	-Dglvnd=disabled \
+%endif
 %if %{with opencl}
 	-Dgallium-opencl=icd \
 	-Dopencl-spirv=true \
@@ -1161,7 +1210,11 @@ if ! %meson \
 	-Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec,av1dec,av1enc,vp9dec \
 	-Dxlib-lease=auto \
 	-Dosmesa=true \
+%if %{with glvnd}
 	-Dglvnd=enabled \
+%else
+	-Dglvnd=disabled \
+%endif
 	-Degl=enabled \
 	-Dgbm=enabled \
 	-Dgles1=disabled \
@@ -1193,6 +1246,7 @@ fi
 %endif
 %ninja_install -C build/
 
+%if %{with glvnd}
 # We get those from libglvnd
 rm -rf	%{buildroot}%{_includedir}/GL/gl.h \
 	%{buildroot}%{_includedir}/GL/glcorearb.h \
@@ -1210,6 +1264,10 @@ rm -rf	%{buildroot}%{_includedir}/GL/gl.h \
 	%{buildroot}%{_libdir}/pkgconfig/gl.pc \
 	%{buildroot}%{_libdir}/libGLESv1_CM.so* \
 	%{buildroot}%{_libdir}/libGLESv2.so*
+%else
+ln -s libGL.so.1 %{buildroot}%{_libdir}/libOpenGL.so.0
+ln -s libGL.so.1 %{buildroot}%{_libdir}/libGLX.so.0
+%endif
 
 # Useless, static lib without headers [optional because it's Intel specific]
 [ -e %{buildroot}%{_libdir}/libgrl.a ] && rm %{buildroot}%{_libdir}/libgrl.a
@@ -1273,16 +1331,31 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_libdir}/pkgconfig/osmesa.pc
 
 %files -n %{libgl}
+%if %{with glvnd}
 %{_datadir}/glvnd/egl_vendor.d/50_mesa.json
 %{_libdir}/libGLX_mesa.so.0*
+%else
+%{_libdir}/libGL.so.1*
+%{_libdir}/libOpenGL.so.0
+%{_libdir}/libGLX.so.0
+%endif
 %dir %{_libdir}/dri
 %if %{with opencl}
 %dir %{_libdir}/gallium-pipe
 %endif
 
+%if ! %{with glvnd}
+%files -n %{libglesv2}
+%{_libdir}/libGLESv2.so.2*
+%endif
+
 %if %{with egl}
 %files -n %{libegl}
+%if %{with glvnd}
 %{_libdir}/libEGL_mesa.so.%{eglmajor}*
+%else
+%{_libdir}/libEGL.so.1*
+%endif
 %endif
 
 %files -n %{libglapi}
@@ -1313,21 +1386,36 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %endif
 
 %files -n %{devgl}
+%if %{with glvnd}
 %{_libdir}/libGLX_mesa.so
-%{_libdir}/pkgconfig/dri.pc
-
-#FIXME: check those headers
 %dir %{_includedir}/GL/internal
 %{_includedir}/GL/internal/dri_interface.h
+%else
+%{_includedir}/GL
+%{_includedir}/GLES2
+%{_includedir}/GLES3
+%{_includedir}/KHR
+%{_libdir}/libGL.so
+%{_libdir}/libGLESv2.so
+%{_libdir}/pkgconfig/gl.pc
+%{_libdir}/pkgconfig/glesv2.pc
+%endif
+%{_libdir}/pkgconfig/dri.pc
 
 %files common-devel
 # meta devel pkg
 
 %if %{with egl}
 %files -n %{devegl}
+%if %{with glvnd}
 %{_includedir}/EGL/eglmesaext.h
 %{_includedir}/EGL/eglext_angle.h
 %{_libdir}/libEGL_mesa.so
+%else
+%{_includedir}/EGL
+%{_libdir}/libEGL.so
+%{_libdir}/pkgconfig/egl.pc
+%endif
 %endif
 
 %files -n %{devglapi}
@@ -1413,10 +1501,18 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_prefix}/lib/pkgconfig/d3d.pc
 
 %files -n %{lib32egl}
+%if %{with glvnd}
 %{_prefix}/lib/libEGL_mesa.so.%{eglmajor}*
+%else
+%{_prefix}/lib/libEGL.so.1*
+%endif
 
 %files -n %{dev32egl}
+%if %{with glvnd}
 %{_prefix}/lib/libEGL_mesa.so
+%else
+%{_prefix}/lib/libEGL.so
+%endif
 
 %files -n %{lib32gl}
 %{_prefix}/lib/libGLX_mesa.so.0*
