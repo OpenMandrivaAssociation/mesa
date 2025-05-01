@@ -1,7 +1,7 @@
-diff -up mesa-25.0.0-rc2/meson.build.5~ mesa-25.0.0-rc2/meson.build
---- mesa-25.0.0-rc2/meson.build.5~	2025-02-05 22:17:27.159187978 +0100
-+++ mesa-25.0.0-rc2/meson.build	2025-02-05 22:20:42.184061633 +0100
-@@ -142,7 +142,7 @@ if gallium_drivers.contains('auto')
+diff -up mesa-25.1.0-rc1/meson.build.5~ mesa-25.1.0-rc1/meson.build
+--- mesa-25.1.0-rc1/meson.build.5~	2025-04-23 16:30:53.215556848 +0200
++++ mesa-25.1.0-rc1/meson.build	2025-04-23 16:35:42.483704019 +0200
+@@ -145,7 +145,7 @@ if gallium_drivers.contains('auto')
        gallium_drivers = [
          'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau', 'svga',
          'tegra', 'virgl', 'lima', 'panfrost', 'llvmpipe', 'softpipe', 'iris',
@@ -10,19 +10,19 @@ diff -up mesa-25.0.0-rc2/meson.build.5~ mesa-25.0.0-rc2/meson.build
        ]
      elif ['mips', 'mips64', 'ppc', 'ppc64', 'riscv32', 'riscv64'].contains(host_machine.cpu_family())
        gallium_drivers = [
-@@ -228,13 +228,11 @@ _vulkan_drivers = get_option('vulkan-dri
+@@ -223,13 +223,11 @@ _vulkan_drivers = get_option('vulkan-dri
  if _vulkan_drivers.contains('auto')
    if system_has_kms_drm
      if host_machine.cpu_family().startswith('x86')
 -      _vulkan_drivers = ['amd', 'intel', 'intel_hasvk', 'nouveau', 'swrast']
 +      _vulkan_drivers = ['amd', 'intel', 'intel_hasvk', 'nouveau', 'swrast', 'virtio']
      elif ['arm', 'aarch64'].contains(host_machine.cpu_family())
--      _vulkan_drivers = ['swrast', 'intel', 'panfrost']
+-      _vulkan_drivers = ['swrast', 'intel', 'panfrost', 'freedreno']
 -    elif ['mips', 'mips64', 'ppc', 'ppc64', 'riscv32', 'riscv64'].contains(host_machine.cpu_family())
 -      _vulkan_drivers = ['amd', 'swrast']
 -    elif ['loongarch64'].contains(host_machine.cpu_family())
 -      _vulkan_drivers = ['amd', 'swrast']
-+      _vulkan_drivers = ['swrast', 'intel', 'panfrost', 'amd', 'freedreno', 'broadcom', 'virtio', 'imagination-experimental', 'nouveau']
++      _vulkan_drivers = ['swrast', 'intel', 'panfrost', 'freedreno', 'amd', 'broadcom', 'virtio', 'imagination-experimental', 'nouveau']
 +    elif ['mips', 'mips64', 'ppc', 'ppc64', 'riscv32', 'riscv64', 'loongarch64'].contains(host_machine.cpu_family())
 +      _vulkan_drivers = ['amd', 'swrast', 'intel', 'virtio', 'imagination-experimental', 'nouveau']
      else

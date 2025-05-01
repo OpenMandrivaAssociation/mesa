@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-#define relc 3
+%define relc 3
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -59,12 +59,6 @@
 %bcond_without r600
 
 %define vsuffix %{?relc:-rc%{relc}}%{!?relc:%{nil}}
-
-%define osmesamajor 8
-%define libosmesa %mklibname osmesa %{osmesamajor}
-%define devosmesa %mklibname osmesa -d
-%define lib32osmesa libosmesa%{osmesamajor}
-%define dev32osmesa libosmesa-devel
 
 %define eglmajor 0
 %define eglname EGL_mesa
@@ -159,7 +153,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	25.0.4
+Version:	25.1.0
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
@@ -222,18 +216,11 @@ Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 ###FIXME Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
 
-# Fix https://bugs.winehq.org/show_bug.cgi?id=41930
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/5094
-# Ported from https://gitlab.freedesktop.org/bvarner/mesa/-/tree/feature/osmesa-preserve-buffer
-Patch500:	mesa-24.0-osmesa-fix-civ3.patch
-# Related to the above, we should also fix
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/5095
-
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required
 
 # From upstream
-Patch1000:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/34001.patch
+# [currently nothing]
 
 BuildRequires:	flex
 BuildRequires:	bison
@@ -442,23 +429,6 @@ Requires:	%{dridrivers} = %{EVRD}
 %description -n freedreno-tools
 Tools for debugging the Freedreno graphics driver.
 %endif
-
-%package -n %{libosmesa}
-Summary:	Mesa offscreen rendering library
-Group:		System/Libraries
-
-%description -n %{libosmesa}
-Mesa offscreen rendering libraries for rendering OpenGL into
-application-allocated blocks of memory.
-
-%package -n %{devosmesa}
-Summary:	Development files for libosmesa
-Group:		Development/C
-Requires:	%{libosmesa} = %{EVRD}
-
-%description -n %{devosmesa}
-This package contains the headers needed to compile programs against
-the Mesa offscreen rendering library.
 
 %package -n %{libgl}
 Summary:	Files for Mesa (GL and GLX libs)
@@ -724,24 +694,6 @@ Requires:	%{devxatracker} = %{EVRD}
 This package contains the headers needed to compile programs against
 the xatracker shared library.
 
-%package -n %{lib32osmesa}
-Summary:	Mesa offscreen rendering library (32-bit)
-Group:		System/Libraries
-
-%description -n %{lib32osmesa}
-Mesa offscreen rendering libraries for rendering OpenGL into
-application-allocated blocks of memory.
-
-%package -n %{dev32osmesa}
-Summary:	Development files for libosmesa (32-bit)
-Group:		Development/C
-Requires:	%{lib32osmesa} = %{EVRD}
-Requires:	%{devosmesa} = %{EVRD}
-
-%description -n %{dev32osmesa}
-This package contains the headers needed to compile programs against
-the Mesa offscreen rendering library.
-
 %package -n %{lib32d3d}
 Summary:	Mesa Gallium Direct3D 9 state tracker (32-bit)
 Group:		System/Libraries
@@ -1002,7 +954,6 @@ if ! %meson32 \
 	-Dvulkan-beta=true \
 	-Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec \
 	-Dxlib-lease=auto \
-	-Dosmesa=true \
 	-Dandroid-libbacktrace=disabled \
 	-Dvalgrind=disabled \
 	-Dglvnd=enabled \
@@ -1121,7 +1072,6 @@ if ! %meson \
 	-Dvulkan-beta=true \
 	-Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec,av1dec,av1enc,vp9dec \
 	-Dxlib-lease=auto \
-	-Dosmesa=true \
 	-Dglvnd=enabled \
 	-Degl=enabled \
 	-Dgbm=enabled \
@@ -1225,14 +1175,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_datadir}/freedreno
 %endif
 
-%files -n %{libosmesa}
-%{_libdir}/libOSMesa.so.%{osmesamajor}*
-
-%files -n %{devosmesa}
-%{_includedir}/GL/osmesa.h
-%{_libdir}/libOSMesa.so
-%{_libdir}/pkgconfig/osmesa.pc
-
 %files -n %{libgl}
 %{_datadir}/glvnd/egl_vendor.d/50_mesa.json
 %{_libdir}/libGLX_mesa.so.0*
@@ -1314,6 +1256,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %if %{with egl}
 %files -n %{devgbm}
 %{_includedir}/gbm.h
+%{_includedir}/gbm_backend_abi.h
 %{_libdir}/libgbm.so
 %{_libdir}/pkgconfig/gbm.pc
 %endif
@@ -1337,6 +1280,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_bindir}/intel_error2aub
 %{_bindir}/intel_sanitize_gpu
 %{_bindir}/intel_stub_gpu
+%{_bindir}/intel_monitor
 %{_bindir}/brw_asm
 %{_bindir}/brw_disasm
 %{_bindir}/elk_asm
@@ -1387,13 +1331,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 
 %files -n %{dev32cl}
 %{_prefix}/lib/libMesaOpenCL.so
-
-%files -n %{lib32osmesa}
-%{_prefix}/lib/libOSMesa.so.%{osmesamajor}*
-
-%files -n %{dev32osmesa}
-%{_prefix}/lib/libOSMesa.so
-%{_prefix}/lib/pkgconfig/osmesa.pc
 
 %files -n %{lib32xatracker}
 %{_prefix}/lib/libxatracker.so.*
