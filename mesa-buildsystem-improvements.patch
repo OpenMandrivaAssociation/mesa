@@ -1,7 +1,7 @@
-diff -up mesa-25.1.0-rc1/meson.build.7~ mesa-25.1.0-rc1/meson.build
---- mesa-25.1.0-rc1/meson.build.7~	2025-04-23 16:36:19.790889221 +0200
-+++ mesa-25.1.0-rc1/meson.build	2025-04-23 16:37:08.802322712 +0200
-@@ -134,6 +134,12 @@ system_has_kms_drm = ['openbsd', 'netbsd
+diff -up mesa-25.2.0-rc1/meson.build.6~ mesa-25.2.0-rc1/meson.build
+--- mesa-25.2.0-rc1/meson.build.6~	2025-07-16 22:57:59.434072436 +0200
++++ mesa-25.2.0-rc1/meson.build	2025-07-16 23:01:21.662559800 +0200
+@@ -142,6 +142,12 @@ system_has_kms_drm = ['openbsd', 'netbsd
  
  gallium_drivers = get_option('gallium-drivers')
  if gallium_drivers.contains('auto')
@@ -13,8 +13,8 @@ diff -up mesa-25.1.0-rc1/meson.build.7~ mesa-25.1.0-rc1/meson.build
 +  endforeach
    if system_has_kms_drm
      # TODO: Sparc
-     if ['x86', 'x86_64'].contains(host_machine.cpu_family())
-@@ -167,6 +173,11 @@ if gallium_drivers.contains('auto')
+     # TODO: handle llvm being disabled or auto when setting default_drivers
+@@ -176,6 +182,11 @@ if gallium_drivers.contains('auto')
      error('Unknown OS @0@. Please pass -Dgallium-drivers to set driver options. Patches gladly accepted to fix this.'.format(
            host_machine.system()))
    endif
@@ -26,7 +26,7 @@ diff -up mesa-25.1.0-rc1/meson.build.7~ mesa-25.1.0-rc1/meson.build
  elif gallium_drivers.contains('all')
     gallium_drivers = [
       'r300', 'r600', 'radeonsi', 'crocus', 'v3d', 'vc4', 'freedreno', 'etnaviv', 'i915',
-@@ -221,6 +232,12 @@ with_gallium_kmsro = system_has_kms_drm
+@@ -234,6 +245,12 @@ with_gallium_kmsro = system_has_kms_drm
  
  _vulkan_drivers = get_option('vulkan-drivers')
  if _vulkan_drivers.contains('auto')
@@ -36,10 +36,10 @@ diff -up mesa-25.1.0-rc1/meson.build.7~ mesa-25.1.0-rc1/meson.build
 +      extras += drv
 +    endif
 +  endforeach
+   # TODO: handle swrat driver if llvm is auto/disabled
    if system_has_kms_drm
      if host_machine.cpu_family().startswith('x86')
-       _vulkan_drivers = ['amd', 'intel', 'intel_hasvk', 'nouveau', 'swrast', 'virtio']
-@@ -239,6 +256,11 @@ if _vulkan_drivers.contains('auto')
+@@ -253,6 +270,11 @@ if _vulkan_drivers.contains('auto')
      error('Unknown OS @0@. Please pass -Dvulkan-drivers to set driver options. Patches gladly accepted to fix this.'.format(
            host_machine.system()))
    endif

@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-#define relc 3
+%define relc 1
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -94,13 +94,6 @@
 %define devglesv3 %mklibname glesv3 -d
 %define dev32glesv3 libglesv3-devel
 
-%define d3dmajor 1
-%define d3dname d3dadapter9
-%define libd3d %mklibname %{d3dname} %{d3dmajor}
-%define devd3d %mklibname %{d3dname} -d
-%define lib32d3d lib%{d3dname}%{d3dmajor}
-%define dev32d3d lib%{d3dname}-devel
-
 %define dridrivers %mklibname dri-drivers
 %define vdpaudrivers %mklibname vdpau-drivers
 %define dridrivers32 libdri-drivers
@@ -112,13 +105,6 @@
 %define lib32gbm lib%{gbmname}%{gbmmajor}
 %define dev32gbm lib%{gbmname}-devel
 
-%define xatrackermajor 2
-%define xatrackername xatracker
-%define libxatracker %mklibname %xatrackername %{xatrackermajor}
-%define devxatracker %mklibname %xatrackername -d
-%define lib32xatracker lib%{xatrackername}%{xatrackermajor}
-%define dev32xatracker lib%{xatrackername}-devel
-
 %define swravxmajor 0
 %define swravxname swravx
 %define libswravx %mklibname %swravxname %{swravxmajor}
@@ -129,12 +115,6 @@
 %define libswravx2 %mklibname %swravx2name %{swravx2major}
 %define lib32swravx2 lib%{swravx2name}%{swravx2major}
 
-%define clmajor 1
-%define clname mesaopencl
-%define libcl %mklibname %clname %clmajor
-%define devcl %mklibname %clname -d
-%define lib32cl lib%{clname}%{clmajor}
-%define dev32cl lib%{clname}-devel
 %define librusticl %mklibname RusticlOpenCL
 
 # This has been removed in 25.0, but we still need to
@@ -153,7 +133,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	25.1.6
+Version:	25.2.0
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
@@ -182,11 +162,37 @@ Obsoletes:	%{name}-xorg-drivers < %{EVRD}
 Obsoletes:	%{name}-xorg-drivers-radeon < %{EVRD}
 Obsoletes:	%{name}-xorg-drivers-nouveau < %{EVRD}
 
+# Dropped in 25.1
+%define xatrackermajor 2
+%define xatrackername xatracker
+%define libxatracker %mklibname %xatrackername %{xatrackermajor}
+%define devxatracker %mklibname %xatrackername -d
+%define lib32xatracker lib%{xatrackername}%{xatrackermajor}
+%define dev32xatracker lib%{xatrackername}-devel
+Obsoletes:	%{libxatracker} < %{EVRD}
+Obsoletes:	%{devxatracker} < %{EVRD}
+%if %{with compat32}
+Obsoletes:	%{lib32xatracker} < %{EVRD}
+Obsoletes:	%{dev32xatracker} < %{EVRD}
+%endif
+%define d3dmajor 1
+%define d3dname d3dadapter9
+%define libd3d %mklibname %{d3dname} %{d3dmajor}
+%define devd3d %mklibname %{d3dname} -d
+%define lib32d3d lib%{d3dname}%{d3dmajor}
+%define dev32d3d lib%{d3dname}-devel
+Obsoletes:	%{libd3d} < %{EVRD}
+Obsoletes:	%{devd3d} < %{EVRD}
+%if %{with compat32}
+Obsoletes:	%{lib32d3d} < %{EVRD}
+Obsoletes:	%{dev32d3d} < %{EVRD}
+%endif
+
 # Without this patch, the OpenCL ICD calls into MesaOpenCL,
 # which for some reason calls back into the OpenCL ICD instead
 # of calling its own function by the same name.
 # (Probably related to -Bsymbolic/-Bsymbolic-functions)
-Patch0:		mesa-20.1.1-fix-opencl.patch
+#Patch0:		mesa-20.1.1-fix-opencl.patch
 # Use llvm-config to detect llvm, since the newer method
 # finds /usr/lib64/libLLVM-17.so even for 32-bit builds
 Patch1:		mesa-23.1-x86_32-llvm-detection.patch
@@ -312,6 +318,7 @@ BuildRequires:	crate(quote)
 BuildRequires:	crate(syn)
 BuildRequires:	crate(unicode-ident)
 BuildRequires:	crate(paste)
+BuildRequires:	crate(rustc-hash)
 # For etnaviv
 BuildRequires:	crate(indexmap)
 %endif
@@ -510,22 +517,6 @@ Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
 EGL development parts.
 %endif
 
-%package -n %{libxatracker}
-Summary:	Files for mesa (xatracker libs)
-Group:		System/Libraries
-
-%description -n %{libxatracker}
-This package provides the xatracker shared library used by gallium.
-
-%package -n %{devxatracker}
-Summary:	Development files for xatracker libs
-Group:		Development/C
-Requires:	%{libxatracker} = %{EVRD}
-
-%description -n %{devxatracker}
-This package contains the headers needed to compile programs against
-the xatracker shared library.
-
 %package -n %{libswravx}
 Summary:	AVX Software rendering library for Mesa
 Group:		System/Libraries
@@ -597,25 +588,6 @@ Provides:	glesv3-devel = %{EVRD}
 %description -n %{devglesv3}
 This package contains the headers needed to compile OpenGL ES 3 programs.
 
-%package -n %{libd3d}
-Summary:	Mesa Gallium Direct3D 9 state tracker
-Group:		System/Libraries
-
-%description -n %{libd3d}
-OpenGL ES is a low-level, lightweight API for advanced embedded graphics using
-well-defined subset profiles of OpenGL.
-
-This package provides Direct3D 9 support.
-
-%package -n %{devd3d}
-Summary:	Development files for Direct3D 9 libs
-Group:		Development/C
-Requires:	%{libd3d} = %{EVRD}
-Provides:	d3d-devel = %{EVRD}
-
-%description -n %{devd3d}
-This package contains the headers needed to compile Direct3D 9 programs.
-
 %if %{with compat32}
 %package -n %{dridrivers32}
 Summary:	Mesa DRI and Vulkan drivers (32-bit)
@@ -677,42 +649,6 @@ Requires:	%{lib32gbm} = %{EVRD}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
 GBM (Graphics Buffer Manager) development parts.
 
-%package -n %{lib32xatracker}
-Summary:	Files for mesa (xatracker libs) (32-bit)
-Group:		System/Libraries
-
-%description -n %{lib32xatracker}
-This package provides the xatracker shared library used by gallium.
-
-%package -n %{dev32xatracker}
-Summary:	Development files for xatracker libs (32-bit)
-Group:		Development/C
-Requires:	%{lib32xatracker} = %{EVRD}
-Requires:	%{devxatracker} = %{EVRD}
-
-%description -n %{dev32xatracker}
-This package contains the headers needed to compile programs against
-the xatracker shared library.
-
-%package -n %{lib32d3d}
-Summary:	Mesa Gallium Direct3D 9 state tracker (32-bit)
-Group:		System/Libraries
-
-%description -n %{lib32d3d}
-OpenGL ES is a low-level, lightweight API for advanced embedded graphics using
-well-defined subset profiles of OpenGL.
-
-This package provides Direct3D 9 support.
-
-%package -n %{dev32d3d}
-Summary:	Development files for Direct3D 9 libs
-Group:		Development/C
-Requires:	%{devd3d} = %{EVRD}
-Requires:	%{lib32d3d} = %{EVRD}
-
-%description -n %{dev32d3d}
-This package contains the headers needed to compile Direct3D 9 programs.
-
 %package -n %{lib32egl}
 Summary:	Files for Mesa (EGL libs) (32-bit)
 Group:		System/Libraries
@@ -731,67 +667,6 @@ Requires:	%{devegl} = %{EVRD}
 %description -n %{dev32egl}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
 EGL development parts.
-
-%package -n %{lib32cl}
-Summary:	Mesa OpenCL libs (32-bit)
-Group:		System/Libraries
-Recommends:	libOpenCL
-
-%description -n %{lib32cl}
-Open Computing Language (OpenCL) is a framework for writing programs that
-execute across heterogeneous platforms consisting of central processing units
-(CPUs), graphics processing units (GPUs), DSPs and other processors.
-
-OpenCL includes a language (based on C99) for writing kernels (functions that
-execute on OpenCL devices), plus application programming interfaces (APIs) that
-are used to define and then control the platforms. OpenCL provides parallel
-computing using task-based and data-based parallelism. OpenCL is an open
-standard maintained by the non-profit technology consortium Khronos Group.
-It has been adopted by Intel, Advanced Micro Devices, Nvidia, and ARM Holdings.
-
-%package -n %{dev32cl}
-Summary:	Development files for OpenCL libs (32-bit)
-Group:		Development/Other
-Requires:	%{lib32cl} = %{EVRD}
-Requires:	%{devcl} = %{EVRD}
-Requires:	opencl-headers
-
-%description -n %{dev32cl}
-Development files for the OpenCL library.
-%endif
-
-%if %{with opencl}
-%package -n %{libcl}
-Summary:	Mesa OpenCL libs
-Group:		System/Libraries
-Provides:	mesa-libOpenCL = %{EVRD}
-Provides:	mesa-opencl = %{EVRD}
-Recommends:	%{_lib}OpenCL
-
-%description -n %{libcl}
-Open Computing Language (OpenCL) is a framework for writing programs that
-execute across heterogeneous platforms consisting of central processing units
-(CPUs), graphics processing units (GPUs), DSPs and other processors.
-
-OpenCL includes a language (based on C99) for writing kernels (functions that
-execute on OpenCL devices), plus application programming interfaces (APIs) that
-are used to define and then control the platforms. OpenCL provides parallel
-computing using task-based and data-based parallelism. OpenCL is an open
-standard maintained by the non-profit technology consortium Khronos Group.
-It has been adopted by Intel, Advanced Micro Devices, Nvidia, and ARM Holdings.
-
-%package -n %{devcl}
-Summary:	Development files for OpenCL libs
-Group:		Development/Other
-Requires:	%{libcl} = %{EVRD}
-Provides:	%{clname}-devel = %{EVRD}
-Provides:	mesa-libOpenCL-devel = %{EVRD}
-Provides:	mesa-opencl-devel = %{EVRD}
-Requires:	opencl-headers
-Recommends:	cmake(OpenCLICDLoader)
-
-%description -n %{devcl}
-Development files for the OpenCL library
 %endif
 
 %if %{with rusticl}
@@ -801,6 +676,18 @@ Group:		System/Libraries
 Provides:	mesa-rusticl = %{EVRD}
 Requires:	libclc-spirv
 Recommends:	%{_lib}OpenCL
+%define clmajor 1
+%define clname mesaopencl
+%define libcl %mklibname %clname %clmajor
+%define devcl %mklibname %clname -d
+%define lib32cl lib%{clname}%{clmajor}
+%define dev32cl lib%{clname}-devel
+Obsoletes: %{libcl} < %{EVRD}
+Obsoletes: %{devcl} < %{EVRD}
+%if %{with compat32}
+Obsoletes: %{lib32cl} < %{EVRD}
+Obsoletes: %{dev32cl} < %{EVRD}
+%endif
 
 %description -n %{librusticl}
 Open Computing Language (OpenCL) is a framework for writing programs that
@@ -862,7 +749,6 @@ Requires:	pkgconfig(glu)
 Requires:	pkgconfig(glut)
 Requires:	%{devgl} = %{EVRD}
 Requires:	%{devegl} = %{EVRD}
-Suggests:	%{devd3d} = %{EVRD}
 Requires:	pkgconfig(libglvnd)
 Requires:	pkgconfig(glesv1_cm)
 Requires:	pkgconfig(glesv2)
@@ -898,6 +784,7 @@ export MESON_PACKAGE_CACHE_DIR="%{cargo_registry}/"
 %rewrite_wrap_file syn
 %rewrite_wrap_file unicode-ident
 %rewrite_wrap_file paste
+%rewrite_wrap_file rustc-hash
 # Rust dependencies of Nouveau...
 # Nouveau doesn't use cargo, so we probably have to do this manually?
 mkdir rustdeps
@@ -941,6 +828,7 @@ EOF
 # for opencl-c-base.h
 export CC="%{__cc} -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include"
 if ! %meson32 \
+	-Dgallium-mediafoundation=disabled \
 	-Dmicrosoft-clc=disabled \
 	-Dshared-llvm=enabled \
 	--cross-file=i686.cross \
@@ -957,15 +845,8 @@ if ! %meson32 \
 	-Dandroid-libbacktrace=disabled \
 	-Dvalgrind=disabled \
 	-Dglvnd=enabled \
-%if %{with opencl}
-	-Dgallium-opencl=icd \
-%else
-	-Dgallium-opencl=disabled \
-%endif
 	-Dgallium-va=enabled \
 	-Dgallium-vdpau=enabled \
-	-Dgallium-xa=enabled \
-	-Dgallium-nine=true \
 	-Dgallium-drivers=auto,crocus \
 	-Degl=enabled \
 	-Dgbm=enabled \
@@ -1052,19 +933,13 @@ if ! %meson \
 %ifarch %{x86_64}
 	-Dintel-clc=enabled \
 %endif
-%if %{with opencl}
-	-Dgallium-opencl=icd \
-%else
-	-Dgallium-opencl=disabled \
-%endif
 %if %{with rusticl}
 	-Dgallium-rusticl=true \
 %endif
 	-Dgallium-extra-hud=true \
 	-Dgallium-va=enabled \
 	-Dgallium-vdpau=enabled \
-	-Dgallium-xa=enabled \
-	-Dgallium-nine=true \
+	-Dgallium-mediafoundation=disabled \
 	-Dglx=dri \
 	-Dplatforms=wayland,x11 \
 	-Degl-native-platform=wayland \
@@ -1152,9 +1027,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %ifarch %{armx}
 %{_libdir}/libpowervr_rogue.so
 %endif
-%if %{with opencl}
-%{_libdir}/gallium-pipe/*.so
-%endif
 %{_libdir}/lib*_noop_drm_shim.so
 # vulkan stuff
 %{_libdir}/libVkLayer_*.so
@@ -1179,26 +1051,10 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_datadir}/glvnd/egl_vendor.d/50_mesa.json
 %{_libdir}/libGLX_mesa.so.0*
 %dir %{_libdir}/dri
-%if %{with opencl}
-%dir %{_libdir}/gallium-pipe
-%endif
 
 %if %{with egl}
 %files -n %{libegl}
 %{_libdir}/libEGL_mesa.so.%{eglmajor}*
-%endif
-
-%files -n %{libxatracker}
-%{_libdir}/libxatracker.so.%{xatrackermajor}*
-
-%files -n %{libd3d}
-%dir %{_libdir}/d3d
-%{_libdir}/d3d/d3dadapter9.so.%{d3dmajor}*
-
-%if %{with opencl}
-%files -n %{libcl}
-%{_sysconfdir}/OpenCL/vendors/mesa.icd
-%{_libdir}/libMesaOpenCL.so.%{clmajor}*
 %endif
 
 %if %{with rusticl}
@@ -1238,21 +1094,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_libdir}/vdpau/libvdpau*.so.*
 %endif
 
-%files -n %{devxatracker}
-%{_libdir}/libxatracker.so
-%{_includedir}/xa_*.h
-%{_libdir}/pkgconfig/xatracker.pc
-
-%files -n %{devd3d}
-%{_includedir}/d3dadapter
-%{_libdir}/d3d/d3dadapter9.so
-%{_libdir}/pkgconfig/d3d.pc
-
-%if %{with opencl}
-%files -n %{devcl}
-%{_libdir}/libMesaOpenCL.so
-%endif
-
 %if %{with egl}
 %files -n %{devgbm}
 %{_includedir}/gbm.h
@@ -1278,6 +1119,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_bindir}/intel_dev_info
 %{_bindir}/intel_dump_gpu
 %{_bindir}/intel_error2aub
+%{_bindir}/intel_measure.py
 %{_bindir}/intel_sanitize_gpu
 %{_bindir}/intel_stub_gpu
 %{_bindir}/intel_monitor
@@ -1303,14 +1145,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_libdir}/libdlclose-skip.so
 
 %if %{with compat32}
-%files -n %{lib32d3d}
-%dir %{_prefix}/lib/d3d
-%{_prefix}/lib/d3d/d3dadapter9.so.%{d3dmajor}*
-
-%files -n %{dev32d3d}
-%{_prefix}/lib/d3d/d3dadapter9.so
-%{_prefix}/lib/pkgconfig/d3d.pc
-
 %files -n %{lib32egl}
 %{_prefix}/lib/libEGL_mesa.so.%{eglmajor}*
 
@@ -1320,24 +1154,10 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %files -n %{lib32gl}
 %{_prefix}/lib/libGLX_mesa.so.0*
 %dir %{_prefix}/lib/dri
-%dir %{_prefix}/lib/gallium-pipe
 
 %files -n %{dev32gl}
 %{_prefix}/lib/pkgconfig/dri.pc
 %{_prefix}/lib/libGLX_mesa.so
-
-%files -n %{lib32cl}
-%{_prefix}/lib/libMesaOpenCL.so.*
-
-%files -n %{dev32cl}
-%{_prefix}/lib/libMesaOpenCL.so
-
-%files -n %{lib32xatracker}
-%{_prefix}/lib/libxatracker.so.*
-
-%files -n %{dev32xatracker}
-%{_prefix}/lib/libxatracker.so
-%{_prefix}/lib/pkgconfig/xatracker.pc
 
 %files -n %{lib32gbm}
 %{_prefix}/lib/libgbm.so.*
@@ -1350,7 +1170,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %files -n %{dridrivers32}
 %{_prefix}/lib/libgallium-*.so
 %{_prefix}/lib/dri/*.so
-%{_prefix}/lib/gallium-pipe/*.so
 %{_prefix}/lib/libVkLayer_*.so
 %{_prefix}/lib/libvulkan_*.so
 %{_prefix}/lib/vdpau/libvdpau_*.so*

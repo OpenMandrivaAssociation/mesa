@@ -1,27 +1,27 @@
-diff -up mesa-25.0.0-rc2/src/gallium/drivers/panfrost/pan_screen.c.4~ mesa-25.0.0-rc2/src/gallium/drivers/panfrost/pan_screen.c
---- mesa-25.0.0-rc2/src/gallium/drivers/panfrost/pan_screen.c.4~	2025-02-05 22:15:47.469618569 +0100
-+++ mesa-25.0.0-rc2/src/gallium/drivers/panfrost/pan_screen.c	2025-02-05 22:16:53.141439864 +0100
-@@ -65,7 +65,7 @@ static const struct debug_named_value pa
-    {"dirty",      PAN_DBG_DIRTY,    "Always re-emit all state"},
-    {"sync",       PAN_DBG_SYNC,     "Wait for each job's completion and abort on GPU faults"},
-    {"nofp16",     PAN_DBG_NOFP16,    "Disable 16-bit support"},
--   {"gl3",        PAN_DBG_GL3,      "Enable experimental GL 3.x implementation, up to 3.3"},
-+   {"nogl3",      PAN_DBG_NOGL3,    "Disable experimental GL 3.x implementation, up to 3.3"},
-    {"noafbc",     PAN_DBG_NO_AFBC,  "Disable AFBC support"},
-    {"nocrc",      PAN_DBG_NO_CRC,   "Disable transaction elimination"},
-    {"msaa16",     PAN_DBG_MSAA16,   "Enable MSAA 8x and 16x support"},
-@@ -567,7 +567,7 @@ panfrost_init_screen_caps(struct panfros
+diff -up mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~ mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c
+--- mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~	2025-07-16 16:42:48.000000000 +0200
++++ mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c	2025-07-16 22:52:40.477061612 +0200
+@@ -67,7 +67,7 @@ static const struct debug_named_value pa
+    {"dirty",      PAN_DBG_DIRTY,      "Always re-emit all state"},
+    {"sync",       PAN_DBG_SYNC,       "Wait for each job's completion and abort on GPU faults"},
+    {"nofp16",     PAN_DBG_NOFP16,     "Disable 16-bit support"},
+-   {"gl3",        PAN_DBG_GL3,        "Enable experimental GL 3.x implementation, up to 3.3"},
++   {"gl3",        PAN_DBG_NOGL3,      "Disable experimental GL 3.x implementation, up to 3.3"},
+    {"noafbc",     PAN_DBG_NO_AFBC,    "Disable AFBC support"},
+    {"nocrc",      PAN_DBG_NO_CRC,     "Disable transaction elimination"},
+    {"linear",     PAN_DBG_LINEAR,     "Force linear textures"},
+@@ -627,7 +627,7 @@ panfrost_init_screen_caps(struct panfros
     struct panfrost_device *dev = &screen->dev;
  
     /* Our GL 3.x implementation is WIP */
 -   bool is_gl3 = dev->debug & PAN_DBG_GL3;
 +   bool is_gl3 = (dev->debug & PAN_DBG_NOGL3) == 0;
  
-    /* Native MRT is introduced with v5 */
-    bool has_mrt = (dev->arch >= 5);
-diff -up mesa-25.0.0-rc2/src/panfrost/lib/pan_util.h.4~ mesa-25.0.0-rc2/src/panfrost/lib/pan_util.h
---- mesa-25.0.0-rc2/src/panfrost/lib/pan_util.h.4~	2025-02-05 22:15:47.469769764 +0100
-+++ mesa-25.0.0-rc2/src/panfrost/lib/pan_util.h	2025-02-05 22:17:10.908465345 +0100
+    unsigned max_tib_size =
+       pan_get_max_tib_size(dev->arch, dev->model);
+diff -up mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h.3~ mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h
+--- mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h.3~	2025-07-16 16:42:48.000000000 +0200
++++ mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h	2025-07-16 22:54:43.618132009 +0200
 @@ -40,7 +40,7 @@
  /* 0x20 unused */
  #define PAN_DBG_NOFP16  0x0040
@@ -29,5 +29,5 @@ diff -up mesa-25.0.0-rc2/src/panfrost/lib/pan_util.h.4~ mesa-25.0.0-rc2/src/panf
 -#define PAN_DBG_GL3     0x0100
 +#define PAN_DBG_NOGL3   0x0100
  #define PAN_DBG_NO_AFBC 0x0200
- #define PAN_DBG_MSAA16  0x0400
- /* 0x800 unused */
+ /* 0x400 unused */
+ #define PAN_DBG_STRICT_IMPORT 0x0800

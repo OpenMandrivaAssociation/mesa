@@ -1,7 +1,7 @@
-diff -up mesa-25.1.0-rc1/meson.build.5~ mesa-25.1.0-rc1/meson.build
---- mesa-25.1.0-rc1/meson.build.5~	2025-04-23 16:30:53.215556848 +0200
-+++ mesa-25.1.0-rc1/meson.build	2025-04-23 16:35:42.483704019 +0200
-@@ -145,7 +145,7 @@ if gallium_drivers.contains('auto')
+diff -up mesa-25.2.0-rc1/meson.build.4~ mesa-25.2.0-rc1/meson.build
+--- mesa-25.2.0-rc1/meson.build.4~	2025-07-16 22:55:03.290199931 +0200
++++ mesa-25.2.0-rc1/meson.build	2025-07-16 22:57:28.356133843 +0200
+@@ -154,7 +154,7 @@ if gallium_drivers.contains('auto')
        gallium_drivers = [
          'v3d', 'vc4', 'freedreno', 'etnaviv', 'nouveau', 'svga',
          'tegra', 'virgl', 'lima', 'panfrost', 'llvmpipe', 'softpipe', 'iris',
@@ -10,8 +10,8 @@ diff -up mesa-25.1.0-rc1/meson.build.5~ mesa-25.1.0-rc1/meson.build
        ]
      elif ['mips', 'mips64', 'ppc', 'ppc64', 'riscv32', 'riscv64'].contains(host_machine.cpu_family())
        gallium_drivers = [
-@@ -223,13 +223,11 @@ _vulkan_drivers = get_option('vulkan-dri
- if _vulkan_drivers.contains('auto')
+@@ -237,13 +237,11 @@ if _vulkan_drivers.contains('auto')
+   # TODO: handle swrat driver if llvm is auto/disabled
    if system_has_kms_drm
      if host_machine.cpu_family().startswith('x86')
 -      _vulkan_drivers = ['amd', 'intel', 'intel_hasvk', 'nouveau', 'swrast']
