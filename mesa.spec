@@ -222,6 +222,7 @@ Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 ###FIXME Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
 Patch13:	mesa-25.2-llvm-21.patch
+Patch14:	mesa-25.2-aarch64-compile.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required

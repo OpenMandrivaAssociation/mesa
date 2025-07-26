@@ -1,0 +1,23 @@
+diff -up mesa-25.2.0-rc2/src/gallium/drivers/radeonsi/si_test_dma_perf.c.omv~ mesa-25.2.0-rc2/src/gallium/drivers/radeonsi/si_test_dma_perf.c
+--- mesa-25.2.0-rc2/src/gallium/drivers/radeonsi/si_test_dma_perf.c.omv~	2025-07-26 18:16:50.280341960 +0100
++++ mesa-25.2.0-rc2/src/gallium/drivers/radeonsi/si_test_dma_perf.c	2025-07-26 18:23:15.372256718 +0100
+@@ -360,12 +360,18 @@ si_test_mem_perf(struct si_screen *sscre
+                   memcpy(ptr, cpu, buffer_size);
+                   break;
+                case 1:
++#ifdef __aarch64__
++               case 2:
++               default:
++#endif
+                   memcpy(cpu, ptr, buffer_size);
+                   break;
++#ifndef __aarch64__
+                case 2:
+                default:
+                   util_streaming_load_memcpy(cpu, ptr, buffer_size);
+                   break;
++#endif
+                }
+ 
+                after = os_time_get_nano();
+diff -up mesa-25.2.0-rc2/src/util/streaming-load-memcpy.c.omv~ mesa-25.2.0-rc2/src/util/streaming-load-memcpy.c
