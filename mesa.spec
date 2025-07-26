@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-%define relc 1
+%define relc 2
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -221,6 +221,7 @@ Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 #Patch10:	mesa-24.0.2-buildfix32.patch
 ###FIXME Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
+Patch13:	mesa-25.2-llvm-21.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required
