@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-%define relc 2
+%define relc 3
 
 %ifarch %{riscv}
 %bcond_with gcc
