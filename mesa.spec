@@ -932,9 +932,6 @@ if ! %meson \
 %endif
 %endif
 %endif
-%ifarch %{x86_64}
-	-Dintel-clc=enabled \
-%endif
 %if %{with rusticl}
 	-Dgallium-rusticl=true \
 %endif
