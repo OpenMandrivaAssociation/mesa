@@ -954,9 +954,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %files -n %{dridrivers}
 %{_libdir}/libgallium-*.so
 %{_libdir}/dri/*.so
-%ifarch %{armx}
-%{_libdir}/libpowervr_rogue.so
-%endif
 %{_libdir}/lib*_noop_drm_shim.so
 # vulkan stuff
 %{_libdir}/libVkLayer_*.so
