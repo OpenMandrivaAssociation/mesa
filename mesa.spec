@@ -856,11 +856,11 @@ if ! %meson \
 %else
 %ifarch %{armx}
 	-Dgallium-drivers=auto,r300,r600,svga,radeonsi,freedreno,etnaviv,tegra,vc4,v3d,lima,panfrost,zink \
-	-Dvulkan-drivers=auto,broadcom,freedreno,panfrost,virtio,imagination-experimental \
+	-Dvulkan-drivers=auto,broadcom,freedreno,panfrost,virtio,imagination \
 %else
 %ifarch %{riscv}
 	-Dgallium-drivers=auto,r300,r600,svga,radeonsi,etnaviv,zink \
-	-Dvulkan-drivers=auto,virtio,imagination-experimental \
+	-Dvulkan-drivers=auto,virtio,imagination \
 %else
 	-Dgallium-drivers=auto,crocus,zink \
 	-Dvulkan-drivers=auto,virtio,intel,intel_hasvk \
