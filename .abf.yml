@@ -1,2 +1,3 @@
 sources:
-  mesa-25.2.6.tar.xz: 158b88bac97e62f76c4596cd596f3c77581379fa
+  mesa-25.3.0-rc3.tar.xz: 674dd1947453a4e6acfd83c8d00886a3dab80133
+  mesa-subprojects.tar.zst: cfe3fe40ed62a0bc64a012b934dcc6ca8f5d840d

@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-#define relc 3
+%define relc 3
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -43,7 +43,6 @@
 
 %bcond_without rust
 %bcond_without rusticl
-%bcond_without vdpau
 %bcond_without va
 %bcond_without egl
 %ifarch %{ix86} %{x86_64}
@@ -95,7 +94,6 @@
 %define dev32glesv3 libglesv3-devel
 
 %define dridrivers %mklibname dri-drivers
-%define vdpaudrivers %mklibname vdpau-drivers
 %define dridrivers32 libdri-drivers
 
 %define gbmmajor 1
@@ -133,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	25.2.6
+Version:	25.3.0
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
@@ -142,11 +140,17 @@ Url:		https://www.mesa3d.org
 %if "%{git_branch}" == "panthor" || "%{git_branch}" == "panfrost"
 Source0:	https://gitlab.freedesktop.org/panfrost/mesa/-/archive/%{git}/mesa-%{git}.tar.bz2
 %else
-Source0:	https://gitlab.freedesktop.org/mesa/mesa/-/archive/%{git_branch}/mesa-%{git_branch}.tar.bz2#/mesa-%{git }.tar.bz2
+Source0:	https://gitlab.freedesktop.org/mesa/mesa/-/archive/%{git_branch}/mesa-%{git_branch}.tar.bz2#/mesa-%{git}.tar.bz2
 %endif
 %else
 Source0:	https://mesa.freedesktop.org/archive/mesa-%{version}%{vsuffix}.tar.xz
 %endif
+# 3rd party libraries that need to be built inside mesa (mostly rust mess that
+# doesn't support proper libraries).
+Source1:	mesa-subprojects.tar.zst
+# Use this to generate/refresh Source1 (not used inside the spec, just kept
+# here for reference) [run from this directory]
+Source2:	download-subprojects
 Source100:	%{name}.rpmlintrc
 
 %define dricoremajor 1
@@ -262,6 +266,7 @@ BuildRequires:	pkgconfig(gtk+-3.0)
 %endif
 BuildRequires:	pkgconfig(libzstd)
 BuildRequires:	pkgconfig(vulkan)
+BuildRequires:	pkgconfig(libdisplay-info)
 BuildRequires:	pkgconfig(x11) >= 1.3.3
 BuildRequires:	pkgconfig(xdamage) >= 1.1.1
 BuildRequires:	pkgconfig(xext) >= 1.1.1
@@ -296,9 +301,6 @@ BuildRequires:	cmake(OpenCLHeaders)
 BuildRequires:	cmake(OpenCLICDLoader)
 BuildRequires:	clang
 %endif
-%if %{with vdpau}
-BuildRequires:	pkgconfig(vdpau) >= 0.4.1
-%endif
 %if %{with va}
 BuildRequires:	pkgconfig(libva) >= 0.31.0
 %endif
@@ -311,18 +313,6 @@ BuildRequires:	glslang
 BuildRequires:	rust
 BuildRequires:	rust-bindgen-cli
 BuildRequires:	cbindgen
-%endif
-
-%if %{with rust}
-BuildRequires:	rust
-BuildRequires:	crate(proc-macro2)
-BuildRequires:	crate(quote)
-BuildRequires:	crate(syn)
-BuildRequires:	crate(unicode-ident)
-BuildRequires:	crate(paste)
-BuildRequires:	crate(rustc-hash)
-# For etnaviv
-BuildRequires:	crate(indexmap)
 %endif
 
 # package mesa
@@ -351,6 +341,8 @@ BuildRequires:	libsensors.so.5
 BuildRequires:	devel(libLLVM)
 BuildRequires:	devel(libclang)
 BuildRequires:	devel(libzstd)
+BuildRequires:	libdisplay-info
+BuildRequires:	devel(libdisplay-info)
 BuildRequires:	devel(libwayland-client)
 BuildRequires:	devel(libwayland-server)
 BuildRequires:	devel(libffi)
@@ -359,7 +351,6 @@ BuildRequires:	libunwind-nongnu-devel
 BuildRequires:	devel(libva)
 BuildRequires:	devel(libz)
 BuildRequires:	devel(libexpat)
-BuildRequires:	devel(libvdpau)
 BuildRequires:	devel(libOpenGL)
 BuildRequires:	devel(libGLdispatch)
 BuildRequires:	devel(libXrandr)
@@ -392,7 +383,6 @@ Conflicts:	%{dridrivers}-vmwgfx <= 22.0.0-0.rc2.1
 Conflicts:	%{dridrivers}-radeon <= 22.0.0-0.rc2.1
 %endif
 %ifarch %{ix86} %{x86_64}
-Suggests:	libvdpau-va-gl
 %rename		%{dridrivers}-intel
 Conflicts:	%{dridrivers}-intel <= 22.0.0-0.rc2.1
 %rename		%{dridrivers}-iris
@@ -426,6 +416,7 @@ Provides:	dri-drivers = %{EVRD}
 Provides:	mesa-dri-drivers = %{EVRD}
 Requires:	vulkan-loader
 Obsoletes:	%{_lib}XvMCgallium1 <= 22.0.0-0.rc2.1
+Obsoletes:	vdpau-drivers < %{EVRD}
 
 %description -n %{dridrivers}
 DRI and Vulkan drivers.
@@ -606,7 +597,6 @@ Conflicts:	%{dridrivers32}-intel <= 22.0.0-0.rc2.1
 Conflicts:	%{dridrivers32}-iris <= 22.0.0-0.rc2.1
 %rename		%{dridrivers32}-nouveau
 Conflicts:	%{dridrivers32}-nouveau <= 22.0.0-0.rc2.1
-%rename		libvdpau-drivers
 Requires:	libvulkan1
 
 %description -n %{dridrivers32}
@@ -699,32 +689,6 @@ execute across heterogeneous platforms consisting of central processing units
 Rusticl is an implementation of OpenCL.
 %endif
 
-%if %{with vdpau}
-%package -n %{vdpaudrivers}
-Summary:	Mesa VDPAU drivers
-Group:		System/Libraries
-Requires:	%{dridrivers} >= %{EVRD}
-%ifnarch %{armx} %{riscv}
-%rename		%{_lib}vdpau-driver-nouveau
-Conflicts:	%{_lib}vdpau-driver-nouveau <= 22.0.0-0.rc2.1
-%rename		%{_lib}vdpau-driver-r300
-Conflicts:	%{_lib}vdpau-driver-r300 <= 22.0.0-0.rc2.1
-%rename		%{_lib}vdpau-driver-radeonsi
-Conflicts:	%{_lib}vdpau-driver-radeonsi <= 22.0.0-0.rc2.1
-%if %{with r600}
-%rename		%{_lib}vdpau-driver-r600
-Conflicts:	%{_lib}vdpau-driver-r600 <= 22.0.0-0.rc2.1
-%endif
-%endif
-%rename		%{_lib}vdpau-driver-softpipe
-Conflicts:	%{_lib}vdpau-driver-softpipe <= 22.0.0-0.rc2.1
-Provides:	vdpau-drivers = %{EVRD}
-Requires:	%{_lib}vdpau1
-
-%description -n %{vdpaudrivers}
-VDPAU drivers.
-%endif
-
 %if %{with egl}
 %package -n %{libgbm}
 Summary:	Files for Mesa (gbm libs)
@@ -766,41 +730,13 @@ Group:		Development/Tools
 Tools for debugging Mesa drivers.
 
 %prep
-%autosetup -p1 -n mesa-%{?git:%{git_branch}}%{!?git:%{version}%{vsuffix}}
+%autosetup -p1 -a1 -n mesa-%{?git:%{git_branch}}%{!?git:%{version}%{vsuffix}}
 
 %build
 %if %{with gcc}
 export CC=gcc
 export CXX=g++
 %endif
-
-%if %{with rust}
-%define cargo_registry /usr/share/cargo/registry
-export MESON_PACKAGE_CACHE_DIR="%{cargo_registry}/"
-# So... Meson can't actually find them without tweaks
-%define inst_crate_nameversion() %(basename %{cargo_registry}/%{1}-*)
-%define rewrite_wrap_file() sed -e "/source.*/d" -e "s/%{1}-.*/%{inst_crate_nameversion %{1}}/" -i subprojects/%{1}.wrap
- 
-%rewrite_wrap_file proc-macro2
-%rewrite_wrap_file quote
-%rewrite_wrap_file syn
-%rewrite_wrap_file unicode-ident
-%rewrite_wrap_file paste
-%rewrite_wrap_file rustc-hash
-# Rust dependencies of Nouveau...
-# Nouveau doesn't use cargo, so we probably have to do this manually?
-mkdir rustdeps
-rustc --crate-name paste --edition=2021 /usr/share/cargo/registry/unicode-ident-*/src/lib.rs --crate-type lib --emit=dep-info,metadata,link --out-dir $(pwd)/rustdeps -Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Clink-arg=-Wl,-z,relro -Clink-arg=-Wl,-z,now
-
-rustc --crate-name unicode_ident --edition=2021 /usr/share/cargo/registry/unicode-ident-*/src/lib.rs --crate-type lib --emit=dep-info,metadata,link --out-dir $(pwd)/rustdeps -Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Clink-arg=-Wl,-z,relro -Clink-arg=-Wl,-z,now
-
-rustc --crate-name proc_macro2 --edition=2021 /usr/share/cargo/registry/proc-macro2-*/src/lib.rs --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debug-assertions=off --cfg 'feature="default"' --cfg 'feature="proc-macro"' --out-dir $(pwd)/rustdeps -L dependency=$(pwd)/rustdeps --extern unicode_ident=$(pwd)/rustdeps/libunicode_ident.rmeta --cap-lints warn -Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Clink-arg=-Wl,-z,relro -Clink-arg=-Wl,-z,now --cap-lints=warn --cfg wrap_proc_macro
-
-rustc --crate-name quote --edition=2018 /usr/share/cargo/registry/quote-*/src/lib.rs --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debug-assertions=off --cfg 'feature="default"' --cfg 'feature="proc-macro"' --out-dir $(pwd)/rustdeps -L dependency=$(pwd)/rustdeps --extern proc_macro2=$(pwd)/rustdeps/libproc_macro2.rmeta --cap-lints warn -Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Clink-arg=-Wl,-z,relro -Clink-arg=-Wl,-z,now --cap-lints=warn
-
-rustc --crate-name syn --edition=2021 /usr/share/cargo/registry/syn-*/src/lib.rs --crate-type lib --emit=dep-info,metadata,link -C embed-bitcode=no -C debug-assertions=off --cfg 'feature="default"' --cfg 'feature="proc-macro"' --cfg 'feature="parsing"' --cfg 'feature="full"' --cfg 'feature="derive"' --cfg 'feature="printing"' --out-dir $(pwd)/rustdeps -L dependency=$(pwd)/rustdeps --extern proc_macro2=$(pwd)/rustdeps/libproc_macro2.rmeta --extern unicode_ident=$(pwd)/rustdeps/libunicode_ident.rmeta --extern quote=$(pwd)/rustdeps/libquote.rmeta --cap-lints warn -Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Clink-arg=-Wl,-z,relro -Clink-arg=-Wl,-z,now --cap-lints=warn
-%endif
-
 
 %if %{with compat32}
 cat >llvm-config <<EOF
@@ -848,7 +784,6 @@ if ! %meson32 \
 	-Dvalgrind=disabled \
 	-Dglvnd=enabled \
 	-Dgallium-va=enabled \
-	-Dgallium-vdpau=enabled \
 	-Dgallium-drivers=auto,crocus \
 	-Degl=enabled \
 	-Dgbm=enabled \
@@ -937,7 +872,6 @@ if ! %meson \
 %endif
 	-Dgallium-extra-hud=true \
 	-Dgallium-va=enabled \
-	-Dgallium-vdpau=enabled \
 	-Dgallium-mediafoundation=disabled \
 	-Dglx=dri \
 	-Dplatforms=wayland,x11 \
@@ -1002,9 +936,6 @@ rm -rf	%{buildroot}%{_includedir}/GL/gl.h \
 %ifarch %{x86_64}
 mkdir -p %{buildroot}%{_prefix}/lib/dri
 %endif
-
-# .so files are not needed by vdpau
-rm -f %{buildroot}%{_libdir}/vdpau/libvdpau_*.so
 
 # .la files are not needed by mesa
 find %{buildroot} -name '*.la' |xargs rm -f
@@ -1086,13 +1017,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_libdir}/libEGL_mesa.so
 %endif
 
-#vdpau enabled
-%if %{with vdpau}
-%files -n %{vdpaudrivers}
-%dir %{_libdir}/vdpau
-%{_libdir}/vdpau/libvdpau*.so.*
-%endif
-
 %if %{with egl}
 %files -n %{devgbm}
 %{_includedir}/gbm.h
@@ -1122,6 +1046,7 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_bindir}/intel_sanitize_gpu
 %{_bindir}/intel_stub_gpu
 %{_bindir}/intel_monitor
+%{_bindir}/mda
 %{_bindir}/brw_asm
 %{_bindir}/brw_disasm
 %{_bindir}/elk_asm
@@ -1171,5 +1096,4 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_prefix}/lib/dri/*.so
 %{_prefix}/lib/libVkLayer_*.so
 %{_prefix}/lib/libvulkan_*.so
-%{_prefix}/lib/vdpau/libvdpau_*.so*
 %endif

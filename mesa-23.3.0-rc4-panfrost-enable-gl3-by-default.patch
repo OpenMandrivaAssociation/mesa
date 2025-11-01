@@ -1,6 +1,6 @@
-diff -up mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~ mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c
---- mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~	2025-07-16 16:42:48.000000000 +0200
-+++ mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c	2025-07-16 22:52:40.477061612 +0200
+diff -up mesa-25.3.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~ mesa-25.3.0-rc1/src/gallium/drivers/panfrost/pan_screen.c
+--- mesa-25.3.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~	2025-10-16 05:56:25.000000000 +0200
++++ mesa-25.3.0-rc1/src/gallium/drivers/panfrost/pan_screen.c	2025-10-20 18:25:34.549634342 +0200
 @@ -67,7 +67,7 @@ static const struct debug_named_value pa
     {"dirty",      PAN_DBG_DIRTY,      "Always re-emit all state"},
     {"sync",       PAN_DBG_SYNC,       "Wait for each job's completion and abort on GPU faults"},
@@ -10,18 +10,18 @@ diff -up mesa-25.2.0-rc1/src/gallium/drivers/panfrost/pan_screen.c.3~ mesa-25.2.
     {"noafbc",     PAN_DBG_NO_AFBC,    "Disable AFBC support"},
     {"nocrc",      PAN_DBG_NO_CRC,     "Disable transaction elimination"},
     {"linear",     PAN_DBG_LINEAR,     "Force linear textures"},
-@@ -627,7 +627,7 @@ panfrost_init_screen_caps(struct panfros
+@@ -667,7 +667,7 @@ panfrost_init_screen_caps(struct panfros
     struct panfrost_device *dev = &screen->dev;
  
     /* Our GL 3.x implementation is WIP */
 -   bool is_gl3 = dev->debug & PAN_DBG_GL3;
-+   bool is_gl3 = (dev->debug & PAN_DBG_NOGL3) == 0;
++   bool is_gl3 = !(dev->debug & PAN_DBG_NOGL3);
  
     unsigned max_tib_size =
-       pan_get_max_tib_size(dev->arch, dev->model);
-diff -up mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h.3~ mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h
---- mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h.3~	2025-07-16 16:42:48.000000000 +0200
-+++ mesa-25.2.0-rc1/src/panfrost/lib/pan_util.h	2025-07-16 22:54:43.618132009 +0200
+       pan_query_tib_size(dev->model);
+diff -up mesa-25.3.0-rc1/src/panfrost/lib/pan_util.h.3~ mesa-25.3.0-rc1/src/panfrost/lib/pan_util.h
+--- mesa-25.3.0-rc1/src/panfrost/lib/pan_util.h.3~	2025-10-16 05:56:25.000000000 +0200
++++ mesa-25.3.0-rc1/src/panfrost/lib/pan_util.h	2025-10-20 18:23:18.401392979 +0200
 @@ -40,7 +40,7 @@
  /* 0x20 unused */
  #define PAN_DBG_NOFP16  0x0040

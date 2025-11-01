@@ -1,0 +1,30 @@
+#!/bin/sh
+cd "$(dirname $0)"
+VER=$(cat mesa.spec |grep ^Version: |awk '{print $2;}')
+RC=$(cat mesa.spec |grep '%define relc '|awk '{print $3;}')
+[ -n "$RC" ] && VER="$VER-rc$RC"
+[ -e mesa-$VER.tar.xz ] || wget https://mesa.freedesktop.org/archive/mesa-$VER.tar.xz
+
+tar xf mesa-$VER.tar.xz
+
+cd mesa-$VER
+# We don't need to duplicate stuff that has proper system libs
+# or stuff we don't need/want to use. But we need the mandatory
+# bits written in languages too stupid to support proper libraries.
+# F*** rust.
+cd subprojects
+rm DirectX-Headers.wrap Vulkan-Profiles.wrap expat.wrap \
+	libarchive.wrap libdrm.wrap libxml2.wrap \
+	lua.wrap perfetto.wrap wayland-protocols.wrap zlib.wrap
+cd ..
+
+meson subprojects download
+
+# We don't need to package stuff that lives in the mesa tarball again...
+rm subprojects/*.wrap
+# We also don't need to package metadata from stuff pulled from git repos
+rm -rf subprojects/*/.git
+
+tar cf ../mesa-subprojects.tar subprojects
+cd ..
+zstd -22 --ultra mesa-subprojects.tar
