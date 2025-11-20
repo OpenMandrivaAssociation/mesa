@@ -1,0 +1,103 @@
+From 1e6aec2fa398134246a0aea4496aaa8949677455 Mon Sep 17 00:00:00 2001
+From: Calder Young <cgiacun@gmail.com>
+Date: Fri, 14 Nov 2025 13:37:51 -0800
+Subject: [PATCH] brw: fix SIMD lowering of fp16 sampler message data with
+ multiple components
+
+Fixes: 61d6aea4 ("brw: fix SIMD lowering of sampler messages with fp16 data")
+Closes: mesa/mesa#13149
+Reviewed-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38455>
+(cherry picked from commit d6fbbfef5ca656a6344346c785dc409024ede32e)
+---
+ .pick_status.json                             |  2 +-
+ .../compiler/brw/brw_lower_simd_width.cpp     | 36 ++++++++++++-------
+ 2 files changed, 25 insertions(+), 13 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 731cd297bf57f..ae072662d65d3 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -354,7 +354,7 @@
+         "description": "brw: fix SIMD lowering of fp16 sampler message data with multiple components",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "61d6aea401743177e30d286ce6946525f30c8df9",
+         "notes": null
+diff --git a/src/intel/compiler/brw/brw_lower_simd_width.cpp b/src/intel/compiler/brw/brw_lower_simd_width.cpp
+index 510701b80847e..7efb42ee3d452 100644
+--- a/src/intel/compiler/brw/brw_lower_simd_width.cpp
++++ b/src/intel/compiler/brw/brw_lower_simd_width.cpp
+@@ -631,12 +631,23 @@ emit_zip(const brw_builder &lbld_before, const brw_builder &lbld_after,
+       (reg_unit(devinfo) * REG_SIZE) : 0;
+    const unsigned dst_size = (inst->size_written - residency_size) /
+       inst->dst.component_size(inst->exec_size);
+-
+-   /* For SEND messages, align the allocation to physical registers */
+-   const brw_reg tmp = lbld_after.vgrf(
+-      inst->dst.type,
+-      (is_send_inst(inst) ? align(dst_size, reg_unit(devinfo)) : dst_size) +
+-      inst->has_sampler_residency() * reg_unit(devinfo));
++   unsigned tmp_comp_size;
++   brw_reg tmp;
++
++   if (is_send_inst(inst)) {
++      /* For SEND messages, align the allocation to physical registers */
++      tmp_comp_size =
++         align(inst->dst.component_size(lbld_after.dispatch_width()),
++               reg_unit(devinfo) * REG_SIZE);
++      const unsigned tmp_size =
++         (dst_size * tmp_comp_size + residency_size) / REG_SIZE;
++      tmp = retype(brw_allocate_vgrf_units(*lbld_after.shader, tmp_size),
++                   inst->dst.type);
++   } else {
++      tmp_comp_size = inst->dst.component_size(lbld_after.dispatch_width());
++      tmp = lbld_after.vgrf(inst->dst.type, dst_size +
++         inst->has_sampler_residency() * reg_unit(devinfo));
++   }
+ 
+    if (inst->predicate) {
+       /* Handle predication by copying the original contents of the
+@@ -644,7 +655,7 @@ emit_zip(const brw_builder &lbld_before, const brw_builder &lbld_after,
+        * instruction.
+        */
+       for (unsigned k = 0; k < dst_size; ++k) {
+-         lbld_before.MOV(offset(tmp, lbld_before, k),
++         lbld_before.MOV(byte_offset(tmp, tmp_comp_size * k),
+                          offset(dst, inst->exec_size, k));
+       }
+    }
+@@ -652,7 +663,7 @@ emit_zip(const brw_builder &lbld_before, const brw_builder &lbld_after,
+    for (unsigned k = 0; k < dst_size; ++k) {
+       /* Copy the (split) temp into the original (larger) destination */
+       lbld_after.MOV(offset(dst, inst->exec_size, k),
+-                     offset(tmp, lbld_after, k));
++                     byte_offset(tmp, tmp_comp_size * k));
+    }
+ 
+    if (inst->has_sampler_residency()) {
+@@ -779,13 +790,14 @@ brw_lower_simd_width(brw_shader &s)
+ 
+          split_inst->dst = emit_zip(lbld.before(inst),
+                                    lbld_after, inst);
++         unsigned comp_size =
++            split_inst->dst.component_size(lower_width);
++
+          /* For SEND messages, align the data size to physical registers */
+-         unsigned data_size =
+-            split_inst->dst.component_size(lower_width) * dst_size;
+          if (is_send_inst(split_inst))
+-            data_size = align(data_size, REG_SIZE * reg_unit(s.devinfo));
++            comp_size = align(comp_size, REG_SIZE * reg_unit(s.devinfo));
+ 
+-         split_inst->size_written = data_size + residency_size;
++         split_inst->size_written = comp_size * dst_size + residency_size;
+ 
+          lbld.after(inst).emit(split_inst);
+       }
+-- 
+GitLab
+

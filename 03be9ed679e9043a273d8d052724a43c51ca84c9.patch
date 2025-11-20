@@ -1,0 +1,66 @@
+From 03be9ed679e9043a273d8d052724a43c51ca84c9 Mon Sep 17 00:00:00 2001
+From: David Rosca <david.rosca@amd.com>
+Date: Tue, 11 Nov 2025 11:09:50 +0100
+Subject: [PATCH] radv/video: Fix coding allow_screen_content_tools and
+ force_integer_mv
+
+This was copied from radeonsi which expected seq_force_screen_content_tools = 2
+and seq_force_integer_mv = 2.
+
+Fixes: 37e71a5cb24 ("radv/video: add support for AV1 encoding")
+Reviewed-by: Benjamin Cheng <benjamin.cheng@amd.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38371>
+(cherry picked from commit 3858a6a696dfa4106ff81f69f99cc0662e58679f)
+---
+ .pick_status.json               |  2 +-
+ src/amd/vulkan/radv_video_enc.c | 13 ++++---------
+ 2 files changed, 5 insertions(+), 10 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 189a38fe8529b..346cc8711bd07 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -444,7 +444,7 @@
+         "description": "radv/video: Fix coding allow_screen_content_tools and force_integer_mv",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "37e71a5cb24cd6053603ca64b67352e0c8e2fce8",
+         "notes": null
+diff --git a/src/amd/vulkan/radv_video_enc.c b/src/amd/vulkan/radv_video_enc.c
+index c10ca787c5520..30e2a85fa563c 100644
+--- a/src/amd/vulkan/radv_video_enc.c
++++ b/src/amd/vulkan/radv_video_enc.c
+@@ -2452,15 +2452,10 @@ radv_enc_av1_obu_instruction(struct radv_cmd_buffer *cmd_buffer, const VkVideoEn
+    /*  disable_cdf_update  */
+    radv_enc_code_fixed_bits(cmd_buffer, av1_pic->flags.disable_cdf_update, 1);
+ 
+-   bool allow_screen_content_tools = false;
+-   if (seq->flags.reduced_still_picture_header || av1_pic->flags.allow_screen_content_tools) {
+-      /*  allow_screen_content_tools  */
+-      allow_screen_content_tools = /*av1_pic->av1_spec_misc.palette_mode_enable ||*/
+-         av1_pic->flags.force_integer_mv;
+-      radv_enc_code_fixed_bits(cmd_buffer, allow_screen_content_tools ? 1 : 0, 1);
+-   }
++   if (seq->seq_force_screen_content_tools == STD_VIDEO_AV1_SELECT_SCREEN_CONTENT_TOOLS)
++      radv_enc_code_fixed_bits(cmd_buffer, av1_pic->flags.allow_screen_content_tools, 1);
+ 
+-   if (allow_screen_content_tools)
++   if (av1_pic->flags.allow_screen_content_tools && seq->seq_force_integer_mv == STD_VIDEO_AV1_SELECT_INTEGER_MV)
+       /*  force_integer_mv  */
+       radv_enc_code_fixed_bits(cmd_buffer, av1_pic->flags.force_integer_mv, 1);
+ 
+@@ -2507,7 +2502,7 @@ radv_enc_av1_obu_instruction(struct radv_cmd_buffer *cmd_buffer, const VkVideoEn
+          /*  render_height_minus_1  */
+          radv_enc_code_fixed_bits(cmd_buffer, av1_pic->render_height_minus_1, 16);
+       }
+-      if (av1_pic->flags.allow_screen_content_tools && av1_pic->flags.force_integer_mv)
++      if (av1_pic->flags.allow_screen_content_tools)
+          /*  allow_intrabc  */
+          radv_enc_code_fixed_bits(cmd_buffer, 0, 1);
+    } else {
+-- 
+GitLab
+

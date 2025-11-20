@@ -1,0 +1,49 @@
+From ecae718b5bba470dbab43826f6896c9a6b1a7316 Mon Sep 17 00:00:00 2001
+From: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Date: Wed, 15 Oct 2025 10:50:43 +0200
+Subject: [PATCH] panfrost: remove stale code
+
+This code was no longer needed after switching to os_read_file, but I
+accidentally left it around, whoops!
+
+Fixes: 49183bfb791 ("pan/bi: use os_read_file-helper")
+CID: 1665295
+Reviewed-by: Boris Brezillon <boris.brezillon@collabora.com>
+Reviewed-by: Lars-Ivar Hesselberg Simonsen <lars-ivar.simonsen@arm.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/37903>
+(cherry picked from commit d77279fa9b60b3566821f6041a1db361c484f706)
+---
+ .pick_status.json               | 2 +-
+ src/panfrost/compiler/cmdline.c | 3 ---
+ 2 files changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 5ed4d468d60ba..53465bd387e48 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -134,7 +134,7 @@
+         "description": "panfrost: remove stale code",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "49183bfb7918009b4ac269bde6ecb8389500e8a4",
+         "notes": null
+diff --git a/src/panfrost/compiler/cmdline.c b/src/panfrost/compiler/cmdline.c
+index 4b1955dd86a0b..f6bd9a2989576 100644
+--- a/src/panfrost/compiler/cmdline.c
++++ b/src/panfrost/compiler/cmdline.c
+@@ -43,9 +43,6 @@ int verbose = 0;
+ static void
+ disassemble(const char *filename)
+ {
+-   FILE *fp = fopen(filename, "rb");
+-   assert(fp);
+-
+    size_t filesize = 0;
+    uint32_t *code = (uint32_t *)os_read_file(filename, &filesize);
+    if (!code) {
+-- 
+GitLab
+

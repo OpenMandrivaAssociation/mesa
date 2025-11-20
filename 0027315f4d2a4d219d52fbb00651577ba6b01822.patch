@@ -1,0 +1,70 @@
+From 0027315f4d2a4d219d52fbb00651577ba6b01822 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Tue, 11 Nov 2025 17:48:57 +0100
+Subject: [PATCH] rusticl/kernel: fix clGetKernelSuggestedLocalWorkSizeKHR
+ implementation
+
+There were two issues:
+1. The global_work_offset parameter is optional but we errored on NULL
+2. We didn't return the reqd_work_group_size when set on the kernel.
+
+Fixes: 376d1e6667a ("rusticl: implement cl_khr_suggested_local_work_size")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38375>
+(cherry picked from commit 810dca450cde704f9ba9238963d94b6860acf08a)
+---
+ .pick_status.json                            | 2 +-
+ src/gallium/frontends/rusticl/api/kernel.rs  | 4 ----
+ src/gallium/frontends/rusticl/core/kernel.rs | 9 +++++++++
+ 3 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 934dc97ca015d..1960501c363b6 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -694,7 +694,7 @@
+         "description": "rusticl/kernel: fix clGetKernelSuggestedLocalWorkSizeKHR implementation",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "376d1e6667a80e1811d4c25115633817f16666a7",
+         "notes": null
+diff --git a/src/gallium/frontends/rusticl/api/kernel.rs b/src/gallium/frontends/rusticl/api/kernel.rs
+index 164d0aa1c11b7..4ab307c6c928c 100644
+--- a/src/gallium/frontends/rusticl/api/kernel.rs
++++ b/src/gallium/frontends/rusticl/api/kernel.rs
+@@ -857,10 +857,6 @@ fn get_kernel_suggested_local_work_size_khr(
+         return Err(CL_INVALID_GLOBAL_WORK_SIZE);
+     }
+ 
+-    if global_work_offset.is_null() {
+-        return Err(CL_INVALID_GLOBAL_OFFSET);
+-    }
+-
+     // CL_INVALID_VALUE if suggested_local_work_size is NULL.
+     if suggested_local_work_size.is_null() {
+         return Err(CL_INVALID_VALUE);
+diff --git a/src/gallium/frontends/rusticl/core/kernel.rs b/src/gallium/frontends/rusticl/core/kernel.rs
+index aa1ce195242d3..fce7192384094 100644
+--- a/src/gallium/frontends/rusticl/core/kernel.rs
++++ b/src/gallium/frontends/rusticl/core/kernel.rs
+@@ -1440,6 +1440,15 @@ impl Kernel {
+         grid: &mut [usize],
+         block: &mut [usize],
+     ) {
++        // We have to use the required workgroup size if specified.
++        if self.work_group_size() != [0; 3] {
++            for i in 0..work_dim {
++                block[i] = self.work_group_size()[i];
++                grid[i] /= block[i];
++            }
++            return;
++        }
++
+         let mut threads = self.max_threads_per_block(d);
+         let dim_threads = d.max_block_sizes();
+         let subgroups = self.preferred_simd_size(d);
+-- 
+GitLab
+

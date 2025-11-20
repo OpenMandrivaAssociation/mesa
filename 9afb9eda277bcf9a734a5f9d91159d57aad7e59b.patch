@@ -1,0 +1,55 @@
+From 9afb9eda277bcf9a734a5f9d91159d57aad7e59b Mon Sep 17 00:00:00 2001
+From: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Date: Sat, 15 Nov 2025 22:59:16 +0200
+Subject: [PATCH] anv: fixup load_ubo lowering
+
+Use ult like nir_lower_explicit_io.
+
+Signed-off-by: Lionel Landwerlin <lionel.g.landwerlin@intel.com>
+Cc: mesa-stable
+Reviewed-by: Alyssa Rosenzweig <alyssa.rosenzweig@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38477>
+(cherry picked from commit 775f8ec105c77c0d294e62d1a76e8e1165ad4ca2)
+---
+ .pick_status.json                          | 2 +-
+ src/intel/vulkan/anv_nir_lower_ubo_loads.c | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 1613abde37d8b..1d70dd9aef1ac 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -1074,7 +1074,7 @@
+         "description": "anv: fixup load_ubo lowering",
+         "nominated": true,
+         "nomination_type": 1,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": null,
+         "notes": null
+diff --git a/src/intel/vulkan/anv_nir_lower_ubo_loads.c b/src/intel/vulkan/anv_nir_lower_ubo_loads.c
+index 6406701c9248c..4feb8297a4cf2 100644
+--- a/src/intel/vulkan/anv_nir_lower_ubo_loads.c
++++ b/src/intel/vulkan/anv_nir_lower_ubo_loads.c
+@@ -73,7 +73,7 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
+                           aligned_offset + 64, aligned_offset + 80,
+                           aligned_offset + 96, aligned_offset + 112);
+          nir_def* mask =
+-            nir_bcsel(b, nir_ilt(b, offsets, bound),
++            nir_bcsel(b, nir_ult(b, offsets, bound),
+                       nir_imm_int(b, 0xFFFFFFFF),
+                       nir_imm_int(b, 0x00000000));
+ 
+@@ -102,7 +102,7 @@ lower_ubo_load_instr(nir_builder *b, nir_intrinsic_instr *load,
+ 
+          unsigned load_size = byte_size * load->num_components;
+          nir_def *in_bounds =
+-            nir_ilt(b, nir_iadd_imm(b, offset, load_size - 1), bound);
++            nir_ult(b, nir_iadd_imm(b, offset, load_size - 1), bound);
+ 
+          nir_push_if(b, in_bounds);
+ 
+-- 
+GitLab
+

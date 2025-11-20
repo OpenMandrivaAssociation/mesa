@@ -1,0 +1,47 @@
+From 4c1435fb92fbf31116ec3dbb2e0bdf73b5874793 Mon Sep 17 00:00:00 2001
+From: Christoph Pillmayer <christoph.pillmayer@arm.com>
+Date: Mon, 10 Nov 2025 13:35:06 +0000
+Subject: [PATCH] nir: Fix preseved metadata in sort_unstructured_blocks
+
+Fixes: c859ea5783b ("nir: Add a sort_unstructured_blocks() helper")
+
+Reviewed-by: Erik Faye-Lund <erik.faye-lund@collabora.com>
+Reviewed-by: Faith Ekstrand <faith.ekstrand@collabora.com>
+Reviewed-by: Mel Henning <mhenning@darkrefraction.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38354>
+(cherry picked from commit 8db66767a9f0243bcd0da32891a005db548ab126)
+---
+ .pick_status.json                   | 2 +-
+ src/compiler/nir/nir_control_flow.c | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 346cc8711bd07..d2e0bfb75a4ba 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -434,7 +434,7 @@
+         "description": "nir: Fix preseved metadata in sort_unstructured_blocks",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "c859ea5783b15ee32435dd6d49a4e3645a45fd19",
+         "notes": null
+diff --git a/src/compiler/nir/nir_control_flow.c b/src/compiler/nir/nir_control_flow.c
+index fcd8682691573..75bb9b0309f02 100644
+--- a/src/compiler/nir/nir_control_flow.c
++++ b/src/compiler/nir/nir_control_flow.c
+@@ -968,7 +968,7 @@ nir_sort_unstructured_blocks(nir_function_impl *impl)
+ 
+    ralloc_free(blocks);
+ 
+-   /* Dominance is toast but we indexed blocks as part of this pass. */
+-   impl->valid_metadata &= nir_metadata_dominance;
++   /* Most metadata is toast but we indexed blocks as part of this pass. */
++   impl->valid_metadata &= nir_metadata_live_defs;
+    impl->valid_metadata |= nir_metadata_block_index;
+ }
+-- 
+GitLab
+

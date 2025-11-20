@@ -1,0 +1,105 @@
+From 408c0986b5d7a478ef10061c7006f1b6962ed214 Mon Sep 17 00:00:00 2001
+From: Alyssa Rosenzweig <alyssa.rosenzweig@intel.com>
+Date: Wed, 12 Nov 2025 15:49:05 -0500
+Subject: [PATCH] nir/sweep: fix use-after-free with dominance LCA
+
+Either we need to save this pointer or toss it.
+
+==146166==ERROR: AddressSanitizer: heap-use-after-free on address 0x7bfe77013920 at pc 0x7b9e6fd5b978 bp 0x7ffc30ef18e0 sp 0x7ffc30ef18d8
+READ of size 4 at 0x7bfe77013920 thread T0
+    #0 0x7b9e6fd5b977 in get_header ../src/util/ralloc.c:83
+    #1 0x7b9e6fd5b977 in ralloc_parent ../src/util/ralloc.c:382
+    #2 0x7b9e6fd5b977 in reralloc_size ../src/util/ralloc.c:198
+    #3 0x7b9e6fd5b977 in reralloc_array_size ../src/util/ralloc.c:241
+    #4 0x7b9e705f83c2 in range_minimum_query_table_resize ../src/util/range_minimum_query.c:21
+    #5 0x7b9e7018af1d in realloc_info ../src/compiler/nir/nir_dominance_lca.c:33
+    #6 0x7b9e7018af1d in nir_calc_dominance_lca_impl ../src/compiler/nir/nir_dominance_lca.c:126
+    #7 0x7b9e6ff9815c in nir_metadata_require ../src/compiler/nir/nir_metadata.c:42
+    #8 0x7b9e6ff998e4 in nir_metadata_require_most ../src/compiler/nir/nir_metadata.c:200
+    #9 0x7b9e6f8aab4d in st_finalize_nir ../src/mesa/state_tracker/st_glsl_to_nir.cpp:735
+    #10 0x7b9e6f0afb14 in st_create_common_variant ../src/mesa/state_tracker/st_program.c:858
+    #11 0x7b9e6f0be2d3 in st_get_common_variant ../src/mesa/state_tracker/st_program.c:973
+    #12 0x7b9e6f0bf9cf in st_precompile_shader_variant ../src/mesa/state_tracker/st_program.c:1478
+    #13 0x7b9e6f0bf9cf in st_finalize_program ../src/mesa/state_tracker/st_program.c:1596
+    #14 0x7b9e6f8b0127 in st_link_glsl_to_nir ../src/mesa/state_tracker/st_glsl_to_nir.cpp:633
+    #15 0x7b9e6f8b3611 in st_link_shader ../src/mesa/state_tracker/st_glsl_to_nir.cpp:816
+    #16 0x7b9e6f7bcf51 in link_program ../src/mesa/main/shaderapi.c:1412
+    #17 0x7b9e6f7bcf51 in link_program_error ../src/mesa/main/shaderapi.c:1474
+    #18 0x0000004020b0 in main._omp_fn.0 /home/alyssa/shader-db/run.c:872
+    #19 0x7f9e7893dd65 in GOMP_parallel (/lib64/libgomp.so.1+0xdd65) (BuildId: 9cc501fdca53b5d4ab094f709486781c98573bc9)
+    #20 0x000000400d6a in main /home/alyssa/shader-db/run.c:689
+    #21 0x7f9e78011574 in __libc_start_call_main (/lib64/libc.so.6+0x3574) (BuildId: 48c4b9b1efb1df15da8e787f489128bf31893317)
+    #22 0x7f9e78011627 in __libc_start_main@GLIBC_2.2.5 (/lib64/libc.so.6+0x3627) (BuildId: 48c4b9b1efb1df15da8e787f489128bf31893317)
+    #23 0x000000401014 in _start (/home/alyssa/shader-db/run+0x401014) (BuildId: a83b8d830cc265be3f54ea3e7a21a0fb5156624b)
+
+0x7bfe77013920 is located 0 bytes inside of 64-byte region [0x7bfe77013920,0x7bfe77013960)
+freed by thread T0 here:
+    #0 0x7f9e782e5beb in free.part.0 (/usr/lib64/libasan.so.8+0xe5beb) (BuildId: cab80046dbc1c97c6e14490acc37d079701f8d9a)
+    #1 0x7b9e6fd5bc39 in unsafe_free ../src/util/ralloc.c:319
+    #2 0x7b9e6fd5bc39 in ralloc_free ../src/util/ralloc.c:264
+    #3 0x7b9e70063d81 in nir_sweep ../src/compiler/nir/nir_sweep.c:219
+    #4 0x7b9e6f0bf499 in st_finalize_program ../src/mesa/state_tracker/st_program.c:1585
+    #5 0x7b9e6f8b0127 in st_link_glsl_to_nir ../src/mesa/state_tracker/st_glsl_to_nir.cpp:633
+    #6 0x7b9e6f8b3611 in st_link_shader ../src/mesa/state_tracker/st_glsl_to_nir.cpp:816
+    #7 0x7b9e6f7bcf51 in link_program ../src/mesa/main/shaderapi.c:1412
+    #8 0x7b9e6f7bcf51 in link_program_error ../src/mesa/main/shaderapi.c:1474
+    #9 0x0000004020b0 in main._omp_fn.0 /home/alyssa/shader-db/run.c:872
+
+previously allocated by thread T0 here:
+    #0 0x7f9e782e5e4b in realloc.part.0 (/usr/lib64/libasan.so.8+0xe5e4b) (BuildId: cab80046dbc1c97c6e14490acc37d079701f8d9a)
+    #1 0x7b9e6fd5a883 in resize ../src/util/ralloc.c:167
+    #2 0x7b9e705f83c2 in range_minimum_query_table_resize ../src/util/range_minimum_query.c:21
+    #3 0x7b9e7018af1d in realloc_info ../src/compiler/nir/nir_dominance_lca.c:33
+    #4 0x7b9e7018af1d in nir_calc_dominance_lca_impl ../src/compiler/nir/nir_dominance_lca.c:126
+    #5 0x7b9e6ff9815c in nir_metadata_require ../src/compiler/nir/nir_metadata.c:42
+    #6 0x7b9e6ff998e4 in nir_metadata_require_most ../src/compiler/nir/nir_metadata.c:200
+    #7 0x7b9e6f8b0ede in st_link_glsl_to_nir ../src/mesa/state_tracker/st_glsl_to_nir.cpp:550
+    #8 0x7b9e6f8b3611 in st_link_shader ../src/mesa/state_tracker/st_glsl_to_nir.cpp:816
+    #9 0x7b9e6f7bcf51 in link_program ../src/mesa/main/shaderapi.c:1412
+    #10 0x7b9e6f7bcf51 in link_program_error ../src/mesa/main/shaderapi.c:1474
+    #11 0x0000004020b0 in main._omp_fn.0 /home/alyssa/shader-db/run.c:872
+
+Fixes: 17876a00afa ("nir: Add a faster lowest common ancestor algorithm")
+Signed-off-by: Alyssa Rosenzweig <alyssa.rosenzweig@intel.com>
+Reviewed-by: Mel Henning <mhenning@darkrefraction.com>
+Reviewed-by: Ian Romanick <ian.d.romanick@intel.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38412>
+(cherry picked from commit 65fcdf4c81d4309257a4ca6471332a7d56e68729)
+---
+ .pick_status.json            | 2 +-
+ src/compiler/nir/nir_sweep.c | 6 ++++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 663b01e32a916..c0ad666436bfe 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -1034,7 +1034,7 @@
+         "description": "nir/sweep: fix use-after-free with dominance LCA",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "17876a00afabc9466162187c18f04080353575d2",
+         "notes": null
+diff --git a/src/compiler/nir/nir_sweep.c b/src/compiler/nir/nir_sweep.c
+index d4a22c276f4aa..0bba79450a5d3 100644
+--- a/src/compiler/nir/nir_sweep.c
++++ b/src/compiler/nir/nir_sweep.c
+@@ -164,6 +164,12 @@ sweep_impl(nir_shader *nir, nir_function_impl *impl)
+ 
+    /* Wipe out all the metadata, if any. */
+    nir_progress(true, impl, nir_metadata_none);
++
++   /* These will be reallocated if needed. NULL them out so we don't
++    * use-after-free later.
++    */
++   impl->dom_lca_info.table.table = NULL;
++   impl->dom_lca_info.block_from_idx = NULL;
+ }
+ 
+ static void
+-- 
+GitLab
+

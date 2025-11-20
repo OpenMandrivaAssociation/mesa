@@ -1,0 +1,90 @@
+From 581e201960a55bf5dbf7a9506b3ae55ad2a4f467 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Timur=20Krist=C3=B3f?= <timur.kristof@gmail.com>
+Date: Fri, 7 Nov 2025 10:41:36 +0100
+Subject: [PATCH] radv: Disable sparse mapping when unsupported by VM
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Also disable the sparse binding queue and other related features.
+Using sparse on GFX6-8 can cause GPU hangs at the moment.
+
+Cc: mesa-stable
+Signed-off-by: Timur Kristóf <timur.kristof@gmail.com>
+Reviewed-by: Marek Olšák <marek.olsak@amd.com>
+Reviewed-by: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38304>
+(cherry picked from commit 1c8881fc605936d403d95426d813cced66d003c2)
+---
+ .pick_status.json                     | 2 +-
+ src/amd/vulkan/radv_formats.c         | 3 +++
+ src/amd/vulkan/radv_physical_device.c | 4 ++--
+ src/amd/vulkan/radv_physical_device.h | 3 ++-
+ 4 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 0fbd20ece1517..63f71cfa91c79 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -594,7 +594,7 @@
+         "description": "radv: Disable sparse mapping when unsupported by VM",
+         "nominated": true,
+         "nomination_type": 1,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": null,
+         "notes": null
+diff --git a/src/amd/vulkan/radv_formats.c b/src/amd/vulkan/radv_formats.c
+index 38f0fdc8d675a..1a8c613177cfc 100644
+--- a/src/amd/vulkan/radv_formats.c
++++ b/src/amd/vulkan/radv_formats.c
+@@ -1056,6 +1056,9 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
+    }
+ 
+    if (info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
++      if (!pdev->info.has_sparse_vm_mappings)
++         goto unsupported;
++
+       /* Sparse resources with multi-planar formats are unsupported. */
+       if (vk_format_get_plane_count(format) > 1)
+          goto unsupported;
+diff --git a/src/amd/vulkan/radv_physical_device.c b/src/amd/vulkan/radv_physical_device.c
+index 7ac0ba41e783a..11a02a0c71129 100644
+--- a/src/amd/vulkan/radv_physical_device.c
++++ b/src/amd/vulkan/radv_physical_device.c
+@@ -867,7 +867,7 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
+       .shaderFloat64 = true,
+       .shaderInt64 = true,
+       .shaderInt16 = true,
+-      .sparseBinding = true,
++      .sparseBinding = pdev->info.has_sparse_vm_mappings,
+       .sparseResidencyBuffer = pdev->info.family >= CHIP_POLARIS10,
+       .sparseResidencyImage2D = pdev->info.family >= CHIP_POLARIS10,
+       .sparseResidencyImage3D = pdev->info.family >= CHIP_POLARIS10,
+@@ -1527,7 +1527,7 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
+       .maxMemoryAllocationCount = UINT32_MAX,
+       .maxSamplerAllocationCount = 64 * 1024,
+       .bufferImageGranularity = 1,
+-      .sparseAddressSpaceSize = pdev->info.virtual_address_max,
++      .sparseAddressSpaceSize = pdev->info.has_sparse_vm_mappings ? pdev->info.virtual_address_max : 0,
+       .maxBoundDescriptorSets = MAX_SETS,
+       .maxPerStageDescriptorSamplers = max_descriptor_set_size,
+       .maxPerStageDescriptorUniformBuffers = max_descriptor_set_size,
+diff --git a/src/amd/vulkan/radv_physical_device.h b/src/amd/vulkan/radv_physical_device.h
+index 30fac919d2ca9..fa48432e74023 100644
+--- a/src/amd/vulkan/radv_physical_device.h
++++ b/src/amd/vulkan/radv_physical_device.h
+@@ -230,7 +230,8 @@ radv_dedicated_sparse_queue_enabled(const struct radv_physical_device *pdev)
+ {
+    /* Dedicated sparse queue requires VK_QUEUE_SUBMIT_MODE_THREADED, which is incompatible with
+     * VK_DEVICE_TIMELINE_MODE_EMULATED. */
+-   return pdev->info.has_timeline_syncobj;
++   return pdev->info.has_timeline_syncobj &&
++          pdev->info.has_sparse_vm_mappings;
+ }
+ 
+ static inline bool
+-- 
+GitLab
+

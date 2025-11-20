@@ -1,0 +1,75 @@
+From fd5c33c03a706c52b8a07eddcda442877575b233 Mon Sep 17 00:00:00 2001
+From: Karol Herbst <kherbst@redhat.com>
+Date: Tue, 11 Nov 2025 17:51:26 +0100
+Subject: [PATCH] rusticl/kernel: Do not run kernels with a workgroup size
+ beyond work_dim
+
+When no workgroup size is specified we try to run with the most optimal one
+possible. However we didn't take into account that we shouldn't run a
+workgroup of higher dimensionality than requested by the application.
+
+Fixes: 376d1e6667a ("rusticl: implement cl_khr_suggested_local_work_size")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38375>
+(cherry picked from commit d46be8fbf2cf784c2c940c3524b4cf5fcc020853)
+---
+ .pick_status.json                            |  2 +-
+ src/gallium/frontends/rusticl/core/kernel.rs | 14 ++++++++++----
+ 2 files changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index 1960501c363b6..fd57c610bab1c 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -684,7 +684,7 @@
+         "description": "rusticl/kernel: Do not run kernels with a workgroup size beyond work_dim",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "376d1e6667a80e1811d4c25115633817f16666a7",
+         "notes": null
+diff --git a/src/gallium/frontends/rusticl/core/kernel.rs b/src/gallium/frontends/rusticl/core/kernel.rs
+index fce7192384094..a723e00b4cb7d 100644
+--- a/src/gallium/frontends/rusticl/core/kernel.rs
++++ b/src/gallium/frontends/rusticl/core/kernel.rs
+@@ -1478,7 +1478,13 @@ impl Kernel {
+         }
+     }
+ 
+-    fn optimize_local_size(&self, d: &Device, grid: &mut [usize; 3], block: &mut [u32; 3]) {
++    fn optimize_local_size(
++        &self,
++        d: &Device,
++        work_dim: u32,
++        grid: &mut [usize; 3],
++        block: &mut [u32; 3],
++    ) {
+         if !block.contains(&0) {
+             for i in 0..3 {
+                 // we already made sure everything is fine
+@@ -1492,10 +1498,10 @@ impl Kernel {
+             usize_block[i] = block[i] as usize;
+         }
+ 
+-        self.suggest_local_size(d, 3, grid, &mut usize_block);
++        self.suggest_local_size(d, work_dim as usize, grid, &mut usize_block);
+ 
+         for i in 0..3 {
+-            block[i] = usize_block[i] as u32;
++            block[i] = 1.max(usize_block[i] as u32);
+         }
+     }
+ 
+@@ -1549,7 +1555,7 @@ impl Kernel {
+ 
+         let api_grid = grid;
+ 
+-        self.optimize_local_size(q.device, &mut grid, &mut block);
++        self.optimize_local_size(q.device, work_dim, &mut grid, &mut block);
+ 
+         Ok(Box::new(move |cl_ctx, ctx| {
+             let hw_max_grid = ctx.dev.max_grid_size();
+-- 
+GitLab
+

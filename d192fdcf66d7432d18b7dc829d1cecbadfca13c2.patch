@@ -1,0 +1,70 @@
+From d192fdcf66d7432d18b7dc829d1cecbadfca13c2 Mon Sep 17 00:00:00 2001
+From: Connor Abbott <cwabbott0@gmail.com>
+Date: Mon, 3 Nov 2025 21:18:53 +0100
+Subject: [PATCH] tu: Handle case where pipeline writes unused color
+ attachments
+
+With VK_EXT_unused_attachments, we may have a case where the FS writes
+to attachments 0 and 1, both have valid formats and are enabled, yet the
+renderpass only has 1 color attachment. In this case we would set
+RB_PS_MRT_CNTL to 2, but since we never emitted RB_MRT_BUF_INFO[1] and
+so on, we would get garbage attachment info from the last render pass
+and end up writing to an attachment that doesn't exist.
+
+Fix this by disabling attachments that are unused. We can't move setting
+RB_PS_MRT_CNTL to emitting when we emit color RT state, because then we
+have the inverse problem of a FS that writes to attachments 0 and 1, a
+renderpass that has 2 attachments, but a blend state that only includes
+1 attachment (and therefore disables color writes for attachment 1). At
+least one side (blending or RT emission) has to assume that the other
+side may have more RTs enabled and disable the rest of the RTs up to
+MAX_RTS.
+
+Fixes: c2eb768eb22 ("tu: Expose VK_EXT_dynamic_rendering_unused_attachments")
+Part-of: <https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/38250>
+(cherry picked from commit 6064e3a7d82ecd31f54f5a77c01ce4253f0e79fe)
+---
+ .pick_status.json                     | 2 +-
+ src/freedreno/vulkan/tu_cmd_buffer.cc | 6 +++++-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/.pick_status.json b/.pick_status.json
+index c0ad666436bfe..43173d0b4e611 100644
+--- a/.pick_status.json
++++ b/.pick_status.json
+@@ -1014,7 +1014,7 @@
+         "description": "tu: Handle case where pipeline writes unused color attachments",
+         "nominated": true,
+         "nomination_type": 2,
+-        "resolution": 0,
++        "resolution": 1,
+         "main_sha": null,
+         "because_sha": "c2eb768eb22287a5cc0cf578f677dc0157ab008e",
+         "notes": null
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index 827da210e84d9..d96e76991b110 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -588,7 +588,7 @@ tu6_emit_mrt(struct tu_cmd_buffer *cmd,
+    }
+ 
+    u_foreach_bit (i, ~written) {
+-      if (i >= subpass->color_count)
++      if (i >= MAX_RTS)
+          break;
+ 
+       /* From the VkPipelineRenderingCreateInfo definition:
+@@ -602,6 +602,10 @@ tu6_emit_mrt(struct tu_cmd_buffer *cmd,
+        * here should prevent them from writing to anything. This also seems
+        * to also be required for alpha-to-coverage which can use the alpha
+        * value for an otherwise-unused attachment.
++       *
++       * With VK_EXT_dynamic_rendering_unused_attachments, pipelines may also
++       * write to attachments beyond those that exist in the render pass, so
++       * we have all attachments not written up to MAX_RTS.
+        */
+        tu_cs_emit_regs(cs,
+          RB_MRT_BUF_INFO(CHIP, i),
+-- 
+GitLab
+
