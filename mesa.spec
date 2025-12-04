@@ -131,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	25.3.0
+Version:	25.3.1
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}2
 Group:		System/Libraries
 License:	MIT
@@ -232,40 +232,6 @@ Patch14:	mesa-25.2-aarch64-compile.patch
 # Currently no patches required
 
 # From upstream
-Patch1000:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/62188b9ee128983158e813ec5faf4bfa96390624.patch
-Patch1001:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/572b63960f59f1da22aa815ce93b36c1c4a3a4c6.patch
-Patch1002:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/408c0986b5d7a478ef10061c7006f1b6962ed214.patch
-Patch1003:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/d192fdcf66d7432d18b7dc829d1cecbadfca13c2.patch
-Patch1004:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/b1c32cbee9083efd0caff087fd68c339f7b4a4c6.patch
-Patch1005:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/ddc1be73d140945c31df7265c447f94db7703d07.patch
-Patch1006:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/9ece69f6fa229f59bfe66acf1b4776f342711cfb.patch
-Patch1007:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/7926f888997eff464cb12ecb2dd6d8672b6f3b97.patch
-Patch1008:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/581e201960a55bf5dbf7a9506b3ae55ad2a4f467.patch
-Patch1009:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/32fe63d091ae3685c42b524cc476f4e408c2e778.patch
-Patch1010:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/03be9ed679e9043a273d8d052724a43c51ca84c9.patch
-Patch1011:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/4c1435fb92fbf31116ec3dbb2e0bdf73b5874793.patch
-Patch1012:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/dc52f2e4386ce5e177b523c39681479df6363c0a.patch
-Patch1013:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/1e6aec2fa398134246a0aea4496aaa8949677455.patch
-Patch1014:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/8404366d2f8efdf422ee835d322ffc741f357961.patch
-Patch1015:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/ecae718b5bba470dbab43826f6896c9a6b1a7316.patch
-Patch1016:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/8082052636540808fef65677eaa129e3d32361c7.patch
-Patch1017:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/e7899b17ac9a91eebf9ba20503a98691bb4b8178.patch
-Patch1018:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/fd12c95ccc0c3ea88759b9911db3e90dc25d6cdc.patch
-Patch1019:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/0155d3c7e2168d7376bb2f3ed62563f002ac21aa.patch
-Patch1020:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/3971bceb15f7fc4d83e8fbd209945269f657a070.patch
-Patch1021:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/6fc34ae63294aacf18e4fb1c8909b2b957eb8db4.patch
-Patch1022:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/9afb9eda277bcf9a734a5f9d91159d57aad7e59b.patch
-Patch1023:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/3ea39caea3457b1e8f35d83f3a01136f1553b33e.patch
-Patch1024:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/14a8d894d052c4c2b8fe4526f6da75f1a581e2db.patch
-Patch1025:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/0027315f4d2a4d219d52fbb00651577ba6b01822.patch
-Patch1026:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/fd5c33c03a706c52b8a07eddcda442877575b233.patch
-Patch1027:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/2c63a7ff5bc39f70bb96c03bea5ddb792c05ad50.patch
-Patch1028:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/0589f69702fc2da8afe9a044a57137943b13f1cd.patch
-Patch1029:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/2aaf58cb829c7e51ad38dc4a891c394889e22b5b.patch
-Patch1030:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/0765b2d10b647ac19dc016dc26478921be1f7564.patch
-Patch1031:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/4b2460ae89eb931a7c3bd4a5c04189743f056338.patch
-Patch1032:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/92f56777b3ebbf780ef55f64e23f84a34ce71f21.patch
-Patch1033:	https://gitlab.freedesktop.org/mesa/mesa/-/commit/841c868ccbfe1592ba0362ab1d1e732492aea79b.patch
 
 BuildRequires:	flex
 BuildRequires:	bison
