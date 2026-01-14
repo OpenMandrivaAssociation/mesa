@@ -850,8 +850,8 @@ if ! %meson \
 	-Dcpp_std=c++17 \
 	-Dandroid-libbacktrace=disabled \
 %if %{cross_compiling}
-	-Dgallium-drivers=swrast,r300,r600,svga,radeonsi,nouveau,zink \
-	-Dvulkan-drivers=swrast,virtio \
+	-Dgallium-drivers=llvmpipe,softpipe,r300,r600,svga,radeonsi,nouveau,zink \
+	-Dvulkan-drivers=virtio \
 %else
 %ifarch %{armx}
 	-Dgallium-drivers=auto,r300,r600,svga,radeonsi,freedreno,etnaviv,tegra,vc4,v3d,lima,panfrost,zink \
