@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-#define relc 4
+%define relc 3
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -131,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	25.3.4
+Version:	26.0.0
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
@@ -225,7 +225,6 @@ Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 #Patch10:	mesa-24.0.2-buildfix32.patch
 ###FIXME Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
-Patch13:	mesa-25.2-llvm-21.patch
 Patch14:	mesa-25.2-aarch64-compile.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git

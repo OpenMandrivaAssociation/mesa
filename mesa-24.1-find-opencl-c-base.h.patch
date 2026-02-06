@@ -5,8 +5,49 @@ diff -up mesa-25.1.0-rc1/src/intel/shaders/meson.build.3~ mesa-25.1.0-rc1/src/in
        '-I' + join_paths(dir_source_root, 'src/intel'),
        '-I' + join_paths(meson.project_build_root(), 'src/intel'),
        '-I' + join_paths(dir_source_root, 'src/intel/genxml'),
-+      '-I/usr/lib64/clang/19/include',
-+      '-I/usr/lib64/clang/20/include',
++      '-I/usr/lib64/clang/21/include',
++      '-I/usr/lib64/clang/22/include',
        cl_args,
      ],
      depends : [gen_cl_xml_pack, intel_dev_wa_src],
+diff -up mesa-26.0.0-rc3/src/compiler/clc/meson.build.omv~ mesa-26.0.0-rc3/src/compiler/clc/meson.build
+--- mesa-26.0.0-rc3/src/compiler/clc/meson.build.omv~	2026-02-06 19:55:49.054078054 +0100
++++ mesa-26.0.0-rc3/src/compiler/clc/meson.build	2026-02-06 19:58:16.036419488 +0100
+@@ -103,7 +103,7 @@ _libmesaclc = static_library(
+   'libmesaclc',
+   files_libmesaclc,
+   sources: _libmesaclc_sources,
+-  include_directories : [inc_include, inc_src, inc_spirv],
++  include_directories : [inc_include, inc_src, inc_spirv, '/usr/lib64/clang/21/include'],
+   c_args : _libmesaclc_c_args,
+   cpp_args : [_libmesaclc_cpp_args, _libmesaclc_c_args],
+   dependencies: [idep_nir, dep_clang, dep_llvm, dep_llvmspirvlib,
+diff -up mesa-26.0.0-rc3/src/intel/blorp/meson.build.omv~ mesa-26.0.0-rc3/src/intel/blorp/meson.build
+--- mesa-26.0.0-rc3/src/intel/blorp/meson.build.omv~	2026-02-06 19:58:51.050194814 +0100
++++ mesa-26.0.0-rc3/src/intel/blorp/meson.build	2026-02-06 20:00:24.376594725 +0100
+@@ -15,6 +15,7 @@ blorp_shaders_spv = custom_target(
+     '-I' + join_paths(meson.project_source_root(), 'src/compiler/libcl'),
+     '-I' + join_paths(meson.project_source_root(), 'src'),
+     '-I' + join_paths(meson.current_source_dir(), '.'),
++    '-I/usr/lib64/clang/21/include',
+     cl_args,
+     ],
+   depends : [gen_cl_xml_pack],
+@@ -54,7 +55,7 @@ files_blorp_elk = files(
+ libblorp = static_library(
+   'blorp',
+   [files_libblorp, files_blorp_brw],
+-  include_directories : [inc_include, inc_src, inc_intel, inc_intel_compiler],
++  include_directories : [inc_include, inc_src, inc_intel, inc_intel_compiler, '/usr/lib64/clang/21/include'],
+   c_args : [no_override_init_args],
+   gnu_symbol_visibility : 'hidden',
+   dependencies : [
+@@ -72,7 +73,7 @@ if with_intel_elk
+   libblorp_elk = static_library(
+     'blorp_elk',
+     [files_libblorp, files_blorp_elk],
+-    include_directories : [inc_include, inc_src, inc_intel],
++    include_directories : [inc_include, inc_src, inc_intel, '/usr/lib64/clang/21/include'],
+     c_args : [no_override_init_args],
+     gnu_symbol_visibility : 'hidden',
+     dependencies : [
