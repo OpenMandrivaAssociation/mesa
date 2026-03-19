@@ -22,7 +22,7 @@
 # or trying to pin point a specific issue. Nobody install debug symbols by default
 %ifarch %{aarch64}
 # In LLVM 18.0.0-rc1, O3 on aarch64 results in a build failure
-%global optflags %{optflags} -O2 -fno-strict-aliasing -g1 -flto=thin
+%global optflags %{optflags} -O3 -fno-strict-aliasing -g1 -flto=thin
 %else
 %global optflags %{optflags} -O3 -fno-strict-aliasing -g1 -flto=thin
 %endif
@@ -131,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	26.0.2
+Version:	26.0.3
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
