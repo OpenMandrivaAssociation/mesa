@@ -322,6 +322,8 @@ BuildRequires:	%{name}-buildtools = %{version}
 %endif
 
 %if %{with compat32}
+BuildRequires:	cross-i686-openmandriva-linux-gnu-clang
+BuildRequires:	cross-i686-openmandriva-linux-gnu-gcc
 BuildRequires:	devel(libdrm)
 BuildRequires:	devel(libX11)
 BuildRequires:	devel(libXdamage)
