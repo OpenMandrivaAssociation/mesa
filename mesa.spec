@@ -11,7 +11,7 @@
 
 # Mesa is used by wine and steam
 %ifarch %{x86_64}
-%bcond_with compat32
+%bcond_without compat32
 %else
 %bcond_with compat32
 %endif
@@ -132,7 +132,7 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	26.1.0
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}2
 Group:		System/Libraries
 License:	MIT
 Url:		https://www.mesa3d.org
@@ -986,8 +986,6 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 
 %ifarch %{armx}
 %files -n freedreno-tools
-%{_bindir}/afuc-asm
-%{_bindir}/afuc-disasm
 %{_bindir}/cffdump
 %{_bindir}/computerator
 %{_bindir}/crashdec
