@@ -11,7 +11,7 @@
 
 # Mesa is used by wine and steam
 %ifarch %{x86_64}
-%bcond_without compat32
+%bcond_with compat32
 %else
 %bcond_with compat32
 %endif
@@ -131,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	26.0.2
+Version:	26.0.5
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
@@ -225,6 +225,7 @@ Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 #Patch10:	mesa-24.0.2-buildfix32.patch
 ###FIXME Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
+Patch13:	mesa-26.0-missing-include.patch
 Patch14:	mesa-25.2-aarch64-compile.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
@@ -315,6 +316,10 @@ BuildRequires:	cbindgen
 
 # package mesa
 Requires:	libGL.so.1%{_arch_tag_suffix}
+
+%if %{with compat32} || %{cross_compiling}
+BuildRequires:	%{name}-buildtools = %{EVRD}
+%endif
 
 %if %{with compat32}
 BuildRequires:	devel(libdrm)
@@ -727,6 +732,17 @@ Group:		Development/Tools
 %description tools
 Tools for debugging Mesa drivers.
 
+%package buildtools
+Summary:	Mesa build tools needed for crosscompiling mesa
+Group:		Development/Tools
+
+%description buildtools
+Mesa build tools needed for crosscompiling mesa.
+
+%files buildtools
+%{_bindir}/vtn_bindgen2
+%{_bindir}/mesa_clc
+
 %prep
 %autosetup -p1 -a1 -n mesa-%{?git:%{git_branch}}%{!?git:%{version}%{vsuffix}}
 
@@ -762,10 +778,13 @@ EOF
 # Let's just hope anything that is old enough to be 32-bit also
 # predates vulkan!
 # for opencl-c-base.h
-export CC="%{__cc} -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include"
+export CC="%{__cc} -m32 -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include -isystem %{_includedir}"
+export CXX="%{__cxx} -m32 -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include -isystem %{_includedir}"
+export LDFLAGS="-m32 -L%{_prefix}/lib"
 if ! %meson32 \
 	-Dgallium-mediafoundation=disabled \
 	-Dmicrosoft-clc=disabled \
+	-Dmesa-clc=system \
 	-Dshared-llvm=enabled \
 	--cross-file=i686.cross \
 	-Db_ndebug=true \
@@ -802,6 +821,8 @@ if ! %meson32 \
 	cat build32/meson-logs/meson-log.txt >/dev/stderr
 fi
 unset CC
+unset CXX
+unset LDFLAGS
 
 %ninja_build -C build32/
 rm llvm-config
@@ -840,9 +861,11 @@ sed -i -e "/binaries/allvm-config = '$(pwd)/llvm-config'" cross.cross
 if ! %meson \
 %if %{cross_compiling}
 	--cross-file=cross.cross \
+	-Dmesa-clc=system \
 	-Dvalgrind=disabled \
 %endif
 	-Dmicrosoft-clc=disabled \
+	-Dinstall-mesa-clc=true \
 	-Dshared-llvm=enabled \
 	-Db_ndebug=true \
 	-Dc_std=c11 \

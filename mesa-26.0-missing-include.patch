@@ -1,0 +1,11 @@
+diff -up mesa-26.0.5/src/gallium/drivers/r600/sfn/sfn_valuefactory.cpp.omv~ mesa-26.0.5/src/gallium/drivers/r600/sfn/sfn_valuefactory.cpp
+--- mesa-26.0.5/src/gallium/drivers/r600/sfn/sfn_valuefactory.cpp.omv~	2026-04-19 19:40:49.492713634 +0200
++++ mesa-26.0.5/src/gallium/drivers/r600/sfn/sfn_valuefactory.cpp	2026-04-19 19:41:55.790433958 +0200
+@@ -14,6 +14,7 @@
+ #include <iostream>
+ #include <queue>
+ #include <sstream>
++#include <limits>
+ 
+ namespace r600 {
+ 
