@@ -318,7 +318,7 @@ BuildRequires:	cbindgen
 Requires:	libGL.so.1%{_arch_tag_suffix}
 
 %if %{with compat32} || %{cross_compiling}
-BuildRequires:	%{name}-buildtools = %{EVRD}
+BuildRequires:	%{name}-buildtools = %{version}
 %endif
 
 %if %{with compat32}
@@ -990,6 +990,8 @@ rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
 %{_bindir}/computerator
 %{_bindir}/crashdec
 %{_bindir}/fdperf
+%{_bindir}/qrisc-asm
+%{_bindir}/qrisc-disasm
 %{_datadir}/freedreno
 %endif
 
