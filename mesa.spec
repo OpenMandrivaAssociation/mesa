@@ -11,7 +11,7 @@
 
 # Mesa is used by wine and steam
 %ifarch %{x86_64}
-%bcond_without compat32
+%bcond_with compat32
 %else
 %bcond_with compat32
 %endif
@@ -131,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	26.1.3
+Version:	26.1.4
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
