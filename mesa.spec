@@ -30,8 +30,8 @@
 
 #define git 20240114
 %define git_branch main
-#define git_branch %%(echo %%{version} |cut -d. -f1-2)
-#define relc 3
+#define git_branch %(echo %{version} |cut -d. -f1-2)
+%define relc 2
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -131,7 +131,7 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	26.1.5
+Version:	26.2.0
 Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
@@ -227,6 +227,13 @@ Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
 Patch13:	mesa-26.0-missing-include.patch
 Patch14:	mesa-25.2-aarch64-compile.patch
+# LLVM 23 moved libclc into the clang resource dir and dropped libclc.pc.
+# Based on draft mesa!40601 (completed for packaging: optional pkg-config +
+# per-triple spirv{32,64}-unknown-unknown/libclc.spv paths).
+Patch15:	mesa-26.2-llvm23-libclc.patch
+# gen_private.h uses std::size_t without including <cstddef>; fails 32-bit builds
+# where transitive includes do not pull it in.
+Patch16:	mesa-26.2-gen-private-cstddef.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required
@@ -292,7 +299,7 @@ BuildRequires:	pkgconfig(libconfig)
 BuildRequires:	pkgconfig(SPIRV-Tools)
 BuildRequires:	pkgconfig(libunwind)
 %if %{with opencl}
-BuildRequires:	pkgconfig(libclc)
+#BuildRequires:	pkgconfig(libclc)
 BuildRequires:	libclc-amdgcn
 BuildRequires:	libclc-spirv
 BuildRequires:	cmake(Clang)
@@ -900,7 +907,7 @@ if ! %meson \
 	-Dgallium-mediafoundation=disabled \
 	-Dglx=dri \
 	-Dplatforms=wayland,x11 \
-	-Degl-native-platform=wayland \
+	-Degl-native-platform=x11 \
 	-Dvulkan-layers=device-select,overlay \
 	-Dvulkan-beta=true \
 	-Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec,av1dec,av1enc,vp9dec \
@@ -1073,15 +1080,16 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %{_bindir}/intel_stub_gpu
 %{_bindir}/intel_monitor
 %{_bindir}/mda
-%{_bindir}/brw_asm
-%{_bindir}/brw_disasm
+# brw_asm/brw_disasm removed upstream in favor of elk_* (intel compiler split)
 %{_bindir}/elk_asm
 %{_bindir}/elk_disasm
 %{_libexecdir}/libintel_dump_gpu.so
 %{_libexecdir}/libintel_sanitize_gpu.so
 %endif
 %{_bindir}/nv_mme_dump
+%{_bindir}/nv_mme_method_dumper
 %{_bindir}/nv_push_dump
+%{_bindir}/gentool
 %ifarch %{armx}
 %{_bindir}/generate_rd
 %{_bindir}/panfrostdump

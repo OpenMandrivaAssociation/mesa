@@ -1,0 +1,11 @@
+--- mesa-26.2.0-rc2/src/intel/compiler/gen/gen_private.h	2026-07-22 15:37:39.000000000 +0200
++++ mesa-patched/src/intel/compiler/gen/gen_private.h	2026-07-23 19:39:26.924393969 +0200
+@@ -3,6 +3,8 @@
+  * SPDX-License-Identifier: MIT
+  */
+ 
++#include <cstddef>
++
+ #include "gen.h"
+ #include "gen_names.h"
+ 
