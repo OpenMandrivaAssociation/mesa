@@ -30,7 +30,7 @@
 
 #define git 20240114
 %define git_branch main
-#define git_branch %(echo %{version} |cut -d. -f1-2)
+#define git_branch %%(echo %%{version} |cut -d. -f1-2)
 #define relc 3
 
 %ifarch %{riscv}
@@ -426,7 +426,7 @@ Obsoletes:	%{_lib}XvMCgallium1 <= 22.0.0-0.rc2.1
 Obsoletes:	vdpau-drivers < %{EVRD}
 
 %description -n %{dridrivers}
-DRI and Vulkan drivers.
+Mesa DRI and Vulkan drivers.
 
 %ifarch %{armx} %{riscv}
 %package -n freedreno-tools
@@ -971,6 +971,10 @@ find %{buildroot} -name '*.la' |xargs rm -f
 # (tpg) remove wayland files as they are now part of wayland package
 rm -rf %{buildroot}%{_libdir}/libwayland-egl.so*
 rm -rf %{buildroot}%{_libdir}/pkgconfig/wayland-egl.pc
+
+# Fix perms
+chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
+
 
 %files
 %doc docs/README.*
