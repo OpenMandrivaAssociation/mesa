@@ -1,5 +1,17 @@
-# False positive (9.1 vs. 9.1.0)
-addFilter("E: incoherent-version-in-name")
+# Mesa-tools contains one private library, while not being a library package
+addFilter("E: executable-in-library-package")
+addFilter("E: non-versioned-file-in-library-package")
 
-# libswrAVX*.so files for dlopen-ing
-addFilter("E: devel-file-in-non-devel-package")
+# .icd and .json config files don't go in %%_libdir
+addFilter("W: non-conffile-in-etc")
+addFilter("E: outside-libdir-files")
+
+# If upstream does not provide a man page we cand do nothing about it
+addFilter("W: no-manual-page-for-binary")
+
+# All the files flagged by rpmlint are private library, so this is OK
+addFilter("E: invalid-soname")
+# ... ditto for libRusticlOpenCL.so
+addFilter("W: devel-file-in-non-devel-package")
+
+#addFilter("E: unused-rpmlintrc-filter")
