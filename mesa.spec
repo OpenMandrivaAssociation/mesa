@@ -1070,6 +1070,7 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %{_bindir}/aubinator_viewer
 %endif
 %{_bindir}/executor
+%{_bindir}/gentool
 %{_bindir}/intel_error2hangdump
 %{_bindir}/intel_hang_replay
 %{_bindir}/intel_dev_info
@@ -1089,7 +1090,6 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %{_bindir}/nv_mme_dump
 %{_bindir}/nv_mme_method_dumper
 %{_bindir}/nv_push_dump
-%{_bindir}/gentool
 %ifarch %{armx}
 %{_bindir}/generate_rd
 %{_bindir}/panfrostdump
