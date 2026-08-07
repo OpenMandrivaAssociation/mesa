@@ -11,7 +11,7 @@
 
 # Mesa is used by wine and steam
 %ifarch %{x86_64}
-%bcond_without compat32
+%bcond_with compat32
 %else
 %bcond_with compat32
 %endif
@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-%define relc 2
+#define relc 2
 
 %ifarch %{riscv}
 %bcond_with gcc
