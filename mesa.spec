@@ -234,6 +234,8 @@ Patch15:	mesa-26.2-llvm23-libclc.patch
 # gen_private.h uses std::size_t without including <cstddef>; fails 32-bit builds
 # where transitive includes do not pull it in.
 Patch16:	mesa-26.2-gen-private-cstddef.patch
+# LLVM 23 ObjectLinkingLayer creator takes a memory manager and returns Expected<>
+Patch17:	mesa-26.2-llvm23-orc-jitlink.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required
