@@ -1,8 +1,9 @@
---- a/src/gallium/auxiliary/gallivm/lp_bld_init_orc.cpp
-+++ b/src/gallium/auxiliary/gallivm/lp_bld_init_orc.cpp
+diff -ruN a/src/gallium/auxiliary/gallivm/lp_bld_init_orc.cpp b/src/gallium/auxiliary/gallivm/lp_bld_init_orc.cpp
+--- a/src/gallium/auxiliary/gallivm/lp_bld_init_orc.cpp	2026-08-19 03:01:16.304156845 +0200
++++ b/src/gallium/auxiliary/gallivm/lp_bld_init_orc.cpp	2026-08-19 03:01:42.904515662 +0200
 @@ -339,15 +339,24 @@
           .setJITTargetMachineBuilder(std::move(JTMB))
-#ifdef USE_JITLINK
+ #ifdef USE_JITLINK
           .setObjectLinkingLayerCreator(
 -#if LLVM_VERSION_MAJOR >= 21
 +#if LLVM_VERSION_MAJOR >= 23
@@ -17,13 +18,13 @@
 +               return std::make_unique<ObjectLinkingLayer>(
 +                  ES, ExitOnErr(llvm::jitlink::InProcessMemoryManager::Create()));
 +            })
-#else
+ #else
              [&](ExecutionSession &ES, const llvm::Triple &TT) {
 -#endif
                 return std::make_unique<ObjectLinkingLayer>(
                    ES, ExitOnErr(llvm::jitlink::InProcessMemoryManager::Create()));
              })
 +#endif
-#else
-#if LLVM_USE_INTEL_JITEVENTS
+ #else
+ #if LLVM_USE_INTEL_JITEVENTS
           .RegisterJITEventListener(
