@@ -1,0 +1,54 @@
+diff -ruN a/meson.build b/meson.build
+--- a/meson.build	2026-08-19 03:53:05.154075294 +0200
++++ b/meson.build	2026-08-19 03:53:50.903820088 +0200
+@@ -986,7 +986,8 @@
+   prog_mesa_clc = find_program('mesa_clc', native : true)
+   prog_vtn_bindgen2 = find_program('vtn_bindgen2', native : true)
+   # Even with mesa-clc already built, rusticl still needs clc.
+-  with_clc = with_gallium_rusticl
++  # install-mesa-clc also needs libmesaclc so we can emit target tools.
++  with_clc = with_gallium_rusticl or get_option('install-mesa-clc')
+ else
+   with_clc = get_option('mesa-clc') != 'auto' or \
+              with_microsoft_clc or \
+diff -ruN a/src/compiler/clc/meson.build b/src/compiler/clc/meson.build
+--- a/src/compiler/clc/meson.build	2026-08-19 03:53:05.154309276 +0200
++++ b/src/compiler/clc/meson.build	2026-08-19 03:53:50.891820459 +0200
+@@ -161,4 +161,17 @@
+     native : not meson.can_run_host_binaries(),
+     install : get_option('install-mesa-clc'),
+   )
++elif get_option('mesa-clc') == 'system' and get_option('install-mesa-clc')
++  # Cross builds use the host tools found above; still ship target copies
++  # so a later native rebuild on the target has mesa-buildtools.
++  executable(
++    'mesa_clc',
++    ['mesa_clc.c'],
++    include_directories : [inc_include, inc_src],
++    c_args : [pre_args, no_override_init_args],
++    link_args : [ld_args_build_id],
++    dependencies : [idep_mesaclc, dep_llvm, dep_spirv_tools, idep_getopt],
++    native : false,
++    install : true,
++  )
+ endif
+diff -ruN a/src/compiler/spirv/meson.build b/src/compiler/spirv/meson.build
+--- a/src/compiler/spirv/meson.build	2026-07-22 15:37:39.000000000 +0200
++++ b/src/compiler/spirv/meson.build	2026-08-19 03:53:50.895820335 +0200
+@@ -92,6 +92,16 @@
+      native : not meson.can_run_host_binaries(),
+      install : get_option('install-mesa-clc'),
+    )
++elif get_option('mesa-clc') == 'system' and get_option('install-mesa-clc')
++   executable(
++     'vtn_bindgen2',
++     ['vtn_bindgen2.c'],
++     include_directories : [inc_include, inc_src],
++     c_args : [c_msvc_compat_args, no_override_init_args],
++     dependencies : [idep_vtn, idep_mesautil, idep_nir],
++     native : false,
++     install : true,
++   )
+ endif
+ 
+ if with_tests and not with_nir_headers_only

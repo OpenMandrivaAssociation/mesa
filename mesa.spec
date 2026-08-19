@@ -236,6 +236,8 @@ Patch15:	mesa-26.2-llvm23-libclc.patch
 Patch16:	mesa-26.2-gen-private-cstddef.patch
 # LLVM 23 ObjectLinkingLayer creator takes a memory manager and returns Expected<>
 Patch17:	mesa-26.2-llvm23-orc-jitlink.patch
+# Cross: use host mesa_clc/vtn_bindgen2, but still install target copies.
+Patch18:	mesa-26.2-install-target-clc.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required
