@@ -132,7 +132,7 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	26.2.0
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}4
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}5
 Group:		System/Libraries
 License:	MIT
 Url:		https://www.mesa3d.org
@@ -878,6 +878,7 @@ if ! %meson \
 	--cross-file=cross.cross \
 	-Dmesa-clc=system \
 	-Dvalgrind=disabled \
+	-Ddisplay-info=disabled \
 %endif
 	-Dmicrosoft-clc=disabled \
 	-Dinstall-mesa-clc=true \
@@ -1091,9 +1092,9 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %{_libexecdir}/libintel_dump_gpu.so
 %{_libexecdir}/libintel_sanitize_gpu.so
 %endif
-%{_bindir}/nv_mme_dump
-%{_bindir}/nv_mme_method_dumper
-%{_bindir}/nv_push_dump
+%optional %{_bindir}/nv_mme_dump
+%optional %{_bindir}/nv_mme_method_dumper
+%optional %{_bindir}/nv_push_dump
 %ifarch %{armx}
 %{_bindir}/generate_rd
 %{_bindir}/panfrostdump
