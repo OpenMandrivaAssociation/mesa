@@ -99,6 +99,8 @@
 
 %define dridrivers %mklibname dri-drivers
 %define dridrivers32 %mklib32name dri-drivers
+%define libgallium %mklibname gallium
+%define lib32gallium %mklib32name gallium
 
 %define gbmmajor 1
 %define gbmname gbm
@@ -138,7 +140,7 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	26.2.1
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}3
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}4
 Group:		System/Libraries
 License:	MIT
 Url:		https://www.mesa3d.org
@@ -246,6 +248,9 @@ Patch16:	mesa-26.2-gen-private-cstddef.patch
 Patch17:	mesa-26.2-llvm23-orc-jitlink.patch
 # Cross: use host mesa_clc/vtn_bindgen2, but still install target copies.
 Patch18:	mesa-26.2-install-target-clc.patch
+# Build each Gallium pipe driver as a real *_dri.so that ELF-links libgallium
+# instead of one megadriver containing every vendor.
+Patch19:	mesa-split-gallium-drivers.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required
@@ -392,64 +397,195 @@ BuildRequires:	libLLVMSPIRVLib-static-devel
 %description
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
 
-%package -n %{dridrivers}
-Summary:	Mesa DRI and Vulkan drivers
+%package -n %{libgallium}
+Summary:	Mesa Gallium shared core (state tracker, NIR, util)
 Group:		System/Libraries
-%rename		%{dridrivers}-swrast
-Conflicts:	%{dridrivers}-swrast <= 22.0.0-0.rc2.1
-%ifnarch %{riscv}
-%rename		%{dridrivers}-virtio
-Conflicts:	%{dridrivers}-virtio <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-vmwgfx
-Conflicts:	%{dridrivers}-vmwgfx <= 22.0.0-0.rc2.1
-%endif
-%ifnarch %{armx} %{riscv}
-%if %{with r600}
-%rename		%{dridrivers}-radeon
-Conflicts:	%{dridrivers}-radeon <= 22.0.0-0.rc2.1
-%endif
-%ifarch %{ix86} %{x86_64}
-%rename		%{dridrivers}-intel
-Conflicts:	%{dridrivers}-intel <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-iris
-Conflicts:	%{dridrivers}-iris <= 22.0.0-0.rc2.1
-%endif
-%rename		%{dridrivers}-nouveau
-Conflicts:	%{dridrivers}-nouveau <= 22.0.0-0.rc2.1
-%endif
-%ifarch %{armx}
-%rename		%{dridrivers}-freedreno
-Conflicts:	%{dridrivers}-freedreno <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-vc4
-Conflicts:	%{dridrivers}-vc4 <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-v3d
-Conflicts:	%{dridrivers}-v3d <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-etnaviv
-Conflicts:	%{dridrivers}-etnaviv <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-tegra
-Conflicts:	%{dridrivers}-tegra <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-lima
-Conflicts:	%{dridrivers}-lima <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-panfrost
-Conflicts:	%{dridrivers}-panfrost <= 22.0.0-0.rc2.1
-%rename		%{dridrivers}-kmsro
-Conflicts:	%{dridrivers}-kmsro <= 22.0.0-0.rc2.1
-%endif
+
+%description -n %{libgallium}
+Shared Mesa Gallium core used by the per-vendor *_dri.so drivers.
+
+%package -n %{dridrivers}
+Summary:	Mesa DRI/Vulkan common files
+Group:		System/Libraries
 # Old OM package
 Provides:	dri-drivers = %{EVRD}
 # Fedora naming, compat Provides: needed to make the
 # zoom RPM install
 Provides:	mesa-dri-drivers = %{EVRD}
+Requires:	%{libgallium} = %{EVRD}
 Requires:	vulkan-loader
 Requires:	%{libgl} = %{EVRD}
 %if %{with egl}
 Requires:	%{libegl} = %{EVRD}
 %endif
+Requires:	%{dridrivers}-swrast = %{EVRD}
+Requires:	%{dridrivers}-zink = %{EVRD}
+%ifnarch %{riscv}
+Recommends:	%{dridrivers}-virtio = %{EVRD}
+Recommends:	%{dridrivers}-vmwgfx = %{EVRD}
+%endif
+%ifnarch %{armx} %{riscv}
+%if %{with r600}
+Recommends:	%{dridrivers}-radeon = %{EVRD}
+%endif
+%ifarch %{ix86} %{x86_64}
+Recommends:	%{dridrivers}-intel = %{EVRD}
+Recommends:	%{dridrivers}-iris = %{EVRD}
+%endif
+Recommends:	%{dridrivers}-nouveau = %{EVRD}
+%endif
+%ifarch %{armx}
+Recommends:	%{dridrivers}-freedreno = %{EVRD}
+Recommends:	%{dridrivers}-vc4 = %{EVRD}
+Recommends:	%{dridrivers}-v3d = %{EVRD}
+Recommends:	%{dridrivers}-etnaviv = %{EVRD}
+Recommends:	%{dridrivers}-tegra = %{EVRD}
+Recommends:	%{dridrivers}-lima = %{EVRD}
+Recommends:	%{dridrivers}-panfrost = %{EVRD}
+Recommends:	%{dridrivers}-kmsro = %{EVRD}
+%endif
 Obsoletes:	%{_lib}XvMCgallium1 <= 22.0.0-0.rc2.1
 Obsoletes:	vdpau-drivers < %{EVRD}
 
 %description -n %{dridrivers}
-Mesa DRI and Vulkan drivers.
+Common Mesa DRI/Vulkan bits (loader stub, layers). Hardware drivers
+are in %{dridrivers}-* subpackages so unused vendors can be omitted.
+
+%package -n %{dridrivers}-swrast
+Summary:	Mesa software rasterizers (llvmpipe, softpipe, lavapipe)
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-swrast
+Gallium software rasterizers and the lavapipe Vulkan ICD.
+
+%package -n %{dridrivers}-zink
+Summary:	Mesa Zink OpenGL-on-Vulkan driver
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-zink
+Zink Gallium driver (OpenGL on top of Vulkan).
+
+%ifnarch %{riscv}
+%package -n %{dridrivers}-virtio
+Summary:	Mesa virtio-GPU DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-virtio
+virtio-GPU Gallium and Vulkan drivers.
+
+%package -n %{dridrivers}-vmwgfx
+Summary:	Mesa VMware SVGA DRI driver
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-vmwgfx
+VMware SVGA Gallium driver.
+%endif
+
+%ifnarch %{armx} %{riscv}
+%if %{with r600}
+%package -n %{dridrivers}-radeon
+Summary:	Mesa AMD/Radeon DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-radeon
+radeonsi/r600/r300 Gallium drivers and RADV.
+%endif
+%ifarch %{ix86} %{x86_64}
+%package -n %{dridrivers}-intel
+Summary:	Mesa Intel DRI and Vulkan drivers (crocus, i915, hasvk)
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-intel
+crocus/i915 Gallium drivers and ANV hasvk.
+
+%package -n %{dridrivers}-iris
+Summary:	Mesa Intel Iris DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-iris
+Iris Gallium driver and ANV.
+%endif
+%package -n %{dridrivers}-nouveau
+Summary:	Mesa Nouveau DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-nouveau
+Nouveau Gallium driver and NVK.
+%endif
+
+%ifarch %{armx}
+%package -n %{dridrivers}-freedreno
+Summary:	Mesa Freedreno DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-freedreno
+Freedreno Gallium and Vulkan drivers.
+
+%package -n %{dridrivers}-vc4
+Summary:	Mesa VC4 DRI driver
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-vc4
+Broadcom VC4 Gallium driver.
+
+%package -n %{dridrivers}-v3d
+Summary:	Mesa V3D DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-v3d
+Broadcom V3D Gallium and Vulkan drivers.
+
+%package -n %{dridrivers}-etnaviv
+Summary:	Mesa Etnaviv DRI driver
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-etnaviv
+Etnaviv Gallium driver.
+
+%package -n %{dridrivers}-tegra
+Summary:	Mesa Tegra DRI driver
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-tegra
+Tegra Gallium driver.
+
+%package -n %{dridrivers}-lima
+Summary:	Mesa Lima DRI driver
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-lima
+Lima Gallium driver.
+
+%package -n %{dridrivers}-panfrost
+Summary:	Mesa Panfrost DRI and Vulkan drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-panfrost
+Panfrost Gallium and Vulkan drivers.
+
+%package -n %{dridrivers}-kmsro
+Summary:	Mesa kmsro display-only DRI drivers
+Group:		System/Libraries
+Requires:	%{libgallium} = %{EVRD}
+
+%description -n %{dridrivers}-kmsro
+kmsro display-controller Gallium drivers.
+%endif
 
 %ifarch %{armx} %{riscv}
 %package -n freedreno-tools
@@ -614,29 +750,102 @@ Provides:	glesv3-devel = %{EVRD}
 This package contains the headers needed to compile OpenGL ES 3 programs.
 
 %if %{with compat32}
-%package -n %{dridrivers32}
-Summary:	Mesa DRI and Vulkan drivers (32-bit)
+%package -n %{lib32gallium}
+Summary:	Mesa Gallium shared core (32-bit)
 Group:		System/Libraries
-%rename		%{dridrivers32}-swrast
-Conflicts:	%{dridrivers32}-swrast <= 22.0.0-0.rc2.1
-%if %{with r600}
-%rename		%{dridrivers32}-radeon
-Conflicts:	%{dridrivers32}-radeon <= 22.0.0-0.rc2.1
-%endif
-%rename		%{dridrivers32}-intel
-Conflicts:	%{dridrivers32}-intel <= 22.0.0-0.rc2.1
-%rename		%{dridrivers32}-iris
-Conflicts:	%{dridrivers32}-iris <= 22.0.0-0.rc2.1
-%rename		%{dridrivers32}-nouveau
-Conflicts:	%{dridrivers32}-nouveau <= 22.0.0-0.rc2.1
+
+%description -n %{lib32gallium}
+Shared Mesa Gallium core used by the per-vendor 32-bit *_dri.so drivers.
+
+%package -n %{dridrivers32}
+Summary:	Mesa DRI/Vulkan common files (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
 Requires:	libvulkan1
 Requires:	%{lib32gl} = %{EVRD}
 %if %{with egl}
 Requires:	%{lib32egl} = %{EVRD}
 %endif
+Requires:	%{dridrivers32}-swrast = %{EVRD}
+Requires:	%{dridrivers32}-zink = %{EVRD}
+%if %{with r600}
+Recommends:	%{dridrivers32}-radeon = %{EVRD}
+%endif
+Recommends:	%{dridrivers32}-intel = %{EVRD}
+Recommends:	%{dridrivers32}-iris = %{EVRD}
+Recommends:	%{dridrivers32}-nouveau = %{EVRD}
+Recommends:	%{dridrivers32}-virtio = %{EVRD}
+Recommends:	%{dridrivers32}-vmwgfx = %{EVRD}
 
 %description -n %{dridrivers32}
-DRI and Vulkan drivers.
+Common 32-bit Mesa DRI/Vulkan bits. Hardware drivers are in
+%{dridrivers32}-* subpackages.
+
+%package -n %{dridrivers32}-swrast
+Summary:	Mesa software rasterizers (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-swrast
+32-bit Gallium software rasterizers and lavapipe.
+
+%package -n %{dridrivers32}-zink
+Summary:	Mesa Zink OpenGL-on-Vulkan driver (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-zink
+32-bit Zink Gallium driver.
+
+%if %{with r600}
+%package -n %{dridrivers32}-radeon
+Summary:	Mesa AMD/Radeon DRI and Vulkan drivers (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-radeon
+32-bit radeonsi/r600/r300 and RADV.
+%endif
+
+%package -n %{dridrivers32}-intel
+Summary:	Mesa Intel DRI and Vulkan drivers (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-intel
+32-bit crocus/i915 and ANV hasvk.
+
+%package -n %{dridrivers32}-iris
+Summary:	Mesa Intel Iris DRI and Vulkan drivers (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-iris
+32-bit Iris and ANV.
+
+%package -n %{dridrivers32}-nouveau
+Summary:	Mesa Nouveau DRI and Vulkan drivers (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-nouveau
+32-bit Nouveau and NVK.
+
+%package -n %{dridrivers32}-virtio
+Summary:	Mesa virtio-GPU DRI driver (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-virtio
+32-bit virtio-GPU Gallium driver.
+
+%package -n %{dridrivers32}-vmwgfx
+Summary:	Mesa VMware SVGA DRI driver (32-bit)
+Group:		System/Libraries
+Requires:	%{lib32gallium} = %{EVRD}
+
+%description -n %{dridrivers32}-vmwgfx
+32-bit VMware SVGA Gallium driver.
 
 %package -n %{lib32gl}
 Summary:	Files for Mesa (GL and GLX libs) (32-bit)
@@ -838,6 +1047,7 @@ if ! %meson32 \
 	-Dvalgrind=disabled \
 	-Dglvnd=enabled \
 	-Dgallium-va=enabled \
+	-Dgallium-split-drivers=true \
 	-Dgallium-drivers=auto,crocus \
 	-Degl=enabled \
 	-Dgbm=enabled \
@@ -930,6 +1140,7 @@ if ! %meson \
 	-Dgallium-rusticl=true \
 %endif
 	-Dgallium-extra-hud=true \
+	-Dgallium-split-drivers=true \
 	-Dgallium-va=enabled \
 	-Dgallium-mediafoundation=disabled \
 	-Dglx=dri \
@@ -1014,17 +1225,147 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %doc docs/README.*
 %{_datadir}/drirc.d
 
-%files -n %{dridrivers}
+%files -n %{libgallium}
 %{_libdir}/libgallium-*.so
-%{_libdir}/dri/*.so
-%{_libdir}/lib*_noop_drm_shim.so
-# vulkan stuff
+
+%files -n %{dridrivers}
+%dir %{_libdir}/dri
+%{_libdir}/dri/libdril_dri.so
+# kmsro panel aliases (libdril stubs) on desktop too
+%optional %{_libdir}/dri/apple_dri.so
+%optional %{_libdir}/dri/armada-drm_dri.so
+%optional %{_libdir}/dri/exynos_dri.so
+%optional %{_libdir}/dri/gm12u320_dri.so
+%optional %{_libdir}/dri/hdlcd_dri.so
+%optional %{_libdir}/dri/hx8357d_dri.so
+%optional %{_libdir}/dri/ili9163_dri.so
+%optional %{_libdir}/dri/ili9225_dri.so
+%optional %{_libdir}/dri/ili9341_dri.so
+%optional %{_libdir}/dri/ili9486_dri.so
+%optional %{_libdir}/dri/imx-dcss_dri.so
+%optional %{_libdir}/dri/imx-drm_dri.so
+%optional %{_libdir}/dri/imx-lcdif_dri.so
+%optional %{_libdir}/dri/ingenic-drm_dri.so
+%optional %{_libdir}/dri/kirin_dri.so
+%optional %{_libdir}/dri/komeda_dri.so
+%optional %{_libdir}/dri/mali-dp_dri.so
+%optional %{_libdir}/dri/mcde_dri.so
+%optional %{_libdir}/dri/mediatek_dri.so
+%optional %{_libdir}/dri/meson_dri.so
+%optional %{_libdir}/dri/mi0283qt_dri.so
+%optional %{_libdir}/dri/mxsfb-drm_dri.so
+%optional %{_libdir}/dri/panel-mipi-dbi_dri.so
+%optional %{_libdir}/dri/pl111_dri.so
+%optional %{_libdir}/dri/rcar-du_dri.so
+%optional %{_libdir}/dri/repaper_dri.so
+%optional %{_libdir}/dri/rockchip_dri.so
+%optional %{_libdir}/dri/rzg2l-du_dri.so
+%optional %{_libdir}/dri/ssd130x_dri.so
+%optional %{_libdir}/dri/st7586_dri.so
+%optional %{_libdir}/dri/st7735r_dri.so
+%optional %{_libdir}/dri/sti_dri.so
+%optional %{_libdir}/dri/stm_dri.so
+%optional %{_libdir}/dri/sun4i-drm_dri.so
+%optional %{_libdir}/dri/udl_dri.so
+%optional %{_libdir}/dri/vkms_dri.so
+%optional %{_libdir}/dri/zynqmp-dpsub_dri.so
 %{_libdir}/libVkLayer_*.so
 %{_datadir}/vulkan/implicit_layer.d/*.json
 %{_bindir}/mesa-overlay-control.py
 %{_datadir}/vulkan/explicit_layer.d/*.json
-%{_libdir}/libvulkan_*.so
-%{_datadir}/vulkan/icd.d/*_icd.*.json
+%ifarch %{armx} %{riscv}
+%optional %{_libdir}/libvulkan_imagination.so
+%optional %{_datadir}/vulkan/icd.d/powervr_icd.*.json
+%optional %{_datadir}/vulkan/icd.d/imagination_icd.*.json
+%endif
+
+%files -n %{dridrivers}-swrast
+%{_libdir}/dri/swrast_dri.so
+%optional %{_libdir}/dri/kms_swrast_dri.so
+%optional %{_libdir}/libvulkan_lvp.so
+%optional %{_datadir}/vulkan/icd.d/lvp_icd.*.json
+
+%files -n %{dridrivers}-zink
+%{_libdir}/dri/zink_dri.so
+
+%ifnarch %{riscv}
+%files -n %{dridrivers}-virtio
+%{_libdir}/dri/virtio_gpu_dri.so
+%optional %{_libdir}/dri/virtio_gpu_drv_video.so
+%optional %{_libdir}/libvulkan_virtio.so
+%optional %{_datadir}/vulkan/icd.d/virtio_icd.*.json
+
+%files -n %{dridrivers}-vmwgfx
+%{_libdir}/dri/vmwgfx_dri.so
+%endif
+
+%ifnarch %{armx} %{riscv}
+%if %{with r600}
+%files -n %{dridrivers}-radeon
+%{_libdir}/dri/radeonsi_dri.so
+%optional %{_libdir}/dri/r300_dri.so
+%optional %{_libdir}/dri/r600_dri.so
+%optional %{_libdir}/dri/radeonsi_drv_video.so
+%optional %{_libdir}/dri/r600_drv_video.so
+%optional %{_libdir}/libvulkan_radeon.so
+%optional %{_datadir}/vulkan/icd.d/radeon_icd.*.json
+%optional %{_libdir}/libamdgpu_noop_drm_shim.so
+%optional %{_libdir}/libradeon_noop_drm_shim.so
+%endif
+%ifarch %{ix86} %{x86_64}
+%files -n %{dridrivers}-intel
+%optional %{_libdir}/dri/crocus_dri.so
+%optional %{_libdir}/dri/i915_dri.so
+%optional %{_libdir}/libvulkan_intel_hasvk.so
+%optional %{_datadir}/vulkan/icd.d/intel_hasvk_icd.*.json
+%optional %{_libdir}/libintel_noop_drm_shim.so
+
+%files -n %{dridrivers}-iris
+%{_libdir}/dri/iris_dri.so
+%optional %{_libdir}/libvulkan_intel.so
+%optional %{_datadir}/vulkan/icd.d/intel_icd.*.json
+%endif
+%files -n %{dridrivers}-nouveau
+%{_libdir}/dri/nouveau_dri.so
+%optional %{_libdir}/dri/nouveau_drv_video.so
+%optional %{_libdir}/libvulkan_nouveau.so
+%optional %{_datadir}/vulkan/icd.d/nouveau_icd.*.json
+%optional %{_libdir}/libnouveau_noop_drm_shim.so
+%endif
+
+%ifarch %{armx}
+%files -n %{dridrivers}-freedreno
+%{_libdir}/dri/msm_dri.so
+%optional %{_libdir}/dri/kgsl_dri.so
+%optional %{_libdir}/libvulkan_freedreno.so
+%optional %{_datadir}/vulkan/icd.d/freedreno_icd.*.json
+
+%files -n %{dridrivers}-vc4
+%{_libdir}/dri/vc4_dri.so
+
+%files -n %{dridrivers}-v3d
+%{_libdir}/dri/v3d_dri.so
+%optional %{_libdir}/libvulkan_broadcom.so
+%optional %{_datadir}/vulkan/icd.d/broadcom_icd.*.json
+
+%files -n %{dridrivers}-etnaviv
+%{_libdir}/dri/etnaviv_dri.so
+
+%files -n %{dridrivers}-tegra
+%{_libdir}/dri/tegra_dri.so
+
+%files -n %{dridrivers}-lima
+%{_libdir}/dri/lima_dri.so
+
+%files -n %{dridrivers}-panfrost
+%{_libdir}/dri/panfrost_dri.so
+%optional %{_libdir}/dri/panthor_dri.so
+%optional %{_libdir}/libvulkan_panfrost.so
+%optional %{_datadir}/vulkan/icd.d/panfrost_icd.*.json
+
+%files -n %{dridrivers}-kmsro
+%{_libdir}/dri/kmsro_dri.so
+%endif
 
 %ifarch %{armx}
 %files -n freedreno-tools
@@ -1152,9 +1493,87 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %{_prefix}/lib/gbm
 %{_prefix}/lib/pkgconfig/gbm.pc
 
-%files -n %{dridrivers32}
+%files -n %{lib32gallium}
 %{_prefix}/lib/libgallium-*.so
-%{_prefix}/lib/dri/*.so
-%{_prefix}/lib/libVkLayer_*.so
-%{_prefix}/lib/libvulkan_*.so
+
+%files -n %{dridrivers32}
+%dir %{_prefix}/lib/dri
+%{_prefix}/lib/dri/libdril_dri.so
+%optional %{_prefix}/lib/dri/apple_dri.so
+%optional %{_prefix}/lib/dri/armada-drm_dri.so
+%optional %{_prefix}/lib/dri/exynos_dri.so
+%optional %{_prefix}/lib/dri/gm12u320_dri.so
+%optional %{_prefix}/lib/dri/hdlcd_dri.so
+%optional %{_prefix}/lib/dri/hx8357d_dri.so
+%optional %{_prefix}/lib/dri/ili9163_dri.so
+%optional %{_prefix}/lib/dri/ili9225_dri.so
+%optional %{_prefix}/lib/dri/ili9341_dri.so
+%optional %{_prefix}/lib/dri/ili9486_dri.so
+%optional %{_prefix}/lib/dri/imx-dcss_dri.so
+%optional %{_prefix}/lib/dri/imx-drm_dri.so
+%optional %{_prefix}/lib/dri/imx-lcdif_dri.so
+%optional %{_prefix}/lib/dri/ingenic-drm_dri.so
+%optional %{_prefix}/lib/dri/kirin_dri.so
+%optional %{_prefix}/lib/dri/komeda_dri.so
+%optional %{_prefix}/lib/dri/mali-dp_dri.so
+%optional %{_prefix}/lib/dri/mcde_dri.so
+%optional %{_prefix}/lib/dri/mediatek_dri.so
+%optional %{_prefix}/lib/dri/meson_dri.so
+%optional %{_prefix}/lib/dri/mi0283qt_dri.so
+%optional %{_prefix}/lib/dri/mxsfb-drm_dri.so
+%optional %{_prefix}/lib/dri/panel-mipi-dbi_dri.so
+%optional %{_prefix}/lib/dri/pl111_dri.so
+%optional %{_prefix}/lib/dri/rcar-du_dri.so
+%optional %{_prefix}/lib/dri/repaper_dri.so
+%optional %{_prefix}/lib/dri/rockchip_dri.so
+%optional %{_prefix}/lib/dri/rzg2l-du_dri.so
+%optional %{_prefix}/lib/dri/ssd130x_dri.so
+%optional %{_prefix}/lib/dri/st7586_dri.so
+%optional %{_prefix}/lib/dri/st7735r_dri.so
+%optional %{_prefix}/lib/dri/sti_dri.so
+%optional %{_prefix}/lib/dri/stm_dri.so
+%optional %{_prefix}/lib/dri/sun4i-drm_dri.so
+%optional %{_prefix}/lib/dri/udl_dri.so
+%optional %{_prefix}/lib/dri/vkms_dri.so
+%optional %{_prefix}/lib/dri/zynqmp-dpsub_dri.so
+%optional %{_prefix}/lib/libVkLayer_*.so
+
+%files -n %{dridrivers32}-swrast
+%{_prefix}/lib/dri/swrast_dri.so
+%optional %{_prefix}/lib/dri/kms_swrast_dri.so
+%optional %{_prefix}/lib/libvulkan_lvp.so
+
+%files -n %{dridrivers32}-zink
+%{_prefix}/lib/dri/zink_dri.so
+
+%if %{with r600}
+%files -n %{dridrivers32}-radeon
+%{_prefix}/lib/dri/radeonsi_dri.so
+%optional %{_prefix}/lib/dri/r300_dri.so
+%optional %{_prefix}/lib/dri/r600_dri.so
+%optional %{_prefix}/lib/dri/radeonsi_drv_video.so
+%optional %{_prefix}/lib/dri/r600_drv_video.so
+%optional %{_prefix}/lib/libvulkan_radeon.so
+%endif
+
+%files -n %{dridrivers32}-intel
+%optional %{_prefix}/lib/dri/crocus_dri.so
+%optional %{_prefix}/lib/dri/i915_dri.so
+%optional %{_prefix}/lib/libvulkan_intel_hasvk.so
+
+%files -n %{dridrivers32}-iris
+%{_prefix}/lib/dri/iris_dri.so
+%optional %{_prefix}/lib/libvulkan_intel.so
+
+%files -n %{dridrivers32}-nouveau
+%{_prefix}/lib/dri/nouveau_dri.so
+%optional %{_prefix}/lib/dri/nouveau_drv_video.so
+%optional %{_prefix}/lib/libvulkan_nouveau.so
+
+%files -n %{dridrivers32}-virtio
+%{_prefix}/lib/dri/virtio_gpu_dri.so
+%optional %{_prefix}/lib/dri/virtio_gpu_drv_video.so
+
+%files -n %{dridrivers32}-vmwgfx
+%{_prefix}/lib/dri/vmwgfx_dri.so
 %endif
