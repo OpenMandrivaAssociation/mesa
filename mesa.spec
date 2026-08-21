@@ -61,16 +61,20 @@
 
 %define eglmajor 0
 %define eglname EGL_mesa
-%define libegl %mklibname %{eglname} %{eglmajor}
+%define libegl %mklibname %{eglname}
+%define oldlibegl %mklibname %{eglname} %{eglmajor}
 %define devegl %mklibname %{eglname} -d
-%define lib32egl lib%{eglname}%{eglmajor}
-%define dev32egl lib%{eglname}-devel
+%define lib32egl %mklib32name %{eglname}
+%define oldlib32egl %mklib32name %{eglname} %{eglmajor}
+%define dev32egl %mklib32name %{eglname} -d
 
 %define glmajor 0
 %define glname GLX_mesa
-%define libgl %mklibname %{glname} %{glmajor}
+%define libgl %mklibname %{glname}
+%define oldlibglx %mklibname %{glname} %{glmajor}
 %define devgl %mklibname GL -d
-%define lib32gl lib%{glname}%{glmajor}
+%define lib32gl %mklib32name %{glname}
+%define oldlib32glx %mklib32name %{glname} %{glmajor}
 %define dev32gl libGL-devel
 
 %define devvulkan %mklibname vulkan-intel -d
@@ -78,40 +82,42 @@
 
 %define glesv1major 1
 %define glesv1name GLESv1_CM
-%define libglesv1 %mklibname %{glesv1name} %{glesv1major}
+%define libglesv1 %mklibname %{glesv1name}
 %define devglesv1 %mklibname %{glesv1name} -d
-%define lib32glesv1 lib%{glesv1name}%{glesv1major}
-%define dev32glesv1 lib%{glesv1name}-devel
+%define lib32glesv1 %mklib32name %{glesv1name}
+%define dev32glesv1 %mklib32name %{glesv1name} -d
 
 %define glesv2major 2
 %define glesv2name GLESv2
-%define libglesv2 %mklibname %{glesv2name}_ %{glesv2major}
+%define libglesv2 %mklibname %{glesv2name}
 %define devglesv2 %mklibname %{glesv2name} -d
-%define lib32glesv2 lib%{glesv2name}_%{glesv2major}
-%define dev32glesv2 lib%{glesv2name}-devel
+%define lib32glesv2 %mklib32name %{glesv2name}
+%define dev32glesv2 %mklib32name %{glesv2name} -d
 
 %define devglesv3 %mklibname glesv3 -d
 %define dev32glesv3 libglesv3-devel
 
 %define dridrivers %mklibname dri-drivers
-%define dridrivers32 libdri-drivers
+%define dridrivers32 %mklib32name dri-drivers
 
 %define gbmmajor 1
 %define gbmname gbm
-%define libgbm %mklibname %{gbmname} %{gbmmajor}
+%define libgbm %mklibname %{gbmname}
+%define oldlibgbm %mklibname %{gbmname} %{gbmmajor}
 %define devgbm %mklibname %{gbmname} -d
-%define lib32gbm lib%{gbmname}%{gbmmajor}
-%define dev32gbm lib%{gbmname}-devel
+%define lib32gbm %mklib32name %{gbmname}
+%define oldlib32gbm %mklib32name %{gbmname} %{gbmmajor}
+%define dev32gbm %mklib32name %{gbmname} -d
 
 %define swravxmajor 0
 %define swravxname swravx
-%define libswravx %mklibname %swravxname %{swravxmajor}
-%define lib32swravx lib%{swravxname}%{swravxmajor}
+%define libswravx %mklibname %swravxname
+%define lib32swravx %mklib32name %{swravxname}
 
 %define swravx2major 0
 %define swravx2name swravx2
-%define libswravx2 %mklibname %swravx2name %{swravx2major}
-%define lib32swravx2 lib%{swravx2name}%{swravx2major}
+%define libswravx2 %mklibname %swravx2name
+%define lib32swravx2 %mklib32name %{swravx2name}
 
 %define librusticl %mklibname RusticlOpenCL
 
@@ -132,7 +138,7 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	26.2.1
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}2
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}3
 Group:		System/Libraries
 License:	MIT
 Url:		https://www.mesa3d.org
@@ -433,6 +439,10 @@ Provides:	dri-drivers = %{EVRD}
 # zoom RPM install
 Provides:	mesa-dri-drivers = %{EVRD}
 Requires:	vulkan-loader
+Requires:	%{libgl} = %{EVRD}
+%if %{with egl}
+Requires:	%{libegl} = %{EVRD}
+%endif
 Obsoletes:	%{_lib}XvMCgallium1 <= 22.0.0-0.rc2.1
 Obsoletes:	vdpau-drivers < %{EVRD}
 
@@ -460,6 +470,7 @@ Requires:	%mklibname GL 1
 Requires:	libglvnd-GL%{?_isa}
 %define oldglname %mklibname gl 1
 %rename %oldglname
+%rename %{oldlibglx}
 Obsoletes:	%{libglapi} < %{EVRD}
 
 %description -n %{libgl}
@@ -508,6 +519,7 @@ Provides:	mesa-libEGL%{?_isa} = %{EVRD}
 Requires:	libglvnd-egl%{?_isa}
 %define oldegl %mklibname egl 1
 %rename %oldegl
+%rename %{oldlibegl}
 
 %description -n %{libegl}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
@@ -616,6 +628,10 @@ Conflicts:	%{dridrivers32}-iris <= 22.0.0-0.rc2.1
 %rename		%{dridrivers32}-nouveau
 Conflicts:	%{dridrivers32}-nouveau <= 22.0.0-0.rc2.1
 Requires:	libvulkan1
+Requires:	%{lib32gl} = %{EVRD}
+%if %{with egl}
+Requires:	%{lib32egl} = %{EVRD}
+%endif
 
 %description -n %{dridrivers32}
 DRI and Vulkan drivers.
@@ -624,6 +640,7 @@ DRI and Vulkan drivers.
 Summary:	Files for Mesa (GL and GLX libs) (32-bit)
 Group:		System/Libraries
 Suggests:	%{dridrivers32} >= %{EVRD}
+%rename %{oldlib32glx}
 Obsoletes:	%{lib32glapi} < %{EVRD}
 
 %description -n %{lib32gl}
@@ -644,6 +661,7 @@ This package contains the headers needed to compile Mesa programs.
 %package -n %{lib32gbm}
 Summary:	Files for Mesa (gbm libs) (32-bit)
 Group:		System/Libraries
+%rename %{oldlib32gbm}
 
 %description -n %{lib32gbm}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
@@ -663,6 +681,7 @@ GBM (Graphics Buffer Manager) development parts.
 Summary:	Files for Mesa (EGL libs) (32-bit)
 Group:		System/Libraries
 Requires:	libglvnd-egl%{?_isa}
+%rename %{oldlib32egl}
 
 %description -n %{lib32egl}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
@@ -711,6 +730,7 @@ Rusticl is an implementation of OpenCL.
 %package -n %{libgbm}
 Summary:	Files for Mesa (gbm libs)
 Group:		System/Libraries
+%rename %{oldlibgbm}
 
 %description -n %{libgbm}
 Mesa is an OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library.
