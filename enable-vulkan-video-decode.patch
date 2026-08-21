@@ -1,122 +1,30 @@
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_debug.h.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_debug.h
---- mesa-24.1.0-rc1/src/amd/vulkan/radv_debug.h.10~	2024-04-26 04:28:12.168623228 +0200
-+++ mesa-24.1.0-rc1/src/amd/vulkan/radv_debug.h	2024-04-26 04:29:27.301285196 +0200
-@@ -74,12 +74,12 @@ enum {
-    RADV_PERFTEST_NGGC = 1u << 8,
-    RADV_PERFTEST_EMULATE_RT = 1u << 9,
-    RADV_PERFTEST_RT_WAVE_64 = 1u << 10,
--   RADV_PERFTEST_VIDEO_DECODE = 1u << 11,
-+   RADV_PERFTEST_NO_VIDEO_DECODE = 1u << 11,
-    RADV_PERFTEST_DMA_SHADERS = 1u << 12,
-    RADV_PERFTEST_TRANSFER_QUEUE = 1u << 13,
-    RADV_PERFTEST_NIR_CACHE = 1u << 14,
-    RADV_PERFTEST_RT_WAVE_32 = 1u << 15,
--   RADV_PERFTEST_VIDEO_ENCODE = 1u << 16,
-+   RADV_PERFTEST_NO_VIDEO_ENCODE = 1u << 16,
- };
- 
- bool radv_init_trace(struct radv_device *device);
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_formats.c.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_formats.c
---- mesa-24.1.0-rc1/src/amd/vulkan/radv_formats.c.10~	2024-04-26 04:28:12.172623264 +0200
-+++ mesa-24.1.0-rc1/src/amd/vulkan/radv_formats.c	2024-04-26 04:31:11.006198955 +0200
-@@ -727,7 +727,7 @@ radv_physical_device_get_format_properti
-             tiling |= VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
-       }
- 
--      if (instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) {
-+      if (!(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE)) {
-          if (format == VK_FORMAT_G8_B8R8_2PLANE_420_UNORM ||
-              format == VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16)
-             tiling |= VK_FORMAT_FEATURE_2_VIDEO_DECODE_OUTPUT_BIT_KHR | VK_FORMAT_FEATURE_2_VIDEO_DECODE_DPB_BIT_KHR;
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_formats.c.rej.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_formats.c.rej
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_instance.c.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_instance.c
---- mesa-24.1.0-rc1/src/amd/vulkan/radv_instance.c.10~	2024-04-26 04:28:12.172623264 +0200
-+++ mesa-24.1.0-rc1/src/amd/vulkan/radv_instance.c	2024-04-26 04:30:14.421700373 +0200
-@@ -94,12 +94,12 @@ static const struct debug_control radv_p
-                                                              {"nggc", RADV_PERFTEST_NGGC},
-                                                              {"emulate_rt", RADV_PERFTEST_EMULATE_RT},
-                                                              {"rtwave64", RADV_PERFTEST_RT_WAVE_64},
--                                                             {"video_decode", RADV_PERFTEST_VIDEO_DECODE},
-+                                                             {"novideo_decode", RADV_PERFTEST_NO_VIDEO_DECODE},
-                                                              {"dmashaders", RADV_PERFTEST_DMA_SHADERS},
-                                                              {"transfer_queue", RADV_PERFTEST_TRANSFER_QUEUE},
-                                                              {"nircache", RADV_PERFTEST_NIR_CACHE},
-                                                              {"rtwave32", RADV_PERFTEST_RT_WAVE_32},
--                                                             {"video_encode", RADV_PERFTEST_VIDEO_ENCODE},
-+                                                             {"novideo_encode", RADV_PERFTEST_NO_VIDEO_ENCODE},
-                                                              {NULL, 0}};
- 
- const char *
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_physical_device.c.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_physical_device.c
---- mesa-24.1.0-rc1/src/amd/vulkan/radv_physical_device.c.10~	2024-04-26 04:28:12.172623264 +0200
-+++ mesa-24.1.0-rc1/src/amd/vulkan/radv_physical_device.c	2024-04-26 04:32:32.674918583 +0200
-@@ -238,7 +238,7 @@ radv_physical_device_init_queue_table(st
-       idx++;
-    }
- 
--   if (instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) {
-+   if (!(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE)) {
-       if (pdev->info.ip[pdev->vid_decode_ip].num_queues > 0) {
-          pdev->vk_queue_to_radv[idx] = RADV_QUEUE_VIDEO_DEC;
-          idx++;
-@@ -569,12 +569,12 @@ radv_physical_device_get_supported_exten
-       .KHR_uniform_buffer_standard_layout = true,
-       .KHR_variable_pointers = true,
-       .KHR_vertex_attribute_divisor = true,
--      .KHR_video_queue = !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) || pdev->video_encode_enabled,
-+      .KHR_video_queue = !(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE) || pdev->video_encode_enabled,
-       .KHR_video_decode_av1 = (pdev->info.vcn_ip_version >= VCN_3_0_0 && pdev->info.vcn_ip_version != VCN_3_0_33 &&
--                               VIDEO_CODEC_AV1DEC && !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE)),
--      .KHR_video_decode_queue = !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE),
--      .KHR_video_decode_h264 = VIDEO_CODEC_H264DEC && !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE),
--      .KHR_video_decode_h265 = VIDEO_CODEC_H265DEC && !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE),
-+                               VIDEO_CODEC_AV1DEC && !(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE)),
-+      .KHR_video_decode_queue = !(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE),
-+      .KHR_video_decode_h264 = VIDEO_CODEC_H264DEC && !(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE),
-+      .KHR_video_decode_h265 = VIDEO_CODEC_H265DEC && !(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE),
-       .KHR_video_encode_h264 = VIDEO_CODEC_H264ENC && pdev->video_encode_enabled,
-       .KHR_video_encode_h265 = VIDEO_CODEC_H265ENC && pdev->video_encode_enabled,
-       .KHR_video_encode_queue = pdev->video_encode_enabled,
-@@ -2245,7 +2245,7 @@ radv_get_physical_device_queue_family_pr
-    if (pdev->info.ip[AMD_IP_COMPUTE].num_queues > 0 && !(instance->debug_flags & RADV_DEBUG_NO_COMPUTE_QUEUE))
-       num_queue_families++;
- 
--   if (instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) {
-+   if (!(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE)) {
-       if (pdev->info.ip[pdev->vid_decode_ip].num_queues > 0)
-          num_queue_families++;
-    }
-@@ -2300,7 +2300,7 @@ radv_get_physical_device_queue_family_pr
-       }
-    }
- 
--   if (instance->perftest_flags & RADV_PERFTEST_VIDEO_DECODE) {
-+   if (!(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_DECODE)) {
-       if (pdev->info.ip[pdev->vid_decode_ip].num_queues > 0) {
-          if (*pCount > idx) {
-             *pQueueFamilyProperties[idx] = (VkQueueFamilyProperties){
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_physical_device.c.rej.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_physical_device.c.rej
-diff -up mesa-24.1.0-rc1/src/amd/vulkan/radv_video_enc.c.10~ mesa-24.1.0-rc1/src/amd/vulkan/radv_video_enc.c
---- mesa-24.1.0-rc1/src/amd/vulkan/radv_video_enc.c.10~	2024-04-26 04:30:26.797809421 +0200
-+++ mesa-24.1.0-rc1/src/amd/vulkan/radv_video_enc.c	2024-04-26 04:30:37.413902962 +0200
-@@ -135,7 +135,7 @@ radv_probe_video_encode(struct radv_phys
-    }
- 
-    struct radv_instance *instance = radv_physical_device_instance(pdev);
--   pdev->video_encode_enabled = !!(instance->perftest_flags & RADV_PERFTEST_VIDEO_ENCODE);
-+   pdev->video_encode_enabled = !(instance->perftest_flags & RADV_PERFTEST_NO_VIDEO_ENCODE);
+--- mesa-26.2.1/src/intel/vulkan/anv_instance.c
++++ mesa-26.2.1/src/intel/vulkan/anv_instance.c
+@@ -16,6 +16,7 @@ static const struct debug_control debug_
+    { "no-sparse",                 ANV_DEBUG_NO_SPARSE},
+    { "sparse-trtt",               ANV_DEBUG_SPARSE_TRTT},
+    { "video-decode",              ANV_DEBUG_VIDEO_DECODE},
++   { "no-video-decode",           ANV_DEBUG_NO_VIDEO_DECODE},
+    { "video-encode",              ANV_DEBUG_VIDEO_ENCODE},
+    { "shader-dump",               ANV_DEBUG_SHADER_DUMP},
+    { "shader-hash",               ANV_DEBUG_SHADER_HASH},
+@@ -30,6 +31,9 @@ static void
+ process_anv_debug_variable_once(void)
+ {
+    anv_debug = parse_debug_string(os_get_option("ANV_DEBUG"), debug_control);
++   /* Default-on; ANV_DEBUG=no-video-decode restores the upstream default. */
++   if (!(anv_debug & ANV_DEBUG_NO_VIDEO_DECODE))
++      anv_debug |= ANV_DEBUG_VIDEO_DECODE;
  }
  
- void
-diff -up mesa-24.1.0-rc1/src/intel/vulkan/anv_device.c.10~ mesa-24.1.0-rc1/src/intel/vulkan/anv_device.c
---- mesa-24.1.0-rc1/src/intel/vulkan/anv_device.c.10~	2024-04-24 22:28:09.000000000 +0200
-+++ mesa-24.1.0-rc1/src/intel/vulkan/anv_device.c	2024-04-26 04:28:12.172623264 +0200
-@@ -2423,7 +2423,7 @@ anv_physical_device_try_create(struct vk
-    device->use_call_secondary =
-       !debug_get_bool_option("ANV_DISABLE_SECONDARY_CMD_BUFFER_CALLS", false);
+ VkResult anv_EnumerateInstanceVersion(
+--- mesa-26.2.1/src/intel/vulkan/anv_private.h
++++ mesa-26.2.1/src/intel/vulkan/anv_private.h
+@@ -1834,6 +1834,7 @@ enum anv_debug {
+    ANV_DEBUG_DGC_DUMP                   = BITFIELD_BIT(13),
+    ANV_DEBUG_NO_ALLOC_OVER_SUBSCRIPTION = BITFIELD_BIT(14),
+    ANV_DEBUG_SKIP_DISK_CACHE            = BITFIELD_BIT(15),
++   ANV_DEBUG_NO_VIDEO_DECODE            = BITFIELD_BIT(16),
+ };
  
--   device->video_decode_enabled = debug_get_bool_option("ANV_VIDEO_DECODE", false);
-+   device->video_decode_enabled = debug_get_bool_option("ANV_VIDEO_DECODE", true);
- 
-    device->uses_ex_bso = device->info.verx10 >= 125;
- 
+ extern enum anv_debug anv_debug;

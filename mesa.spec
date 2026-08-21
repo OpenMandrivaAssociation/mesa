@@ -229,7 +229,9 @@ Patch7:		mesa-24-llvmspirv-detection.patch
 Patch8:		mesa-buildsystem-improvements.patch
 Patch9:		mesa-24.0-llvmspirvlib-version-check.patch
 #Patch10:	mesa-24.0.2-buildfix32.patch
-###FIXME Patch11:	enable-vulkan-video-decode.patch
+# RADV already enables Vulkan video by default on VCN2+ (Mesa 25+).
+# ANV still gates decode behind ANV_DEBUG=video-decode; default it on.
+Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
 Patch13:	mesa-26.0-missing-include.patch
 Patch14:	mesa-25.2-aarch64-compile.patch
