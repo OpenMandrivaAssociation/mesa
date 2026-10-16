@@ -243,6 +243,8 @@ Patch15:	mesa-26.2-llvm23-libclc.patch
 Patch16:	mesa-26.2-gen-private-cstddef.patch
 # Cross: use host mesa_clc/vtn_bindgen2, but still install target copies.
 Patch18:	mesa-26.2-install-target-clc.patch
+# Python 3.15 does not flush gen_perf.py's outputs on shutdown.
+Patch19:	mesa-26.3-gen-perf-close-outputs.patch
 
 # Panthor -- https://gitlab.freedesktop.org/bbrezillon/mesa.git
 # Currently no patches required

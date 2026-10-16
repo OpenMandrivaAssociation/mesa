@@ -1,0 +1,12 @@
+--- a/src/intel/perf/gen_perf.py
++++ b/src/intel/perf/gen_perf.py
+@@ -1025,6 +1025,9 @@ def main():
+         c_outdent(3)
+         c("}")
+ 
++    c_file.close()
++    header_file.close()
++
+ 
+ if __name__ == '__main__':
+     main()
