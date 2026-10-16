@@ -15,7 +15,7 @@ cd mesa-$VER
 cd subprojects
 rm DirectX-Headers.wrap Vulkan-Profiles.wrap expat.wrap \
 	libarchive.wrap libdrm.wrap libxml2.wrap \
-	lua.wrap perfetto.wrap wayland-protocols.wrap zlib.wrap
+	lua.wrap wayland-protocols.wrap zlib.wrap
 cd ..
 
 meson subprojects download

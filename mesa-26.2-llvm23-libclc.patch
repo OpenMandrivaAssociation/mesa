@@ -1,6 +1,6 @@
---- a/meson.build	2026-08-20 10:57:40.000000000 +0200
-+++ b/meson.build	2026-08-20 14:50:32.507798818 +0200
-@@ -988,7 +988,9 @@
+--- a/meson.build
++++ b/meson.build
+@@ -1055,7 +1055,9 @@
      'mesa-libclc not found. Build will fall back to upstream libclc, however ' +
      'this is not recommended for most use cases.')
    if not dep_clc.found()
@@ -11,8 +11,8 @@
    endif
  endif
  
---- a/src/compiler/clc/meson.build	2026-08-20 10:57:40.000000000 +0200
-+++ b/src/compiler/clc/meson.build	2026-08-20 14:50:32.507798818 +0200
+--- a/src/compiler/clc/meson.build
++++ b/src/compiler/clc/meson.build
 @@ -40,10 +40,25 @@
    _libmesaclc_cpp_args += ['-DUSE_STATIC_OPENCL_C_H=1']
  endif
@@ -70,23 +70,3 @@
      if not cc.has_function('mmap')
        error('mmap required for dynamic libCLC loading')
      endif
---- a/src/compiler/clc/nir_load_libclc.c	2026-08-20 10:57:40.000000000 +0200
-+++ b/src/compiler/clc/nir_load_libclc.c	2026-08-20 14:50:32.521897898 +0200
-@@ -63,7 +63,7 @@
-       .static_data_size = sizeof(libclc_spirv_mesa3d_spv),
- #endif
- #ifdef DYNAMIC_LIBCLC_PATH
--      .sys_path = DYNAMIC_LIBCLC_PATH "spirv-mesa3d-.spv",
-+      .sys_path = DYNAMIC_LIBCLC_PATH LIBCLC_SPV32,
- #endif
-    },
-    {
-@@ -73,7 +73,7 @@
-       .static_data_size = sizeof(libclc_spirv64_mesa3d_spv),
- #endif
- #ifdef DYNAMIC_LIBCLC_PATH
--      .sys_path = DYNAMIC_LIBCLC_PATH "spirv64-mesa3d-.spv",
-+      .sys_path = DYNAMIC_LIBCLC_PATH LIBCLC_SPV64,
- #endif
-    },
- };

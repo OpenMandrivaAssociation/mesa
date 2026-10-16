@@ -31,7 +31,7 @@
 #define git 20240114
 %define git_branch main
 #define git_branch %(echo %{version} |cut -d. -f1-2)
-#define relc 2
+%define relc 1
 
 %ifarch %{riscv}
 %bcond_with gcc
@@ -137,8 +137,8 @@
 
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
-Version:	26.2.3
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}2
+Version:	26.3.0
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}1
 Group:		System/Libraries
 License:	MIT
 Url:		https://www.mesa3d.org
@@ -235,15 +235,12 @@ Patch11:	enable-vulkan-video-decode.patch
 #Patch12:	https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/31950.patch
 Patch13:	mesa-26.0-missing-include.patch
 Patch14:	mesa-25.2-aarch64-compile.patch
-# LLVM 23 moved libclc into the clang resource dir and dropped libclc.pc.
-# Based on draft mesa!40601 (completed for packaging: optional pkg-config +
-# per-triple spirv{32,64}-unknown-unknown/libclc.spv paths).
+# LLVM 23 dropped libclc.pc. 26.3 already probes both on-disk layouts;
+# meson still errors if the pkg-config module is missing.
 Patch15:	mesa-26.2-llvm23-libclc.patch
 # gen_private.h uses std::size_t without including <cstddef>; fails 32-bit builds
 # where transitive includes do not pull it in.
 Patch16:	mesa-26.2-gen-private-cstddef.patch
-# LLVM 23 ObjectLinkingLayer creator takes a memory manager and returns Expected<>
-Patch17:	mesa-26.2-llvm23-orc-jitlink.patch
 # Cross: use host mesa_clc/vtn_bindgen2, but still install target copies.
 Patch18:	mesa-26.2-install-target-clc.patch
 
