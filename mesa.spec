@@ -1124,6 +1124,7 @@ chmod 0755 %{buildroot}%{_bindir}/mesa-overlay-control.py
 %{_bindir}/replay
 %{_bindir}/lima_disasm
 %endif
+%{_bindir}/amdgpu_list_devices
 %{_bindir}/glsl_compiler
 %{_bindir}/spirv2nir
 %{_libdir}/libdlclose-skip.so
