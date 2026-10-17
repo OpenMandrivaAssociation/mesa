@@ -138,7 +138,7 @@
 Summary:	OpenGL 4.6+ and ES 3.1+ compatible 3D graphics library
 Name:		mesa
 Version:	26.3.0
-Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}2
+Release:	%{?relc:0.rc%{relc}.}%{?git:0.%{git}.}3
 Group:		System/Libraries
 License:	MIT
 Url:		https://www.mesa3d.org
@@ -783,6 +783,22 @@ Mesa build tools needed for crosscompiling mesa.
 %autosetup -p1 -a1 -n mesa-%{?git:%{git_branch}}%{!?git:%{version}%{vsuffix}}
 
 %build
+%ifarch %{x86_64}
+# The 32-bit build's LTO compile of glapi api_trace.c was SIGKILL'd
+# (ninja code 137) at one job per core. 16GB per job, at most 4.
+# The build root is an 80% tmpfs.
+mem_kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+max_jobs=$((mem_kb / 16777216))
+[ "$max_jobs" -ge 1 ] || max_jobs=1
+[ "$max_jobs" -le 4 ] || max_jobs=4
+ncpus=$(/usr/bin/getconf _NPROCESSORS_ONLN)
+[ "$ncpus" -le "$max_jobs" ] || ncpus=$max_jobs
+echo "Using $ncpus mesa build jobs (MemTotal ${mem_kb} kB)"
+ninja_j="-j$ncpus"
+%else
+ninja_j=
+%endif
+
 %if %{with gcc}
 export CC=gcc
 export CXX=g++
@@ -860,7 +876,7 @@ unset CC
 unset CXX
 unset LDFLAGS
 
-%ninja_build -C build32/
+%ninja_build -C build32/ $ninja_j
 rm llvm-config
 %endif
 
@@ -962,7 +978,7 @@ if ! %meson \
 	cat build/meson-logs/meson-log.txt >/dev/stderr
 fi
 
-%ninja_build -C build/
+%ninja_build -C build/ $ninja_j
 
 %install
 %if %{with compat32}
