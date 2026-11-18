@@ -334,7 +334,9 @@ BuildRequires:	cbindgen
 # package mesa
 Requires:	libGL.so.1%{_arch_tag_suffix}
 
-%if %{with compat32} || %{cross_compiling}
+%if %{cross_compiling}
+# The 32-bit build on x86_64 uses mesa_clc from this build, not the
+# previous mesa-buildtools still in the repository.
 BuildRequires:	%{name}-buildtools = %{version}
 %endif
 
@@ -803,82 +805,6 @@ export CC=gcc
 export CXX=g++
 %endif
 
-%if %{with compat32}
-cat >llvm-config <<EOF
-#!/bin/sh
-/usr/bin/llvm-config "\$@" |sed -e 's,lib64,lib,g'
-EOF
-chmod +x llvm-config
-export PATH="$(pwd):${PATH}"
-
-cat >i686.cross <<EOF
-[binaries]
-pkgconfig = 'pkg-config'
-cmake = 'cmake'
-llvm-config = '$(pwd)/llvm-config'
-
-[host_machine]
-system = 'linux'
-cpu_family = 'x86'
-cpu = 'i686'
-endian = 'little'
-EOF
-
-# vulkan-drivers intentionally doesn't include nouveau for now, since
-# that would require a 32-bit rust crosscompiler.
-# Let's just hope anything that is old enough to be 32-bit also
-# predates vulkan!
-# for opencl-c-base.h
-export CC="%{__cc} -m32 -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include -isystem %{_includedir}"
-export CXX="%{__cxx} -m32 -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include -isystem %{_includedir}"
-export LDFLAGS="-m32 -L%{_prefix}/lib"
-if ! %meson32 \
-	-Dgallium-mediafoundation=disabled \
-	-Dmicrosoft-clc=disabled \
-	-Dmesa-clc=system \
-	-Dshared-llvm=enabled \
-	--cross-file=i686.cross \
-	-Db_ndebug=true \
-	-Dc_std=c11 \
-	-Dcpp_std=c++17 \
-	-Dglx=auto \
-	-Dplatforms=wayland,x11 \
-	-Dvulkan-layers=device-select,overlay \
-	-Dvulkan-drivers=amd,intel,intel_hasvk,swrast \
-	-Dvulkan-beta=true \
-	-Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec \
-	-Dxlib-lease=auto \
-	-Dandroid-libbacktrace=disabled \
-	-Dvalgrind=disabled \
-	-Dglvnd=enabled \
-	-Dgallium-va=enabled \
-	-Dgallium-drivers=auto,crocus \
-	-Degl=enabled \
-	-Dgbm=enabled \
-	-Dgles1=disabled \
-	-Dgles2=enabled \
-	-Dglx-direct=true \
-	-Dllvm=enabled \
-	-Dlmsensors=enabled \
-	-Dopengl=true \
-	-Dshader-cache=enabled \
-	-Dshared-glapi=enabled \
-	-Dshared-llvm=enabled \
-	-Dselinux=false \
-	-Dbuild-tests=false \
-	-Dintel-rt=disabled \
-	-Dtools=""; then
-
-	cat build32/meson-logs/meson-log.txt >/dev/stderr
-fi
-unset CC
-unset CXX
-unset LDFLAGS
-
-%ninja_build -C build32/ $ninja_j
-rm llvm-config
-%endif
-
 # FIXME keep in sync with with_tools=all definition from meson.build
 TOOLS="drm-shim,dlclose-skip,glsl,nir,nouveau"
 %ifarch %{armx}
@@ -978,6 +904,90 @@ if ! %meson \
 fi
 
 %ninja_build -C build/ $ninja_j
+
+
+%if %{with compat32}
+cat >llvm-config <<EOF
+#!/bin/sh
+/usr/bin/llvm-config "\$@" |sed -e 's,lib64,lib,g'
+EOF
+chmod +x llvm-config
+# mesa_clc and vtn_bindgen2 were just built for this version.
+clc=$(find build -type f -name mesa_clc -executable | head -n1)
+bindgen=$(find build -type f -name vtn_bindgen2 -executable | head -n1)
+test -n "$clc"
+test -x "$clc"
+test -n "$bindgen"
+test -x "$bindgen"
+export PATH="$(dirname "$clc"):$(dirname "$bindgen"):$(pwd):${PATH}"
+
+cat >i686.cross <<EOF
+[binaries]
+pkgconfig = 'pkg-config'
+cmake = 'cmake'
+llvm-config = '$(pwd)/llvm-config'
+
+[host_machine]
+system = 'linux'
+cpu_family = 'x86'
+cpu = 'i686'
+endian = 'little'
+EOF
+
+# vulkan-drivers intentionally doesn't include nouveau for now, since
+# that would require a 32-bit rust crosscompiler.
+# Let's just hope anything that is old enough to be 32-bit also
+# predates vulkan!
+# for opencl-c-base.h
+export CC="%{__cc} -m32 -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include -isystem %{_includedir}"
+export CXX="%{__cxx} -m32 -I%{_libdir}/clang/$(clang --version |head -n1 |cut -d' ' -f2 |cut -d. -f1)/include -isystem %{_includedir}"
+export LDFLAGS="-m32 -L%{_prefix}/lib"
+if ! %meson32 \
+	-Dgallium-mediafoundation=disabled \
+	-Dmicrosoft-clc=disabled \
+	-Dmesa-clc=system \
+	-Dshared-llvm=enabled \
+	--cross-file=i686.cross \
+	-Db_ndebug=true \
+	-Dc_std=c11 \
+	-Dcpp_std=c++17 \
+	-Dglx=auto \
+	-Dplatforms=wayland,x11 \
+	-Dvulkan-layers=device-select,overlay \
+	-Dvulkan-drivers=amd,intel,intel_hasvk,swrast \
+	-Dvulkan-beta=true \
+	-Dvideo-codecs=h264dec,h264enc,h265dec,h265enc,vc1dec \
+	-Dxlib-lease=auto \
+	-Dandroid-libbacktrace=disabled \
+	-Dvalgrind=disabled \
+	-Dglvnd=enabled \
+	-Dgallium-va=enabled \
+	-Dgallium-drivers=auto,crocus \
+	-Degl=enabled \
+	-Dgbm=enabled \
+	-Dgles1=disabled \
+	-Dgles2=enabled \
+	-Dglx-direct=true \
+	-Dllvm=enabled \
+	-Dlmsensors=enabled \
+	-Dopengl=true \
+	-Dshader-cache=enabled \
+	-Dshared-glapi=enabled \
+	-Dshared-llvm=enabled \
+	-Dselinux=false \
+	-Dbuild-tests=false \
+	-Dintel-rt=disabled \
+	-Dtools=""; then
+
+	cat build32/meson-logs/meson-log.txt >/dev/stderr
+fi
+unset CC
+unset CXX
+unset LDFLAGS
+
+%ninja_build -C build32/ $ninja_j
+rm llvm-config
+%endif
 
 %install
 %if %{with compat32}
