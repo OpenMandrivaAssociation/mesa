@@ -913,13 +913,18 @@ cat >llvm-config <<EOF
 EOF
 chmod +x llvm-config
 # mesa_clc and vtn_bindgen2 were just built for this version.
-clc=$(find build -type f -name mesa_clc -executable | head -n1)
-bindgen=$(find build -type f -name vtn_bindgen2 -executable | head -n1)
-test -n "$clc"
+# Absolute paths in a native file: a relative PATH entry is stored as-is,
+# and ninja runs from build32/, so it cannot see build/.
+clc=$(pwd)/build/src/compiler/clc/mesa_clc
+bindgen=$(pwd)/build/src/compiler/spirv/vtn_bindgen2
 test -x "$clc"
-test -n "$bindgen"
 test -x "$bindgen"
-export PATH="$(dirname "$clc"):$(dirname "$bindgen"):$(pwd):${PATH}"
+cat >clc-native.ini <<EOF
+[binaries]
+mesa_clc = '$clc'
+vtn_bindgen2 = '$bindgen'
+EOF
+export PATH="$(pwd):${PATH}"
 
 cat >i686.cross <<EOF
 [binaries]
@@ -947,6 +952,7 @@ if ! %meson32 \
 	-Dmicrosoft-clc=disabled \
 	-Dmesa-clc=system \
 	-Dshared-llvm=enabled \
+	--native-file=$(pwd)/clc-native.ini \
 	--cross-file=i686.cross \
 	-Db_ndebug=true \
 	-Dc_std=c11 \
